@@ -1,0 +1,1356 @@
+<script>
+// =================================================================
+// صفحة التأخر والاستئذان (النسخة النهائية)
+// =================================================================
+
+var attLateRecords = [];
+var attPermissionRecords = [];
+var attCurrentTab = 'late';
+
+// =================================================================
+// قوائم الاستئذان
+// =================================================================
+var PERMISSION_REASONS = ['ظرف صحي', 'ظرف أسري', 'موعد حكومي', 'طلب ولي الأمر'];
+var PERMISSION_RECEIVERS = ['الأب', 'الأخ', 'الأم', 'الجد', 'العم', 'آخر'];
+var PERMISSION_RESPONSIBLES = ['الموجه الطلابي', 'الوكيل', 'المدير'];
+var LATE_PERIODS = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة', 'السابعة'];
+var DAYS_AR = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
+// =================================================================
+// دالة استخراج اليوم من التاريخ
+// =================================================================
+function getDayNameFromDate(dateStr) {
+    if (!dateStr) return '';
+    try {
+        // التاريخ يأتي بصيغة yyyy/MM/dd HH:mm
+        var parts = dateStr.split(' ')[0].split('/');
+        if (parts.length < 3) return '';
+        var date = new Date(parts[0], parts[1] - 1, parts[2]);
+        return DAYS_AR[date.getDay()] || '';
+    } catch (e) {
+        return '';
+    }
+}
+
+// =================================================================
+// دالة استخراج الوقت فقط
+// =================================================================
+function getTimeOnly(dateStr) {
+    if (!dateStr) return '-';
+    try {
+        var parts = dateStr.split(' ');
+        return parts[1] || dateStr;
+    } catch (e) {
+        return dateStr;
+    }
+}
+
+// =================================================================
+// 1. رسم الصفحة الرئيسية
+// =================================================================
+function renderAttendancePage() {
+    var main = document.getElementById('main-content');
+    main.innerHTML = `
+        <div class="max-w-full">
+            <!-- العنوان -->
+            <div class="flex justify-between items-center mb-5">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 bg-red-50 rounded-lg border border-red-200">
+                        <span class="material-symbols-outlined text-2xl text-red-600">schedule</span>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-extrabold text-gray-900">التأخر والاستئذان</h2>
+                        <p class="text-sm text-gray-400 font-medium">المرحلة: <span class="text-red-600 font-bold">${currentStage}</span></p>
+                    </div>
+                </div>
+                <div id="att-today-stats" class="flex gap-4">
+                </div>
+            </div>
+            
+            <!-- التبويبات -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 mb-5">
+                <div class="flex border-b border-gray-200">
+                    <button onclick="switchAttTab('late')" id="att-tab-late" class="flex-1 px-5 py-3.5 text-center font-bold text-sm transition-all border-b-2 border-red-500 text-red-600 bg-red-50">
+                        <span class="material-symbols-outlined align-middle ml-1">timer_off</span>
+                        تأخر اليوم
+                        <span id="att-late-count" class="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full mr-2">0</span>
+                    </button>
+                    <button onclick="switchAttTab('permission')" id="att-tab-permission" class="flex-1 px-5 py-3.5 text-center font-bold text-sm transition-all border-b-2 border-transparent text-gray-500 hover:text-purple-600 hover:bg-purple-50">
+                        <span class="material-symbols-outlined align-middle ml-1">exit_to_app</span>
+                        استئذان اليوم
+                        <span id="att-perm-count" class="bg-gray-400 text-white text-xs px-2 py-0.5 rounded-full mr-2">0</span>
+                    </button>
+                    <button onclick="switchAttTab('archive')" id="att-tab-archive" class="flex-1 px-5 py-3.5 text-center font-bold text-sm transition-all border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50">
+                        <span class="material-symbols-outlined align-middle ml-1">inventory_2</span>
+                        الأرشيف
+                    </button>
+                </div>
+            </div>
+            
+            <!-- محتوى التبويب -->
+            <div id="att-tab-content">
+            </div>
+        </div>
+        
+        <!-- النوافذ المنبثقة -->
+        ${getAttAddLateModalHTML()}
+        ${getAttAddPermissionModalHTML()}
+        ${getAttSendModalHTML()}
+    `;
+    
+    loadTodayStats();
+    switchAttTab('late');
+}
+
+// =================================================================
+// 2. تبديل التبويبات
+// =================================================================
+function switchAttTab(tab) {
+    attCurrentTab = tab;
+    
+    document.querySelectorAll('[id^="att-tab-"]').forEach(function(btn) {
+        if (btn.id === 'att-tab-content') return;
+        btn.classList.remove('border-red-500', 'border-purple-500', 'border-gray-500', 'text-red-600', 'text-purple-600', 'text-gray-700', 'bg-red-50', 'bg-purple-50', 'bg-gray-50');
+        btn.classList.add('border-transparent', 'text-gray-500');
+    });
+    
+    var activeBtn = document.getElementById('att-tab-' + tab);
+    if (tab === 'late') {
+        activeBtn.classList.add('border-red-500', 'text-red-600', 'bg-red-50');
+    } else if (tab === 'permission') {
+        activeBtn.classList.add('border-purple-500', 'text-purple-600', 'bg-purple-50');
+    } else {
+        activeBtn.classList.add('border-gray-500', 'text-gray-700', 'bg-gray-50');
+    }
+    activeBtn.classList.remove('border-transparent', 'text-gray-500');
+    
+    if (tab === 'late') {
+        renderLateTab();
+    } else if (tab === 'permission') {
+        renderPermissionTab();
+    } else {
+        renderArchiveTab();
+    }
+}
+
+// =================================================================
+// 3. تبويب التأخر
+// =================================================================
+function renderLateTab() {
+    var content = document.getElementById('att-tab-content');
+    content.innerHTML = `
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-4">
+            <div class="flex flex-wrap gap-3 items-center justify-between">
+                <div class="flex gap-3">
+                    <button onclick="openAddLateModal()" class="flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-bold shadow-sm">
+                        <span class="material-symbols-outlined">add_circle</span>
+                        تسجيل تأخر
+                    </button>
+                    <button onclick="loadTodayLateRecords()" class="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">
+                        <span class="material-symbols-outlined">refresh</span>
+                        تحديث
+                    </button>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="selectAllAttRecords('late')" class="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 font-medium">
+                        <span class="material-symbols-outlined">select_all</span>
+                        تحديد الكل
+                    </button>
+                    <button onclick="openAttSendModal('late')" class="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 font-medium">
+                        <span class="material-symbols-outlined">send</span>
+                        إرسال للمحددين
+                    </button>
+                    <button onclick="printAttList('late')" class="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 font-medium">
+                        <span class="material-symbols-outlined">print</span>
+                        طباعة
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="att-late-list" class="space-y-3">
+            <div class="text-center py-16">
+                <div class="loading-bar mx-auto"><div class="loading-bar-progress"></div></div>
+                <p class="text-gray-500 mt-4">جاري تحميل السجلات...</p>
+            </div>
+        </div>
+    `;
+    
+    loadTodayLateRecords();
+}
+
+function loadTodayLateRecords() {
+    google.script.run.withSuccessHandler(function(result) {
+        if (result && result.success) {
+            attLateRecords = result.records || [];
+        } else {
+            attLateRecords = [];
+        }
+        document.getElementById('att-late-count').innerText = attLateRecords.length;
+        displayLateRecords();
+    }).withFailureHandler(function(err) {
+        console.log('خطأ:', err);
+        attLateRecords = [];
+        displayLateRecords();
+    }).getTodayLateRecords(currentStage);
+}
+
+function displayLateRecords() {
+    var container = document.getElementById('att-late-list');
+    
+    if (attLateRecords.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-16 bg-white rounded-xl border border-gray-200">
+                <span class="material-symbols-outlined text-gray-300 text-6xl">event_available</span>
+                <p class="text-gray-500 mt-3 text-lg">لا يوجد متأخرون اليوم</p>
+                <p class="text-gray-400 text-sm mt-1">اضغط على "تسجيل تأخر" لإضافة طالب متأخر</p>
+            </div>
+        `;
+        return;
+    }
+    
+    var html = '<div class="bg-white rounded-xl border border-gray-200 overflow-hidden">';
+    html += '<table class="min-w-full divide-y divide-gray-200">';
+    html += `
+        <thead class="bg-red-50">
+            <tr>
+                <th class="px-4 py-3 text-center w-12">
+                    <input type="checkbox" id="att-late-select-all" onchange="toggleAttSelectAll('late')" class="w-5 h-5 rounded border-gray-300 text-red-600">
+                </th>
+                <th class="px-4 py-3 text-right text-xs font-bold text-gray-600">الطالب</th>
+                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600">الصف</th>
+                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600">نوع التأخر</th>
+                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600">الحصة</th>
+                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600">اليوم والتاريخ</th>
+                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600">الإرسال</th>
+                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600">إجراءات</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+    `;
+    
+    attLateRecords.forEach(function(rec, idx) {
+        var sentBadge = rec['تم_الإرسال'] === 'نعم' 
+            ? '<span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">تم ✓</span>'
+            : '<span class="px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-bold">لم يُرسل</span>';
+        
+        var dayName = getDayNameFromDate(rec['وقت_الإدخال']);
+        var timeOnly = getTimeOnly(rec['وقت_الإدخال']);
+        var hijriDate = rec['التاريخ_هجري'] || '';
+        var dateDisplay = dayName + ' ' + hijriDate + ' - ' + timeOnly;
+        
+        var lateType = rec['نوع_التأخر'] || 'تأخر صباحي';
+        var lateTypeBadge = lateType === 'تأخر حصة' 
+            ? '<span class="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs font-bold">حصة</span>'
+            : '<span class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-bold">صباحي</span>';
+        
+        html += `
+            <tr class="hover:bg-gray-50">
+                <td class="px-4 py-3 text-center">
+                    <input type="checkbox" class="att-late-checkbox w-5 h-5 rounded border-gray-300 text-red-600"
+                           data-index="${idx}" data-phone="${escapeHtml(getStudentPhone(rec))}" data-name="${escapeHtml(rec['اسم_الطالب'] || '')}" data-row="${rec.rowIndex}" data-grade="${escapeHtml(rec['الصف'] || '')}" data-cls="${escapeHtml(rec['الفصل'] || '')}">
+                </td>
+                <td class="px-4 py-3">
+                    <div class="font-bold text-gray-800">${escapeHtml(rec['اسم_الطالب'] || '')}</div>
+                    <div class="text-xs text-gray-400">${escapeHtml(rec['رقم_الطالب'] || '')}</div>
+                </td>
+                <td class="px-4 py-3 text-center text-sm">${escapeHtml(rec['الصف'] || '')} / ${escapeHtml(rec['الفصل'] || '')}</td>
+                <td class="px-4 py-3 text-center">${lateTypeBadge}</td>
+                <td class="px-4 py-3 text-center">
+                    <span class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-bold">${escapeHtml(rec['الحصة'] || '-')}</span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                    <div class="text-xs text-gray-600">${escapeHtml(dateDisplay)}</div>
+                </td>
+                <td class="px-4 py-3 text-center">${sentBadge}</td>
+                <td class="px-4 py-3 text-center">
+                    <div class="flex justify-center gap-1">
+                        <button onclick="sendSingleAtt('late', ${idx})" class="p-1.5 hover:bg-green-50 rounded text-green-600" title="إرسال">
+                            <span class="material-symbols-outlined text-lg">send</span>
+                        </button>
+                        <button onclick="deleteAttRecord('late', ${rec.rowIndex})" class="p-1.5 hover:bg-red-50 rounded text-red-600" title="حذف">
+                            <span class="material-symbols-outlined text-lg">delete</span>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+
+// =================================================================
+// 4. تبويب الاستئذان
+// =================================================================
+function renderPermissionTab() {
+    var content = document.getElementById('att-tab-content');
+    content.innerHTML = `
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-4">
+            <div class="flex flex-wrap gap-3 items-center justify-between">
+                <div class="flex gap-3">
+                    <button onclick="openAddPermissionModal()" class="flex items-center gap-2 px-5 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-bold shadow-sm">
+                        <span class="material-symbols-outlined">add_circle</span>
+                        تسجيل استئذان
+                    </button>
+                    <button onclick="loadTodayPermissionRecords()" class="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">
+                        <span class="material-symbols-outlined">refresh</span>
+                        تحديث
+                    </button>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="selectAllAttRecords('permission')" class="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 font-medium">
+                        <span class="material-symbols-outlined">select_all</span>
+                        تحديد الكل
+                    </button>
+                    <button onclick="openAttSendModal('permission')" class="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 font-medium">
+                        <span class="material-symbols-outlined">send</span>
+                        إرسال للمحددين
+                    </button>
+                    <button onclick="printAttList('permission')" class="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 font-medium">
+                        <span class="material-symbols-outlined">print</span>
+                        طباعة
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="att-permission-list" class="space-y-3">
+            <div class="text-center py-16">
+                <div class="loading-bar mx-auto"><div class="loading-bar-progress"></div></div>
+                <p class="text-gray-500 mt-4">جاري تحميل السجلات...</p>
+            </div>
+        </div>
+    `;
+    
+    loadTodayPermissionRecords();
+}
+
+function loadTodayPermissionRecords() {
+    google.script.run.withSuccessHandler(function(result) {
+        if (result && result.success) {
+            attPermissionRecords = result.records || [];
+        } else {
+            attPermissionRecords = [];
+        }
+        document.getElementById('att-perm-count').innerText = attPermissionRecords.length;
+        displayPermissionRecords();
+    }).withFailureHandler(function(err) {
+        console.log('خطأ:', err);
+        attPermissionRecords = [];
+        displayPermissionRecords();
+    }).getTodayPermissionRecords(currentStage);
+}
+
+function displayPermissionRecords() {
+    var container = document.getElementById('att-permission-list');
+    
+    if (attPermissionRecords.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-16 bg-white rounded-xl border border-gray-200">
+                <span class="material-symbols-outlined text-gray-300 text-6xl">door_front</span>
+                <p class="text-gray-500 mt-3 text-lg">لا يوجد مستأذنون اليوم</p>
+                <p class="text-gray-400 text-sm mt-1">اضغط على "تسجيل استئذان" لإضافة طالب مستأذن</p>
+            </div>
+        `;
+        return;
+    }
+    
+    var html = '<div class="bg-white rounded-xl border border-gray-200 overflow-hidden">';
+    html += '<table class="min-w-full divide-y divide-gray-200">';
+    html += `
+        <thead class="bg-purple-50">
+            <tr>
+                <th class="px-4 py-3 text-center w-12">
+                    <input type="checkbox" id="att-perm-select-all" onchange="toggleAttSelectAll('permission')" class="w-5 h-5 rounded border-gray-300 text-purple-600">
+                </th>
+                <th class="px-4 py-3 text-right text-xs font-bold text-gray-600">الطالب</th>
+                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600">الصف</th>
+                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600">اليوم والتاريخ</th>
+                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600">وقت الخروج</th>
+                <th class="px-4 py-3 text-right text-xs font-bold text-gray-600">السبب</th>
+                <th class="px-4 py-3 text-right text-xs font-bold text-gray-600">المستلم</th>
+                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600">التأكيد</th>
+                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600">الإرسال</th>
+                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600">إجراءات</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+    `;
+    
+    attPermissionRecords.forEach(function(rec, idx) {
+        var sentBadge = rec['تم_الإرسال'] === 'نعم' 
+            ? '<span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">تم ✓</span>'
+            : '<span class="px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-bold">لم يُرسل</span>';
+        
+        var confirmBadge = rec['وقت_التأكيد'] && rec['وقت_التأكيد'] !== ''
+            ? '<span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">خرج ' + escapeHtml(rec['وقت_التأكيد']) + '</span>'
+            : '<span class="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-bold">معلق</span>';
+        
+        var dayName = getDayNameFromDate(rec['وقت_الإدخال']);
+        var hijriDate = rec['التاريخ_هجري'] || '';
+        var dateDisplay = dayName + ' ' + hijriDate;
+        var exitTime = rec['وقت_الخروج'] || '-';
+        
+        html += `
+            <tr class="hover:bg-gray-50">
+                <td class="px-4 py-3 text-center">
+                    <input type="checkbox" class="att-perm-checkbox w-5 h-5 rounded border-gray-300 text-purple-600"
+                           data-index="${idx}" data-phone="${escapeHtml(getStudentPhone(rec))}" data-name="${escapeHtml(rec['اسم_الطالب'] || '')}" data-row="${rec.rowIndex}" data-grade="${escapeHtml(rec['الصف'] || '')}" data-cls="${escapeHtml(rec['الفصل'] || '')}">
+                </td>
+                <td class="px-4 py-3">
+                    <div class="font-bold text-gray-800">${escapeHtml(rec['اسم_الطالب'] || '')}</div>
+                    <div class="text-xs text-gray-400">${escapeHtml(rec['رقم_الطالب'] || '')}</div>
+                </td>
+                <td class="px-4 py-3 text-center text-sm">${escapeHtml(rec['الصف'] || '')} / ${escapeHtml(rec['الفصل'] || '')}</td>
+                <td class="px-4 py-3 text-center">
+                    <div class="text-xs text-gray-600">${escapeHtml(dateDisplay)}</div>
+                </td>
+                <td class="px-4 py-3 text-center">
+                    <span class="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-bold">${escapeHtml(exitTime)}</span>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">${escapeHtml(rec['السبب'] || '-')}</td>
+                <td class="px-4 py-3 text-sm text-gray-600">${escapeHtml(rec['المستلم'] || '-')}</td>
+                <td class="px-4 py-3 text-center">${confirmBadge}</td>
+                <td class="px-4 py-3 text-center">${sentBadge}</td>
+                <td class="px-4 py-3 text-center">
+                    <div class="flex justify-center gap-1">
+                        <button onclick="sendSingleAtt('permission', ${idx})" class="p-1.5 hover:bg-green-50 rounded text-green-600" title="إرسال">
+                            <span class="material-symbols-outlined text-lg">send</span>
+                        </button>
+                        <button onclick="deleteAttRecord('permission', ${rec.rowIndex})" class="p-1.5 hover:bg-red-50 rounded text-red-600" title="حذف">
+                            <span class="material-symbols-outlined text-lg">delete</span>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+
+// =================================================================
+// 5. تبويب الأرشيف
+// =================================================================
+function renderArchiveTab() {
+    var content = document.getElementById('att-tab-content');
+    content.innerHTML = `
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-4">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                <div>
+                    <label class="block text-sm font-bold text-gray-600 mb-1">النوع</label>
+                    <select id="archive-type" onchange="loadArchive()" class="w-full h-10 px-3 border border-gray-300 rounded-lg">
+                        <option value="late">التأخر</option>
+                        <option value="permission">الاستئذان</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-gray-600 mb-1">من تاريخ</label>
+                    <input type="date" id="archive-from" class="w-full h-10 px-3 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-gray-600 mb-1">إلى تاريخ</label>
+                    <input type="date" id="archive-to" class="w-full h-10 px-3 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                    <button onclick="loadArchive()" class="w-full h-10 px-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold flex items-center justify-center gap-2">
+                        <span class="material-symbols-outlined">search</span>
+                        بحث
+                    </button>
+                </div>
+                <div>
+                    <button onclick="printArchive()" class="w-full h-10 px-4 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 font-bold flex items-center justify-center gap-2">
+                        <span class="material-symbols-outlined">print</span>
+                        طباعة
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="archive-content" class="bg-white rounded-xl border border-gray-200 p-8 text-center">
+            <span class="material-symbols-outlined text-gray-300 text-6xl">inventory_2</span>
+            <p class="text-gray-500 mt-3">اختر النوع والتاريخ ثم اضغط بحث</p>
+        </div>
+    `;
+    
+    var today = new Date();
+    var weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    document.getElementById('archive-to').value = today.toISOString().split('T')[0];
+    document.getElementById('archive-from').value = weekAgo.toISOString().split('T')[0];
+}
+
+function loadArchive() {
+    var type = document.getElementById('archive-type').value;
+    var dateFrom = document.getElementById('archive-from').value;
+    var dateTo = document.getElementById('archive-to').value;
+
+    if (!dateFrom || !dateTo) {
+        showEnhancedToast('warning', 'يرجى تحديد تاريخ البداية والنهاية');
+        return;
+    }
+
+    var container = document.getElementById('archive-content');
+    container.innerHTML = `
+        <div class="text-center py-16">
+            <div class="loading-bar mx-auto"><div class="loading-bar-progress"></div></div>
+            <p class="text-gray-500 mt-4">جاري تحميل الأرشيف...</p>
+        </div>
+    `;
+    
+    var func = type === 'late' ? 'getLateArchive' : 'getPermissionArchive';
+    
+    google.script.run.withSuccessHandler(function(result) {
+        if (result && result.success) {
+            displayArchive(result.records || [], type);
+        } else {
+            displayArchive([], type);
+        }
+    }).withFailureHandler(function(err) {
+        console.log('خطأ:', err);
+        displayArchive([], type);
+    })[func](currentStage, dateFrom, dateTo);
+}
+
+function displayArchive(records, type) {
+    var container = document.getElementById('archive-content');
+    
+    if (records.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-16">
+                <span class="material-symbols-outlined text-gray-300 text-6xl">search_off</span>
+                <p class="text-gray-500 mt-3">لا توجد سجلات في هذه الفترة</p>
+            </div>
+        `;
+        return;
+    }
+    
+    var isLate = type === 'late';
+    var colorClass = isLate ? 'red' : 'purple';
+    
+    var html = '<div class="overflow-x-auto"><table class="min-w-full divide-y divide-gray-200">';
+    html += `
+        <thead class="bg-${colorClass}-50">
+            <tr>
+                <th class="px-4 py-3 text-right text-xs font-bold text-gray-600">الطالب</th>
+                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600">الصف</th>
+                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600">اليوم والتاريخ</th>
+                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600">${isLate ? 'نوع التأخر' : 'وقت الخروج'}</th>
+                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600">${isLate ? 'الحصة' : 'السبب'}</th>
+                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600">المسجل</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+    `;
+    
+    records.forEach(function(rec) {
+        var dayName = getDayNameFromDate(rec['وقت_الإدخال']);
+        var hijriDate = rec['التاريخ_هجري'] || '';
+        var dateDisplay = dayName + ' ' + hijriDate;
+        
+        html += `
+            <tr class="hover:bg-gray-50">
+                <td class="px-4 py-3 font-bold text-gray-800">${escapeHtml(rec['اسم_الطالب'] || '')}</td>
+                <td class="px-4 py-3 text-center text-sm">${escapeHtml(rec['الصف'] || '')} / ${escapeHtml(rec['الفصل'] || '')}</td>
+                <td class="px-4 py-3 text-center text-sm text-gray-600">${escapeHtml(dateDisplay)}</td>
+                <td class="px-4 py-3 text-center">
+                    <span class="px-2 py-1 bg-${colorClass}-100 text-${colorClass}-700 rounded text-xs font-bold">
+                        ${escapeHtml(isLate ? (rec['نوع_التأخر'] || 'صباحي') : (rec['وقت_الخروج'] || '-'))}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-center text-sm text-gray-600">${escapeHtml(isLate ? (rec['الحصة'] || '-') : (rec['السبب'] || '-'))}</td>
+                <td class="px-4 py-3 text-center text-sm text-gray-500">${escapeHtml(rec['المسجل'] || '')}</td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table></div>';
+    html += `<div class="mt-4 text-center text-sm text-gray-500">إجمالي السجلات: <span class="font-bold">${records.length}</span></div>`;
+    
+    container.innerHTML = html;
+}
+
+// =================================================================
+// 6. النوافذ المنبثقة - التأخر
+// =================================================================
+function getAttAddLateModalHTML() {
+    var periodOptions = LATE_PERIODS.map(function(p) { return '<option value="' + p + '">' + p + '</option>'; }).join('');
+    
+    return `
+        <div id="att-late-modal" class="fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col">
+                <div class="bg-gradient-to-r from-red-500 to-red-600 p-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <span class="material-symbols-outlined">timer_off</span>
+                        تسجيل تأخر
+                    </h3>
+                    <button onclick="closeAttLateModal()" class="text-white/80 hover:text-white">
+                        <span class="material-symbols-outlined text-2xl">close</span>
+                    </button>
+                </div>
+                <div class="p-6 space-y-4 overflow-y-auto flex-1">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">نوع التأخر *</label>
+                        <div class="flex gap-4">
+                            <label class="flex items-center gap-2 px-4 py-3 border-2 rounded-lg cursor-pointer border-red-500 bg-red-50" id="late-type-morning-label">
+                                <input type="radio" name="late-type" value="تأخر صباحي" checked onchange="handleLateTypeChange()">
+                                <span class="font-bold text-red-700">تأخر صباحي</span>
+                            </label>
+                            <label class="flex items-center gap-2 px-4 py-3 border-2 rounded-lg cursor-pointer border-gray-300" id="late-type-period-label">
+                                <input type="radio" name="late-type" value="تأخر حصة" onchange="handleLateTypeChange()">
+                                <span class="font-bold text-gray-700">تأخر حصة</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div id="late-period-container" class="hidden">
+                        <label class="block text-sm font-bold text-gray-700 mb-1">الحصة *</label>
+                        <select id="late-period" class="w-full h-11 px-3 border border-gray-300 rounded-lg">
+                            <option value="">اختر الحصة</option>
+                            ${periodOptions}
+                        </select>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">الصف *</label>
+                            <select id="late-grade" onchange="handleLateGradeChange()" class="w-full h-11 px-3 border border-gray-300 rounded-lg">
+                                <option value="">اختر الصف</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">الفصل *</label>
+                            <select id="late-class" onchange="handleLateClassChange()" class="w-full h-11 px-3 border border-gray-300 rounded-lg" disabled>
+                                <option value="">اختر الفصل</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">الطلاب * <span class="text-gray-400 font-normal">(يمكنك اختيار أكثر من طالب)</span></label>
+                        <select id="late-students" multiple class="w-full h-48 px-3 py-2 border border-gray-300 rounded-lg" disabled>
+                            <option value="">اختر الطلاب</option>
+                        </select>
+                        <p class="text-xs text-gray-400 mt-1">اضغط Ctrl للاختيار المتعدد</p>
+                    </div>
+                </div>
+                <div class="bg-gray-50 p-4 border-t flex gap-3 justify-end">
+                    <button onclick="closeAttLateModal()" class="px-5 py-2 text-gray-600 font-bold hover:bg-gray-200 rounded-lg">إلغاء</button>
+                    <button onclick="saveLateMultiple()" class="px-6 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700">حفظ</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// =================================================================
+// 7. النوافذ المنبثقة - الاستئذان
+// =================================================================
+function getAttAddPermissionModalHTML() {
+    var reasonOptions = PERMISSION_REASONS.map(function(r) { return '<option value="' + r + '">' + r + '</option>'; }).join('');
+    var receiverOptions = PERMISSION_RECEIVERS.map(function(r) { return '<option value="' + r + '">' + r + '</option>'; }).join('');
+    var responsibleOptions = PERMISSION_RESPONSIBLES.map(function(r) { return '<option value="' + r + '">' + r + '</option>'; }).join('');
+    
+    return `
+        <div id="att-perm-modal" class="fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col">
+                <div class="bg-gradient-to-r from-purple-500 to-purple-600 p-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <span class="material-symbols-outlined">exit_to_app</span>
+                        تسجيل استئذان
+                    </h3>
+                    <button onclick="closeAttPermModal()" class="text-white/80 hover:text-white">
+                        <span class="material-symbols-outlined text-2xl">close</span>
+                    </button>
+                </div>
+                <div class="p-6 space-y-4 overflow-y-auto flex-1">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">الصف *</label>
+                            <select id="perm-grade" onchange="handlePermGradeChange()" class="w-full h-11 px-3 border border-gray-300 rounded-lg">
+                                <option value="">اختر الصف</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">الفصل *</label>
+                            <select id="perm-class" onchange="handlePermClassChange()" class="w-full h-11 px-3 border border-gray-300 rounded-lg" disabled>
+                                <option value="">اختر الفصل</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">الطلاب * <span class="text-gray-400 font-normal">(يمكنك اختيار أكثر من طالب)</span></label>
+                        <select id="perm-students" multiple class="w-full h-48 px-3 py-2 border border-gray-300 rounded-lg" disabled>
+                            <option value="">اختر الطلاب</option>
+                        </select>
+                        <p class="text-xs text-gray-400 mt-1">اضغط Ctrl للاختيار المتعدد</p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">وقت الخروج</label>
+                            <input type="time" id="perm-exit-time" class="w-full h-11 px-3 border border-gray-300 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">السبب *</label>
+                            <select id="perm-reason" class="w-full h-11 px-3 border border-gray-300 rounded-lg">
+                                <option value="">اختر السبب</option>
+                                ${reasonOptions}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">المستلم *</label>
+                            <select id="perm-receiver" class="w-full h-11 px-3 border border-gray-300 rounded-lg">
+                                <option value="">اختر المستلم</option>
+                                ${receiverOptions}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">المسؤول *</label>
+                            <select id="perm-responsible" class="w-full h-11 px-3 border border-gray-300 rounded-lg">
+                                <option value="">اختر المسؤول</option>
+                                ${responsibleOptions}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 p-4 border-t flex gap-3 justify-end">
+                    <button onclick="closeAttPermModal()" class="px-5 py-2 text-gray-600 font-bold hover:bg-gray-200 rounded-lg">إلغاء</button>
+                    <button onclick="savePermissionMultiple()" class="px-6 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700">حفظ</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// =================================================================
+// 8. نافذة الإرسال
+// =================================================================
+function getAttSendModalHTML() {
+    return `
+        <div id="att-send-modal" class="fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-2xl overflow-hidden">
+                <div class="bg-gradient-to-r from-green-500 to-green-600 p-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <span class="material-symbols-outlined">send</span>
+                        إرسال إشعار
+                    </h3>
+                    <button onclick="closeAttSendModal()" class="text-white/80 hover:text-white">
+                        <span class="material-symbols-outlined text-2xl">close</span>
+                    </button>
+                </div>
+                <div class="p-6">
+                    <div class="mb-4">
+                        <label class="block text-sm font-bold text-gray-700 mb-2">طريقة الإرسال</label>
+                        <div class="flex gap-4">
+                            <label class="flex items-center gap-2 px-4 py-3 border-2 rounded-lg cursor-pointer border-green-500 bg-green-50">
+                                <input type="radio" name="send-method" value="whatsapp" checked>
+                                <span class="material-symbols-outlined text-green-600">chat</span>
+                                <span class="font-bold text-green-700">واتساب</span>
+                            </label>
+                            <label class="flex items-center gap-2 px-4 py-3 border-2 rounded-lg cursor-pointer border-gray-300">
+                                <input type="radio" name="send-method" value="sms">
+                                <span class="material-symbols-outlined text-blue-600">sms</span>
+                                <span class="font-bold text-gray-700">SMS</span>
+                            </label>
+                            <label class="flex items-center gap-2 px-4 py-3 border-2 rounded-lg cursor-pointer border-gray-300">
+                                <input type="radio" name="send-method" value="both">
+                                <span class="material-symbols-outlined text-purple-600">mark_email_read</span>
+                                <span class="font-bold text-gray-700">الاثنين</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+                        <div class="flex items-center gap-2 text-blue-700 font-bold mb-2">
+                            <span class="material-symbols-outlined">group</span>
+                            <span>المستلمين: <span id="att-send-count">0</span> ولي أمر</span>
+                        </div>
+                        <div id="att-send-recipients" class="flex flex-wrap gap-2"></div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">نص الرسالة</label>
+                        <textarea id="att-send-message" rows="6" class="w-full p-4 border border-gray-300 rounded-xl resize-none text-sm leading-relaxed"></textarea>
+                    </div>
+                </div>
+                <div class="bg-gray-50 p-4 border-t flex gap-3 justify-end">
+                    <button onclick="closeAttSendModal()" class="px-5 py-2 text-gray-600 font-bold hover:bg-gray-200 rounded-lg">إلغاء</button>
+                    <button onclick="sendAttMessages()" class="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 flex items-center gap-2">
+                        <span class="material-symbols-outlined">send</span>
+                        إرسال الآن
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// =================================================================
+// 9. دوال فتح وإغلاق النوافذ
+// =================================================================
+function openAddLateModal() {
+    document.getElementById('att-late-modal').classList.remove('hidden');
+    populateAttGrades('late');
+    handleLateTypeChange();
+}
+
+function closeAttLateModal() {
+    document.getElementById('att-late-modal').classList.add('hidden');
+    document.getElementById('late-grade').value = '';
+    document.getElementById('late-class').innerHTML = '<option value="">اختر الفصل</option>';
+    document.getElementById('late-students').innerHTML = '<option value="">اختر الطلاب</option>';
+    document.getElementById('late-period').value = '';
+    document.querySelector('input[name="late-type"][value="تأخر صباحي"]').checked = true;
+    handleLateTypeChange();
+}
+
+function openAddPermissionModal() {
+    document.getElementById('att-perm-modal').classList.remove('hidden');
+    populateAttGrades('perm');
+    var now = new Date();
+    document.getElementById('perm-exit-time').value = now.toTimeString().slice(0,5);
+}
+
+function closeAttPermModal() {
+    document.getElementById('att-perm-modal').classList.add('hidden');
+    document.getElementById('perm-grade').value = '';
+    document.getElementById('perm-class').innerHTML = '<option value="">اختر الفصل</option>';
+    document.getElementById('perm-students').innerHTML = '<option value="">اختر الطلاب</option>';
+    document.getElementById('perm-exit-time').value = '';
+    document.getElementById('perm-reason').value = '';
+    document.getElementById('perm-receiver').value = '';
+    document.getElementById('perm-responsible').value = '';
+}
+
+function closeAttSendModal() {
+    document.getElementById('att-send-modal').classList.add('hidden');
+}
+
+// =================================================================
+// 10. دالة تغيير نوع التأخر
+// =================================================================
+function handleLateTypeChange() {
+    var lateType = document.querySelector('input[name="late-type"]:checked').value;
+    var periodContainer = document.getElementById('late-period-container');
+    var morningLabel = document.getElementById('late-type-morning-label');
+    var periodLabel = document.getElementById('late-type-period-label');
+    
+    if (lateType === 'تأخر حصة') {
+        periodContainer.classList.remove('hidden');
+        morningLabel.classList.remove('border-red-500', 'bg-red-50');
+        morningLabel.classList.add('border-gray-300');
+        periodLabel.classList.remove('border-gray-300');
+        periodLabel.classList.add('border-amber-500', 'bg-amber-50');
+    } else {
+        periodContainer.classList.add('hidden');
+        periodLabel.classList.remove('border-amber-500', 'bg-amber-50');
+        periodLabel.classList.add('border-gray-300');
+        morningLabel.classList.remove('border-gray-300');
+        morningLabel.classList.add('border-red-500', 'bg-red-50');
+    }
+}
+
+// =================================================================
+// 11. تعبئة القوائم
+// =================================================================
+function populateAttGrades(prefix) {
+    var grades = [];
+    var seen = {};
+    APP_DATA.students.filter(function(s) { return s['المرحلة'] === currentStage; }).forEach(function(s) {
+        if (!seen[s['الصف']]) {
+            seen[s['الصف']] = true;
+            grades.push(s['الصف']);
+        }
+    });
+    
+    var gradeOrder = ["أول", "ثاني", "ثالث"];
+    grades.sort(function(a, b) {
+        var indexA = gradeOrder.findIndex(function(key) { return a.includes(key); });
+        var indexB = gradeOrder.findIndex(function(key) { return b.includes(key); });
+        return indexA - indexB;
+    });
+    
+    var select = document.getElementById(prefix + '-grade');
+    select.innerHTML = '<option value="">اختر الصف</option>';
+    grades.forEach(function(g) { select.add(new Option(g, g)); });
+}
+
+function handleLateGradeChange() { handleAttGradeChange('late'); }
+function handlePermGradeChange() { handleAttGradeChange('perm'); }
+
+function handleAttGradeChange(prefix) {
+    var grade = document.getElementById(prefix + '-grade').value;
+    var classSelect = document.getElementById(prefix + '-class');
+    var studentSelect = document.getElementById(prefix + '-students');
+    
+    classSelect.innerHTML = '<option value="">اختر الفصل</option>';
+    studentSelect.innerHTML = '<option value="">اختر الطلاب</option>';
+    classSelect.disabled = !grade;
+    studentSelect.disabled = true;
+    
+    if (grade) {
+        var classes = [];
+        var seen = {};
+        APP_DATA.students.filter(function(s) {
+            return s['المرحلة'] === currentStage && s['الصف'] === grade;
+        }).forEach(function(s) {
+            if (!seen[s['الفصل']]) {
+                seen[s['الفصل']] = true;
+                classes.push(s['الفصل']);
+            }
+        });
+        classes.sort();
+        classes.forEach(function(c) { classSelect.add(new Option(c, c)); });
+    }
+}
+
+function handleLateClassChange() { handleAttClassChange('late'); }
+function handlePermClassChange() { handleAttClassChange('perm'); }
+
+function handleAttClassChange(prefix) {
+    var grade = document.getElementById(prefix + '-grade').value;
+    var cls = document.getElementById(prefix + '-class').value;
+    var studentSelect = document.getElementById(prefix + '-students');
+    
+    studentSelect.innerHTML = '';
+    studentSelect.disabled = !cls;
+    
+    if (grade && cls) {
+        var students = APP_DATA.students.filter(function(s) {
+            return s['المرحلة'] === currentStage && s['الصف'] === grade && s['الفصل'] == cls;
+        });
+        students.sort(function(a, b) { return a['اسم الطالب'].localeCompare(b['اسم الطالب'], 'ar'); });
+        students.forEach(function(s) {
+            var opt = new Option(s['اسم الطالب'], s['رقم الطالب']);
+            opt.dataset.name = s['اسم الطالب'];
+            opt.dataset.grade = s['الصف'];
+            opt.dataset.class = s['الفصل'];
+            opt.dataset.phone = s['رقم الجوال'] || '';
+            studentSelect.add(opt);
+        });
+    }
+}
+
+// =================================================================
+// 12. حفظ التأخر (متعدد)
+// =================================================================
+function saveLateMultiple() {
+    var lateType = document.querySelector('input[name="late-type"]:checked').value;
+    var period = document.getElementById('late-period').value;
+    var studentSelect = document.getElementById('late-students');
+    var selectedOptions = Array.from(studentSelect.selectedOptions);
+    
+    if (selectedOptions.length === 0) {
+        showEnhancedToast('warning', 'يرجى اختيار طالب واحد على الأقل');
+        return;
+    }
+    
+    if (lateType === 'تأخر حصة' && !period) {
+        showEnhancedToast('warning', 'يرجى اختيار الحصة');
+        return;
+    }
+    
+    var students = selectedOptions.map(function(opt) {
+        return {
+            studentId: opt.value,
+            studentName: opt.dataset.name,
+            grade: opt.dataset.grade,
+            class: opt.dataset.class,
+            phone: opt.dataset.phone
+        };
+    });
+    
+    var data = {
+        stage: currentStage,
+        lateType: lateType,
+        period: period,
+        students: students
+    };
+    
+    showEnhancedToast('info', 'جاري حفظ ' + students.length + ' طالب...');
+    
+    google.script.run.withSuccessHandler(function(res) {
+        if (res.success) {
+            showEnhancedToast('success', res.message);
+            closeAttLateModal();
+            loadTodayLateRecords();
+            loadTodayStats();
+        } else {
+            showEnhancedToast('danger', 'خطأ: ' + res.error);
+        }
+    }).withFailureHandler(function(err) {
+        showEnhancedToast('danger', 'خطأ: ' + err);
+    }).saveLateRecords(data);
+}
+
+// =================================================================
+// 13. حفظ الاستئذان (متعدد)
+// =================================================================
+function savePermissionMultiple() {
+    var exitTime = document.getElementById('perm-exit-time').value;
+    var reason = document.getElementById('perm-reason').value;
+    var receiver = document.getElementById('perm-receiver').value;
+    var responsible = document.getElementById('perm-responsible').value;
+    var studentSelect = document.getElementById('perm-students');
+    var selectedOptions = Array.from(studentSelect.selectedOptions);
+    
+    if (selectedOptions.length === 0) {
+        showEnhancedToast('warning', 'يرجى اختيار طالب واحد على الأقل');
+        return;
+    }
+    
+    if (!reason) {
+        showEnhancedToast('warning', 'يرجى اختيار السبب');
+        return;
+    }
+    
+    if (!receiver) {
+        showEnhancedToast('warning', 'يرجى اختيار المستلم');
+        return;
+    }
+    
+    if (!responsible) {
+        showEnhancedToast('warning', 'يرجى اختيار المسؤول');
+        return;
+    }
+    
+    var students = selectedOptions.map(function(opt) {
+        return {
+            studentId: opt.value,
+            studentName: opt.dataset.name,
+            grade: opt.dataset.grade,
+            class: opt.dataset.class,
+            phone: opt.dataset.phone
+        };
+    });
+    
+    var data = {
+        stage: currentStage,
+        exitTime: exitTime,
+        reason: reason,
+        receiver: receiver,
+        responsible: responsible,
+        students: students
+    };
+    
+    showEnhancedToast('info', 'جاري حفظ ' + students.length + ' طالب...');
+    
+    google.script.run.withSuccessHandler(function(res) {
+        if (res.success) {
+            showEnhancedToast('success', res.message);
+            closeAttPermModal();
+            loadTodayPermissionRecords();
+            loadTodayStats();
+        } else {
+            showEnhancedToast('danger', 'خطأ: ' + res.error);
+        }
+    }).withFailureHandler(function(err) {
+        showEnhancedToast('danger', 'خطأ: ' + err);
+    }).savePermissionRecords(data);
+}
+
+// =================================================================
+// 14. الحذف
+// =================================================================
+function deleteAttRecord(type, rowIndex) {
+    showStyledConfirm_({title: 'حذف السجل', message: 'هل تريد حذف هذا السجل؟', icon: 'delete', color: 'red', onConfirm: function() {
+    var func = type === 'late' ? 'deleteLateRecord' : 'deletePermissionRecord';
+    
+    google.script.run.withSuccessHandler(function(res) {
+        if (res.success) {
+            showEnhancedToast('success', 'تم الحذف');
+            if (type === 'late') loadTodayLateRecords();
+            else loadTodayPermissionRecords();
+            loadTodayStats();
+        } else {
+            showEnhancedToast('danger', 'خطأ: ' + (res.error || 'فشل الحذف'));
+        }
+    }).withFailureHandler(function(err) {
+        showEnhancedToast('danger', 'خطأ في الاتصال: ' + (err.message || ''));
+    })[func](currentStage, rowIndex);
+    }});
+}
+
+// =================================================================
+// 15. التحديد والإرسال
+// =================================================================
+function toggleAttSelectAll(type) {
+    var checkboxClass = type === 'late' ? '.att-late-checkbox' : '.att-perm-checkbox';
+    var selectAllId = type === 'late' ? 'att-late-select-all' : 'att-perm-select-all';
+    var isChecked = document.getElementById(selectAllId).checked;
+    document.querySelectorAll(checkboxClass).forEach(function(cb) { cb.checked = isChecked; });
+}
+
+function selectAllAttRecords(type) {
+    var checkboxClass = type === 'late' ? '.att-late-checkbox' : '.att-perm-checkbox';
+    document.querySelectorAll(checkboxClass).forEach(function(cb) { cb.checked = true; });
+}
+
+function openAttSendModal(type) {
+    var checkboxClass = type === 'late' ? '.att-late-checkbox:checked' : '.att-perm-checkbox:checked';
+    var selected = document.querySelectorAll(checkboxClass);
+    
+    if (selected.length === 0) {
+        showEnhancedToast('warning', 'يرجى تحديد سجل واحد على الأقل');
+        return;
+    }
+    
+    var recipients = [];
+    var recipientsHTML = [];
+    
+    selected.forEach(function(cb) {
+        var phone = cb.dataset.phone;
+        var name = cb.dataset.name;
+        var idx = cb.dataset.index;
+        var rowIndex = cb.dataset.row;
+        
+        recipients.push({ phone: phone, name: name, index: idx, type: type, rowIndex: rowIndex, grade: cb.dataset.grade || '', cls: cb.dataset.cls || '' });
+        recipientsHTML.push('<span class="px-3 py-1 bg-white rounded-full text-sm text-gray-700 border">ولي أمر: ' + escapeHtml(name) + '</span>');
+    });
+    
+    document.getElementById('att-send-recipients').innerHTML = recipientsHTML.join('');
+    document.getElementById('att-send-count').innerText = recipients.length;
+    document.getElementById('att-send-modal').dataset.recipients = JSON.stringify(recipients);
+    document.getElementById('att-send-modal').dataset.type = type;
+    
+    var template = type === 'late' 
+        ? 'السلام عليكم ورحمة الله وبركاته\n\nولي أمر الطالب: {اسم_الطالب}\n\nنود إبلاغكم بتأخر ابنكم عن الحضور للمدرسة اليوم.\n\nنأمل الحرص على الحضور المبكر.\n\nمع تحيات إدارة مدرسة ' + (APP_DATA.settings.school_name || 'المدرسة') + ''
+        : 'السلام عليكم ورحمة الله وبركاته\n\nولي أمر الطالب: {اسم_الطالب}\n\nنود إبلاغكم باستئذان ابنكم من المدرسة اليوم.\n\nمع تحيات إدارة مدرسة ' + (APP_DATA.settings.school_name || 'المدرسة') + '';
+    
+    document.getElementById('att-send-message').value = template;
+    document.getElementById('att-send-modal').classList.remove('hidden');
+}
+
+function sendSingleAtt(type, idx) {
+    var records = type === 'late' ? attLateRecords : attPermissionRecords;
+    var rec = records[idx];
+    
+    var recipients = [{ phone: getStudentPhone(rec), name: rec['اسم_الطالب'], index: idx, type: type, rowIndex: rec.rowIndex, grade: rec['الصف'] || '', cls: rec['الفصل'] || '' }];
+    
+    document.getElementById('att-send-recipients').innerHTML = '<span class="px-3 py-1 bg-white rounded-full text-sm text-gray-700 border">ولي أمر: ' + escapeHtml(rec['اسم_الطالب']) + '</span>';
+    document.getElementById('att-send-count').innerText = '1';
+    document.getElementById('att-send-modal').dataset.recipients = JSON.stringify(recipients);
+    document.getElementById('att-send-modal').dataset.type = type;
+    
+    var lateInfo = type === 'late' ? '\nنوع التأخر: ' + (rec['نوع_التأخر'] || 'صباحي') + (rec['الحصة'] ? '\nالحصة: ' + rec['الحصة'] : '') : '';
+    var permInfo = type === 'permission' ? '\nوقت الخروج: ' + (rec['وقت_الخروج'] || '-') + '\nالسبب: ' + (rec['السبب'] || '-') : '';
+    
+    var template = type === 'late' 
+        ? 'السلام عليكم ورحمة الله وبركاته\n\nولي أمر الطالب: ' + rec['اسم_الطالب'] + '\n\nنود إبلاغكم بتأخر ابنكم عن الحضور للمدرسة اليوم.' + lateInfo + '\n\nنأمل الحرص على الحضور المبكر.\n\nمع تحيات إدارة مدرسة ' + (APP_DATA.settings.school_name || 'المدرسة') + ''
+        : 'السلام عليكم ورحمة الله وبركاته\n\nولي أمر الطالب: ' + rec['اسم_الطالب'] + '\n\nنود إبلاغكم باستئذان ابنكم من المدرسة اليوم.' + permInfo + '\n\nمع تحيات إدارة مدرسة ' + (APP_DATA.settings.school_name || 'المدرسة') + '';
+    
+    document.getElementById('att-send-message').value = template;
+    document.getElementById('att-send-modal').classList.remove('hidden');
+}
+
+// =================================================================
+// 16. إرسال الرسائل
+// =================================================================
+function sendAttMessages() {
+    var modal = document.getElementById('att-send-modal');
+    var recipients = JSON.parse(modal.dataset.recipients || '[]');
+    var type = modal.dataset.type;
+    var messageTemplate = document.getElementById('att-send-message').value;
+    var sendMethod = document.querySelector('input[name="send-method"]:checked').value;
+    
+    if (recipients.length === 0) {
+        showEnhancedToast('warning', 'لا يوجد مستلمين');
+        return;
+    }
+    
+    showEnhancedToast('info', 'جاري إرسال ' + recipients.length + ' رسالة عبر ' + (sendMethod === 'both' ? 'الواتساب و SMS' : sendMethod === 'whatsapp' ? 'الواتساب' : 'SMS') + '...');
+    closeAttSendModal();
+    
+    var successCount = 0;
+    var failCount = 0;
+    var totalOperations = recipients.length * (sendMethod === 'both' ? 2 : 1);
+    var completedOperations = 0;
+    
+    recipients.forEach(function(recipient, index) {
+        var message = messageTemplate.replace('{اسم_الطالب}', recipient.name);
+        
+        setTimeout(function() {
+            if (sendMethod === 'whatsapp' || sendMethod === 'both') {
+                google.script.run.withSuccessHandler(function(res) {
+                    if (res && res.success) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                    }
+                    completedOperations++;
+                    checkSendComplete();
+                }).withFailureHandler(function() {
+                    failCount++;
+                    completedOperations++;
+                    checkSendComplete();
+                }).sendWhatsAppWithLog({
+                    phone: recipient.phone,
+                    message: message,
+                    studentName: recipient.name,
+                    grade: recipient.grade || '',
+                    class: recipient.cls || '',
+                    messageType: type === 'late' ? 'تأخر' : 'استئذان',
+                    messageTitle: type === 'late' ? 'إشعار تأخر' : 'إشعار استئذان'
+                }, currentStage);
+            }
+            
+            if (sendMethod === 'sms' || sendMethod === 'both') {
+                google.script.run.withSuccessHandler(function(res) {
+                    if (res && res.success) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                    }
+                    completedOperations++;
+                    checkSendComplete();
+                }).withFailureHandler(function() {
+                    failCount++;
+                    completedOperations++;
+                    checkSendComplete();
+                }).sendSingleSMS(recipient.phone, message);
+            }
+            
+            var updateFunc = type === 'late' ? 'updateLateSentStatus' : 'updatePermissionSentStatus';
+            google.script.run.withSuccessHandler(function(res) {
+                if (res && !res.success) { console.error('فشل تحديث حالة الإرسال:', res.error || ''); }
+            }).withFailureHandler(function(e){ console.error('فشل تحديث حالة الإرسال:', e); })[updateFunc](currentStage, recipient.rowIndex);
+            
+        }, index * 1500);
+    });
+    
+    function checkSendComplete() {
+        if (completedOperations >= totalOperations) {
+            showEnhancedToast('success', 'تم الإرسال: ' + successCount + ' ناجح، ' + failCount + ' فاشل');
+            if (type === 'late') loadTodayLateRecords();
+            else loadTodayPermissionRecords();
+        }
+    }
+}
+
+// =================================================================
+// 17. الإحصائيات
+// =================================================================
+function loadTodayStats() {
+    google.script.run.withSuccessHandler(function(result) {
+        if (result && result.success) {
+            var stats = result.stats;
+            var el = document.getElementById('att-today-stats');
+            if (el) el.innerHTML = `
+                <div class="bg-red-50 border border-red-200 rounded-xl px-4 py-2 text-center">
+                    <div class="text-2xl font-black text-red-600">${stats.lateCount}</div>
+                    <div class="text-xs text-red-500">متأخر</div>
+                </div>
+                <div class="bg-purple-50 border border-purple-200 rounded-xl px-4 py-2 text-center">
+                    <div class="text-2xl font-black text-purple-600">${stats.permissionCount}</div>
+                    <div class="text-xs text-purple-500">مستأذن</div>
+                </div>
+            `;
+        }
+    }).withFailureHandler(function(err) {
+        console.error('فشل تحميل الإحصائيات:', err);
+    }).getTodayAttendanceStats(currentStage);
+}
+
+// =================================================================
+// 18. الطباعة
+// =================================================================
+function printAttList(type) {
+    var records = type === 'late' ? attLateRecords : attPermissionRecords;
+    var title = type === 'late' ? 'سجل المتأخرين' : 'سجل المستأذنين';
+    var color = type === 'late' ? '#dc2626' : '#7c3aed';
+    
+    if (records.length === 0) {
+        showEnhancedToast('warning', 'لا توجد بيانات للطباعة');
+        return;
+    }
+    
+    var rows = records.map(function(rec, i) {
+        var dayName = getDayNameFromDate(rec['وقت_الإدخال']);
+        var hijriDate = rec['التاريخ_هجري'] || '';
+        
+        if (type === 'late') {
+            return '<tr>' +
+                '<td class="data-cell">' + toIndic(i + 1) + '</td>' +
+                '<td class="name-cell">' + escapeHtml(rec['اسم_الطالب'] || '') + '</td>' +
+                '<td class="data-cell">' + escapeHtml(rec['الصف'] || '') + ' / ' + escapeHtml(rec['الفصل'] || '') + '</td>' +
+                '<td class="data-cell">' + escapeHtml(dayName + ' ' + hijriDate) + '</td>' +
+                '<td class="data-cell">' + escapeHtml(rec['نوع_التأخر'] || 'صباحي') + '</td>' +
+                '<td class="data-cell">' + escapeHtml(rec['الحصة'] || '-') + '</td>' +
+                '</tr>';
+        } else {
+            return '<tr>' +
+                '<td class="data-cell">' + toIndic(i + 1) + '</td>' +
+                '<td class="name-cell">' + escapeHtml(rec['اسم_الطالب'] || '') + '</td>' +
+                '<td class="data-cell">' + escapeHtml(rec['الصف'] || '') + ' / ' + escapeHtml(rec['الفصل'] || '') + '</td>' +
+                '<td class="data-cell">' + escapeHtml(dayName + ' ' + hijriDate) + '</td>' +
+                '<td class="data-cell">' + escapeHtml(rec['وقت_الخروج'] || '-') + '</td>' +
+                '<td class="data-cell">' + escapeHtml(rec['السبب'] || '-') + '</td>' +
+                '<td class="data-cell">' + escapeHtml(rec['المستلم'] || '-') + '</td>' +
+                '</tr>';
+        }
+    }).join('');
+    
+    var headers = type === 'late' 
+        ? '<th>م</th><th>اسم الطالب</th><th>الصف</th><th>اليوم والتاريخ</th><th>نوع التأخر</th><th>الحصة</th>'
+        : '<th>م</th><th>اسم الطالب</th><th>الصف</th><th>اليوم والتاريخ</th><th>وقت الخروج</th><th>السبب</th><th>المستلم</th>';
+    
+    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var colCount = type === 'late' ? 6 : 7;
+    var headersFormatted = headers.replace(/<th>/g, '<th class="col-header">');
+    
+    var win = window.open('', '_blank');
+    if (!win) { showEnhancedToast('danger', 'يرجى السماح بالنوافذ المنبثقة للطباعة'); return; }
+    win.document.write(buildSharedPrintPage_({
+        title: title,
+        subtitle: currentStage,
+        dateText: hijri + ' | العدد: ' + toArShared_(records.length),
+        colCount: colCount,
+        headers: headersFormatted,
+        rows: rows,
+        total: toArShared_(records.length) + (type === 'late' ? ' متأخر' : ' مستأذن')
+    }));
+    win.document.close();
+    setTimeout(function() { win.focus(); win.print(); }, 500);
+}
+
+function printArchive() {
+    var type = document.getElementById('archive-type').value;
+    showEnhancedToast('info', 'جاري تحضير الطباعة...');
+    
+    setTimeout(function() {
+        var container = document.getElementById('archive-content');
+        var table = container.querySelector('table');
+        if (!table) {
+            showEnhancedToast('warning', 'لا توجد بيانات للطباعة');
+            return;
+        }
+        
+        var title = type === 'late' ? 'أرشيف التأخر' : 'أرشيف الاستئذان';
+        var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+        
+        // Extract rows from existing table
+        var tbody = table.querySelector('tbody');
+        var thead = table.querySelector('thead');
+        var rows = tbody ? tbody.innerHTML : '';
+        var headerRow = thead ? thead.querySelector('tr') : null;
+        var headerCells = headerRow ? headerRow.innerHTML.replace(/<th/g, '<th class="col-header"') : '';
+        var colCount = headerRow ? headerRow.querySelectorAll('th').length : 7;
+        
+        var win = window.open('', '_blank');
+        if (!win) { showEnhancedToast('danger', 'يرجى السماح بالنوافذ المنبثقة للطباعة'); return; }
+        win.document.write(buildSharedPrintPage_({
+            title: title,
+            subtitle: currentStage,
+            dateText: hijri,
+            colCount: colCount,
+            headers: headerCells,
+            rows: rows,
+            total: ''
+        }));
+        win.document.close();
+        setTimeout(function() { win.focus(); win.print(); }, 500);
+    }, 500);
+}
+</script>

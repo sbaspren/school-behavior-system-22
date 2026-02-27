@@ -1,0 +1,581 @@
+<script>
+    // =================================================================
+    // 0. دالة حماية XSS — مشتركة لكل الملفات
+    // =================================================================
+    function escapeHtml(str) {
+      if (!str && str !== 0) return '';
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    // =================================================================
+    // ★ دالة اسم المرحلة الكامل — بدلاً من ternary ثنائية
+    // =================================================================
+    var STAGE_FULL_NAMES = {
+      'متوسط': 'المرحلة المتوسطة',
+      'ثانوي': 'المرحلة الثانوية',
+      'ابتدائي': 'المرحلة الابتدائية',
+      'طفولة مبكرة': 'مرحلة الطفولة المبكرة'
+    };
+    function getStageName_(stage) { return STAGE_FULL_NAMES[stage] || stage || ''; }
+
+    // =================================================================
+    // 1. المتغيرات العامة (Global Variables)
+    // =================================================================
+    let APP_DATA = { students: [], violations: [], procedures: {}, proceduresByDegree: {}, settings: { manager: '', deputies: [], counselors: [], committee: [] } };
+    let currentStage = 'متوسط';
+    let currentRecords = [];
+    let chartInstances = {};
+    
+    // =================================================================
+    // 2. تهيئة النظام (Initialization)
+    // =================================================================
+    document.addEventListener('DOMContentLoaded', function() {
+        google.script.run.withSuccessHandler(onDataReceived).withFailureHandler(onDataError).getInitialData();
+        setupNavigation();
+    });
+
+    function onDataReceived(data) {
+        if (data.success) {
+            // ★ فحص: هل يحتاج إعداد هيكل المدرسة أولاً؟
+            if (data.needsSetup) {
+                showSetupScreen();
+                return;
+            }
+
+            // ★ دمج البيانات بدلاً من استبدالها كاملة (للحفاظ على القيم الافتراضية)
+            APP_DATA = data;
+            if (!APP_DATA.settings) APP_DATA.settings = {};
+            if (!APP_DATA.settings.deputies) APP_DATA.settings.deputies = [];
+            if (!APP_DATA.settings.counselors) APP_DATA.settings.counselors = [];
+            if (!APP_DATA.settings.committee) APP_DATA.settings.committee = [];
+            if (!APP_DATA.students) APP_DATA.students = [];
+            if (!APP_DATA.violations) APP_DATA.violations = [];
+            if (!APP_DATA.procedures) APP_DATA.procedures = {};
+            // ★ عرض اسم المدرسة في الشريط الجانبي
+            var sidebarName = document.getElementById('sidebar-school-name');
+            if (sidebarName && data.settings && data.settings.school_name) {
+                sidebarName.textContent = data.settings.school_name;
+            }
+            // إخفاء شاشة الإعداد إذا كانت ظاهرة
+            var setupScreen = document.getElementById('setup-screen');
+            if (setupScreen) setupScreen.remove();
+            document.getElementById('main-app-content')?.classList.remove('hidden');
+
+            // ★ تحديث قائمة المراحل في الشريط العلوي
+            if (data.enabledStages) {
+                updateStageSelector(data.enabledStages);
+            }
+
+            // الافتراضي: فتح لوحة المتابعة
+            const defaultBtn = document.querySelector('.nav-item[data-section="dashboard"]');
+            if (defaultBtn) defaultBtn.classList.add('active');
+            switchSection('dashboard');
+        } else {
+            showEnhancedToast('danger', 'فشل تحميل البيانات: ' + data.error);
+        }
+    }
+
+    // ★ شاشة الترحيب الإجبارية عند أول استخدام
+    function showSetupScreen() {
+        // إخفاء المحتوى الرئيسي
+        document.getElementById('main-app-content')?.classList.add('hidden');
+
+        // إزالة شاشة إعداد سابقة إن وُجدت
+        var existing = document.getElementById('setup-screen');
+        if (existing) existing.remove();
+
+        var screen = document.createElement('div');
+        screen.id = 'setup-screen';
+        screen.className = 'fixed inset-0 bg-gradient-to-br from-indigo-50 via-white to-purple-50 z-[1000] flex items-center justify-center';
+        screen.innerHTML = ''
+            + '<div class="bg-white rounded-3xl shadow-2xl ring-1 ring-black/5 w-full max-w-lg mx-4 overflow-hidden text-center">'
+            + '  <div class="bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-8">'
+            + '    <span class="material-symbols-outlined text-white text-5xl mb-3" style="font-size:56px">school</span>'
+            + '    <h1 class="text-2xl font-bold text-white">مرحباً بك في نظام إدارة السلوك</h1>'
+            + '    <p class="text-indigo-100 mt-2 text-sm">الخطوة الأولى: إعداد هيكل المدرسة</p>'
+            + '  </div>'
+            + '  <div class="px-8 py-6">'
+            + '    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 text-right">'
+            + '      <div class="flex items-start gap-3">'
+            + '        <span class="material-symbols-outlined text-amber-500 mt-0.5">info</span>'
+            + '        <div>'
+            + '          <p class="font-bold text-amber-800 text-sm">إعداد مطلوب</p>'
+            + '          <p class="text-amber-700 text-xs mt-1">يرجى تحديد المراحل الدراسية والصفوف والفصول لبناء قاعدة بيانات النظام. هذه الخطوة مطلوبة مرة واحدة فقط.</p>'
+            + '        </div>'
+            + '      </div>'
+            + '    </div>'
+            + '    <div class="space-y-3 text-right mb-6">'
+            + '      <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">'
+            + '        <span class="flex items-center justify-center w-8 h-8 bg-indigo-100 text-indigo-600 rounded-full text-sm font-bold">1</span>'
+            + '        <span class="text-gray-700 text-sm">اختر المراحل الدراسية (ابتدائي، متوسط، ثانوي...)</span>'
+            + '      </div>'
+            + '      <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">'
+            + '        <span class="flex items-center justify-center w-8 h-8 bg-indigo-100 text-indigo-600 rounded-full text-sm font-bold">2</span>'
+            + '        <span class="text-gray-700 text-sm">حدد الصفوف وعدد الفصول لكل صف</span>'
+            + '      </div>'
+            + '      <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">'
+            + '        <span class="flex items-center justify-center w-8 h-8 bg-indigo-100 text-indigo-600 rounded-full text-sm font-bold">3</span>'
+            + '        <span class="text-gray-700 text-sm">احفظ — وسيُبنى النظام تلقائياً</span>'
+            + '      </div>'
+            + '    </div>'
+            + '    <button onclick="goToStructureSetup()" class="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-bold text-lg hover:from-indigo-700 hover:to-purple-700 shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 transition">'
+            + '      <span class="material-symbols-outlined">settings</span>'
+            + '      إعداد هيكل المدرسة'
+            + '    </button>'
+            + '  </div>'
+            + '</div>';
+        document.body.appendChild(screen);
+    }
+
+    // ★ الانتقال لصفحة الإعدادات → تبويب هيكل الصفوف
+    function goToStructureSetup() {
+        var setupScreen = document.getElementById('setup-screen');
+        if (setupScreen) setupScreen.remove();
+        document.getElementById('main-app-content')?.classList.remove('hidden');
+
+        // تفعيل قسم الإعدادات في القائمة
+        document.querySelectorAll('.nav-item').forEach(function(el) { el.classList.remove('active'); });
+        var settingsBtn = document.querySelector('.nav-item[data-section="settings"]');
+        if (settingsBtn) settingsBtn.classList.add('active');
+        switchSection('settings');
+
+        // فتح تبويب هيكل الصفوف مباشرة (بعد تحميل الإعدادات)
+        setTimeout(function() {
+            if (typeof switchSettingsTab === 'function') {
+                switchSettingsTab('structure');
+            }
+        }, 500);
+    }
+
+    // ★ تحديث قائمة المراحل في الشريط العلوي
+    function updateStageSelector(stages) {
+        var selector = document.getElementById('stage-selector');
+        if (!selector || !stages || stages.length === 0) return;
+
+        selector.innerHTML = '';
+        stages.forEach(function(s) {
+            var opt = document.createElement('option');
+            opt.value = s;
+            opt.textContent = s;
+            selector.appendChild(opt);
+        });
+
+        // تعيين المرحلة الافتراضية
+        currentStage = stages[0];
+    }
+
+    function onDataError(error) {
+        showEnhancedToast('danger', 'خطأ في الاتصال بالخادم: ' + error);
+    }
+
+    // =================================================================
+    // 3. نظام التنقل (Navigation System)
+    // =================================================================
+    function setupNavigation() {
+        // تفعيل أزرار القائمة الجانبية
+        document.querySelectorAll('.nav-item[data-section]').forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+                item.classList.add('active');
+                switchSection(item.dataset.section);
+            });
+        });
+
+        // تفعيل تغيير المرحلة (متوسط/ثانوي)
+        var stageSelector = document.getElementById('stage-selector');
+        if (stageSelector) {
+            stageSelector.addEventListener('change', (e) => {
+                currentStage = e.target.value;
+                const active = document.querySelector('.nav-item.active')?.dataset.section;
+                if(active) switchSection(active);
+            });
+        }
+
+        // زر التحديث
+        // ★ حماية من الضغط المتكرر على زر التحديث (debounce)
+        var _refreshing = false;
+        var refreshBtn = document.getElementById('refreshBtn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => {
+                if (_refreshing) return;
+                _refreshing = true;
+                refreshBtn.style.opacity = '0.5';
+                refreshBtn.style.pointerEvents = 'none';
+                showEnhancedToast('info', 'جاري تحديث البيانات...');
+                google.script.run.withSuccessHandler(function(data) {
+                    _refreshing = false;
+                    refreshBtn.style.opacity = '';
+                    refreshBtn.style.pointerEvents = '';
+                    onDataReceived(data);
+                }).withFailureHandler(function(err) {
+                    _refreshing = false;
+                    refreshBtn.style.opacity = '';
+                    refreshBtn.style.pointerEvents = '';
+                    onDataError(err);
+                }).getInitialData();
+            });
+        }
+    }
+
+    // =================================================================
+    // ★ نظام التخزين المؤقت للتبويبات (إصلاح #9)
+    // يحفظ بيانات كل قسم لتجنب إعادة التحميل عند التبديل
+    // =================================================================
+    var _sectionCache = {};
+    var _sectionCacheTTL = 60000; // صلاحية الكاش: 60 ثانية
+    var _currentSectionId = '';
+
+    function setSectionCache(key, data) {
+        _sectionCache[key] = { data: data, timestamp: Date.now() };
+    }
+    function getSectionCache(key) {
+        var entry = _sectionCache[key];
+        if (!entry) return null;
+        if (Date.now() - entry.timestamp > _sectionCacheTTL) {
+            delete _sectionCache[key];
+            return null;
+        }
+        return entry.data;
+    }
+    function clearSectionCache(key) {
+        if (key) delete _sectionCache[key];
+        else _sectionCache = {};
+    }
+
+    // =================================================================
+    // ★ نظام التحميل الكسول للأقسام (إصلاح #10)
+    // يتتبع الأقسام المُهيّأة ويُعيد تهيئتها فقط عند الحاجة
+    // =================================================================
+    var _initializedSections = {};
+
+    function switchSection(sectionId) {
+        // ★ تدمير الرسوم فقط عند الخروج من القسم (لا عند كل تبديل)
+        if (_currentSectionId !== sectionId) {
+            Object.values(chartInstances).forEach(c => c.destroy());
+            chartInstances = {};
+        }
+        _currentSectionId = sectionId;
+
+        switch(sectionId) {
+            case 'dashboard':
+                renderDashboardPage();
+                break;
+            case 'violations':
+            case 'new-violation':
+                renderNewViolationPage();
+                break;
+            case 'absence':
+                renderAbsencePage();
+                break;
+            case 'tardiness':
+                renderTardinessPage();
+                break;
+            case 'permissions':
+                renderPermissionsPage();
+                break;
+            case 'general-forms':
+                renderGeneralFormsPage();
+                break;
+            case 'whatsapp':
+                renderWhatsAppPage();
+                break;
+            case 'settings':
+                renderSettingsPage();
+                break;
+            case 'educational-notes':
+                renderEducationalNotesPage();
+                break;
+            case 'communication':
+                renderCommunicationPage();
+                break;
+            case 'academic':
+                renderAcademicPage();
+                break;
+            case 'noor':
+                renderNoorPage();
+                break;
+            default:
+                break;
+        }
+    }
+
+    // =================================================================
+    // ★ تحديث تدريجي للجداول (إصلاح #8)
+    // بدلاً من إعادة بناء الجدول كاملاً، يتم تحديث الخلايا المتغيرة فقط
+    // =================================================================
+    function smartUpdateTable_(containerId, newHtml) {
+        var container = document.getElementById(containerId);
+        if (!container) return;
+        // إذا لم يكن هناك محتوى سابق أو اختلف عدد الصفوف → إعادة بناء كاملة
+        var oldTable = container.querySelector('table');
+        if (!oldTable) {
+            container.innerHTML = newHtml;
+            return;
+        }
+        var tempDiv = document.createElement('div');
+        tempDiv.innerHTML = newHtml;
+        var newTable = tempDiv.querySelector('table');
+        if (!newTable) {
+            container.innerHTML = newHtml;
+            return;
+        }
+        var oldRows = oldTable.querySelectorAll('tbody tr');
+        var newRows = newTable.querySelectorAll('tbody tr');
+        // إذا اختلف عدد الصفوف → إعادة بناء كاملة
+        if (oldRows.length !== newRows.length) {
+            container.innerHTML = newHtml;
+            return;
+        }
+        // تحديث الخلايا المختلفة فقط
+        for (var i = 0; i < oldRows.length; i++) {
+            if (oldRows[i].innerHTML !== newRows[i].innerHTML) {
+                oldRows[i].innerHTML = newRows[i].innerHTML;
+            }
+        }
+        // تحديث التذييل إن وُجد
+        var oldFooter = container.querySelector('.tbl-footer');
+        var newFooter = tempDiv.querySelector('.tbl-footer');
+        if (oldFooter && newFooter && oldFooter.innerHTML !== newFooter.innerHTML) {
+            oldFooter.innerHTML = newFooter.innerHTML;
+        }
+    }
+
+    // =================================================================
+    // 4. دوال مساعدة عامة (Utilities)
+    // =================================================================
+    
+    // إظهار التنبيهات (Toast) - مع z-index عالي ليظهر فوق النوافذ المنبثقة
+    function showEnhancedToast(type, message) {
+        const toast = document.getElementById('toast-notification');
+        if (!toast) { console.warn('Toast element not found:', type, message); return; }
+        const colors = { success: 'bg-green-600', danger: 'bg-red-600', info: 'bg-blue-600', warning: 'bg-yellow-500' };
+
+        // تم تغيير z-50 إلى z-[99999] ليظهر فوق النوافذ المنبثقة
+        toast.className = `fixed top-5 left-1/2 transform -translate-x-1/2 text-white px-6 py-3 rounded-lg shadow-lg z-[99999] transition-all duration-300 ${colors[type] || colors.info}`;
+        toast.textContent = message;
+
+        // إظهار
+        toast.classList.remove('opacity-0', 'invisible');
+
+        // إخفاء تلقائي بعد 3 ثواني
+        setTimeout(() => toast.classList.add('opacity-0', 'invisible'), 3000);
+    }
+
+    // تحويل الأرقام إلى أرقام هندية (١٢٣)
+    function toIndic(n) {
+        if(n==null) return ''; 
+        return n.toString().replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
+    }
+
+    // استخراج اسم اليوم من التاريخ
+    function getDayFromDate(dateVal) {
+        const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+        const d = new Date(dateVal);
+        return days[d.getDay()] || '';
+    }
+
+    // الحصول على معرف النموذج من اسمه العربي
+    function getFormIdByName(name) {
+        // تنظيف الاسم من المسافات الزائدة لضمان المطابقة
+        const cleanName = name ? name.trim() : '';
+        
+        const map = { 
+            'إشعار ولي الأمر': 'ishar_wali_amr', 
+            'اشعار ولي الامر': 'ishar_wali_amr',
+            'تعهد سلوكي': 'tahood_slooki', 
+            'إحالة طالب': 'ehalat_talib', 
+            'احالة طالب': 'ehalat_talib',
+            'دعوة ولي أمر': 'dawat_wali_amr', 
+            'دعوة ولي الأمر': 'dawat_wali_amr', 
+            'محضر ضبط واقعة': 'mahdar_dab_wakea', 
+            'محضر اجتماع لجنة': 'mahdar_lajnah', 
+            'فرص تعويض': 'tawid_darajat' 
+        };
+        return map[cleanName];
+    }
+
+    // دالة showToast للتوافق مع ملفات الإعدادات
+    function showToast(message, type = 'info') {
+        const typeMap = { 'error': 'danger', 'success': 'success', 'info': 'info', 'warning': 'warning' };
+        const mappedType = typeMap[type] || type;
+        showEnhancedToast(mappedType, message);
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // ★ Sheet-Style Table Helpers (دوال مشتركة للجداول)
+    // ═══════════════════════════════════════════════════════
+    function getF_(rec, name) {
+        if (!rec) return '';
+        var v = rec[name];
+        if (v !== undefined && v !== null && v !== '') return v;
+        var a = name.replace(/ /g, '_');
+        if (a !== name) { v = rec[a]; if (v !== undefined && v !== null && v !== '') return v; }
+        var b = name.replace(/_/g, ' ');
+        if (b !== name) { v = rec[b]; if (v !== undefined && v !== null && v !== '') return v; }
+        return '';
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // ★ دالة موحدة لجلب رقم جوال ولي الأمر (مركزية لكل الأقسام)
+    // تبحث في: ١) السجل نفسه ٢) APP_DATA.students بالرقم ٣) بالاسم+الصف
+    // ═══════════════════════════════════════════════════════
+    function getStudentPhone(rec) {
+        if (!rec) return '';
+        
+        // ★ المرحلة ١: البحث في السجل نفسه
+        var phoneKeys = ['رقم الجوال', 'رقم_الجوال', 'الجوال', 'جوال ولي الأمر', 'phone'];
+        for (var i = 0; i < phoneKeys.length; i++) {
+            var v = rec[phoneKeys[i]];
+            if (v && String(v).trim()) return String(v).trim();
+        }
+        
+        // ★ المرحلة ٢: البحث في APP_DATA.students برقم الطالب
+        var studentId = String(rec['رقم الطالب'] || rec['رقم_الطالب'] || rec['studentId'] || rec['id'] || '').trim();
+        if (studentId && APP_DATA && APP_DATA.students) {
+            var student = APP_DATA.students.find(function(s) {
+                return String(s['رقم الطالب'] || s['رقم_الطالب'] || '').trim() == studentId;
+            });
+            if (student) {
+                for (var j = 0; j < phoneKeys.length; j++) {
+                    var v2 = student[phoneKeys[j]];
+                    if (v2 && String(v2).trim()) return String(v2).trim();
+                }
+            }
+        }
+        
+        // ★ المرحلة ٣: البحث بالاسم + الصف + الفصل (آخر محاولة)
+        var name = String(rec['اسم الطالب'] || rec['اسم_الطالب'] || '').trim();
+        var grade = String(rec['الصف'] || '').trim();
+        var cls = String(rec['الفصل'] || '').trim();
+        if (name && APP_DATA && APP_DATA.students) {
+            var match = APP_DATA.students.find(function(s) {
+                return String(s['اسم الطالب'] || '').trim() === name 
+                    && String(s['الصف'] || '').trim() === grade 
+                    && String(s['الفصل'] || '').trim() == cls;
+            });
+            if (match) {
+                for (var k = 0; k < phoneKeys.length; k++) {
+                    var v3 = match[phoneKeys[k]];
+                    if (v3 && String(v3).trim()) return String(v3).trim();
+                }
+            }
+        }
+        
+        return '';
+    }
+
+    function sortRecordsByClass_(records) {
+        var go = {'الأول':1,'الثاني':2,'الثالث':3,'الرابع':4,'الخامس':5,'السادس':6};
+        return records.slice().sort(function(a, b) {
+            var gA = getF_(a,'الصف'), gB = getF_(b,'الصف'), oA = 99, oB = 99;
+            for (var k in go) { if (gA.indexOf(k) >= 0) { oA = go[k]; break; } }
+            for (var k in go) { if (gB.indexOf(k) >= 0) { oB = go[k]; break; } }
+            if (oA !== oB) return oA - oB;
+            var cA = parseInt(getF_(a,'الفصل')) || 0, cB = parseInt(getF_(b,'الفصل')) || 0;
+            if (cA !== cB) return cA - cB;
+            return (getF_(a,'اسم_الطالب')||'').localeCompare(getF_(b,'اسم_الطالب')||'','ar');
+        });
+    }
+
+    function classKey_(rec) {
+        return (getF_(rec,'الصف')||'') + '/' + (getF_(rec,'الفصل')||'');
+    }
+
+    function sheetGroupInfo_(sorted) {
+        var info = [], i = 0;
+        while (i < sorted.length) {
+            var key = classKey_(sorted[i]), cnt = 1;
+            while (i + cnt < sorted.length && classKey_(sorted[i + cnt]) === key) cnt++;
+            for (var j = 0; j < cnt; j++) info.push({ first: j === 0, span: cnt, border: i > 0 && j === 0 });
+            i += cnt;
+        }
+        return info;
+    }
+
+    function toArabicNum_(n) {
+        if (n === null || n === undefined || n === '' || n === '-') return String(n || '-');
+        return String(n).replace(/[0-9]/g, function(d) { return '٠١٢٣٤٥٦٧٨٩'[d]; });
+    }
+
+    function getTimeOnly_(dateStr) {
+        if (!dateStr) return '-';
+        try { var s = String(dateStr); return s.split(' ')[1] || s; } catch(e) { return dateStr; }
+    }
+
+    function countBadge_(isSent, sendFn) {
+        if (isSent) return '<span class="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold"><span class="material-symbols-outlined text-[14px]">check_circle</span> تم</span>';
+        return '<button data-send-action="' + escapeHtml(sendFn) + '" class="btn-send-action inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded-full text-xs font-bold hover:bg-green-100 border border-green-200"><span class="material-symbols-outlined text-[14px]">send</span> إرسال</button>';
+    }
+
+    // ★ معالج أحداث مفوّض لأزرار الإرسال (بديل آمن عن onclick المضمنة)
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.btn-send-action');
+        if (btn) {
+            var action = btn.getAttribute('data-send-action');
+            if (action) {
+                try { new Function(action)(); } catch(err) { console.error('Send action error:', err); }
+            }
+        }
+    });
+
+    // ═══════════════════════════════════════════════════════
+    // ★ تطبيع النص العربي (إزالة تشكيل + توحيد الألف والهمزة)
+    // ═══════════════════════════════════════════════════════
+    function normalizeArabic_(text) {
+        if (!text) return '';
+        return String(text)
+            .replace(/[\u064B-\u065F\u0670]/g, '')       // إزالة التشكيل
+            .replace(/[إأآا]/g, 'ا')                      // توحيد الألف
+            .replace(/ة/g, 'ه')                            // التاء المربوطة
+            .replace(/ى/g, 'ي')                            // الألف المقصورة
+            .replace(/\s+بن\s+/g, ' ')                     // إزالة "بن"
+            .replace(/\s+/g, ' ')                          // تنظيف المسافات
+            .trim();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // ★ منبثقة تأكيد مصممة (بديل confirm() المتصفح) - مشتركة لكل الأقسام
+    // الاستخدام: showStyledConfirm_({title, message, icon, color, onConfirm})
+    // color: اللون الرئيسي (indigo/emerald/red/amber...) - افتراضي indigo
+    // ═══════════════════════════════════════════════════════
+    function showStyledConfirm_(opts) {
+        var existing = document.getElementById('styled-confirm-global');
+        if (existing) existing.remove();
+        
+        var color = opts.color || 'indigo';
+        var modal = document.createElement('div');
+        modal.id = 'styled-confirm-global';
+        modal.className = 'fixed inset-0 bg-gray-900/50 z-[999] flex items-center justify-center backdrop-blur-sm';
+        modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+        modal.innerHTML = '<div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-md mx-4 overflow-hidden">'
+            + '<div class="px-5 py-4 bg-gradient-to-r from-' + color + '-500 to-' + color + '-600 text-white flex items-center gap-3">'
+            + '<span class="material-symbols-outlined text-2xl">' + escapeHtml(opts.icon || 'help') + '</span>'
+            + '<h3 class="font-bold text-lg" id="sc-title-g"></h3></div>'
+            + '<div class="p-6"><p class="text-gray-700 text-base leading-relaxed" id="sc-msg-g"></p></div>'
+            + '<div class="px-5 py-3 bg-gray-50 flex justify-end gap-3">'
+            + '<button id="sc-cancel-g" class="px-5 py-2.5 text-gray-600 hover:bg-gray-200 rounded-lg text-sm font-bold transition">إلغاء</button>'
+            + '<button id="sc-confirm-g" class="px-6 py-2.5 bg-' + color + '-600 text-white rounded-lg text-sm font-bold hover:bg-' + color + '-700 flex items-center gap-2 shadow-md transition">'
+            + '<span class="material-symbols-outlined text-[18px]">check</span> تأكيد</button>'
+            + '</div></div>';
+        document.body.appendChild(modal);
+        document.getElementById('sc-title-g').textContent = opts.title || 'تأكيد';
+        document.getElementById('sc-msg-g').textContent = opts.message || '';
+
+        document.getElementById('sc-cancel-g').onclick = function() { modal.remove(); };
+        document.getElementById('sc-confirm-g').onclick = function() { modal.remove(); if (opts.onConfirm) opts.onConfirm(); };
+    }
+
+    // =================================================================
+    // ★ قائمة منسدلة مشتركة (Dropdown Toggle)
+    // =================================================================
+    function toggleDropdown(id) {
+        var el = document.getElementById(id);
+        if (el) el.classList.toggle('open');
+    }
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.dropdown-wrapper')) {
+            document.querySelectorAll('.dropdown-wrapper.open').forEach(function(d) { d.classList.remove('open'); });
+        }
+    });
+</script>

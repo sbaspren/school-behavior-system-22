@@ -1,0 +1,3323 @@
+<script>
+// =================================================================
+// JS_Settings.html - واجهة الإعدادات الشاملة
+// الإصدار: 5.0 (إصلاح شامل - script tags + تبويب الروابط)
+// التاريخ: فبراير 2026
+// =================================================================
+
+// =================================================================
+// المتغيرات العامة
+// =================================================================
+let settings_currentTab = 'school';
+let settings_schoolData = {};
+let settings_structureData = {};
+let settings_usersData = [];
+let settings_teachersData = [];
+let settings_studentsData = [];
+let settings_subjectsData = [];
+let settings_availableRoles = [];
+let settings_uploadedFileData = null;
+let settings_importType = '';
+let settings_currentStageFilter = ''; // فلتر المرحلة الحالي (للطلاب والمعلمين)
+let settings_currentClassFilter = ''; // فلتر الفصل الحالي (للطلاب)
+
+// متغيرات تبويب الروابط
+var linksData = {
+  teachers: [],
+  admins: [],
+  linkedPersons: []
+};
+
+// =================================================================
+// دوال مساعدة عامة — escapeHtml() معرّفة في JS_Core.html
+// =================================================================
+
+function isValidHttpsUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    try {
+        var u = new URL(url);
+        return u.protocol === 'https:';
+    } catch(e) {
+        return false;
+    }
+}
+
+// الثوابت
+const SETTINGS_STAGES = [
+    { id: 'kindergarten', name: 'طفولة مبكرة', grades: ['الأول', 'الثاني', 'الثالث'] },
+    { id: 'primary', name: 'ابتدائي', grades: ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس'] },
+    { id: 'intermediate', name: 'متوسط', grades: ['الأول', 'الثاني', 'الثالث'] },
+    { id: 'secondary', name: 'ثانوي', grades: ['الأول', 'الثاني', 'الثالث'] }
+];
+
+const SETTINGS_SECONDARY_TRACKS = {
+    'فصلي': ['الأول', 'الثاني', 'الثالث'],
+    'مسارات': ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس']
+};
+
+const SETTINGS_CLASS_LETTERS = ['أ', 'ب', 'ج', 'د', 'هـ', 'و', 'ز', 'ح', 'ط', 'ي'];
+
+// =================================================================
+// ★ المواد الدراسية حسب المنهج السعودي (محددة مسبقاً)
+// =================================================================
+const STAGE_SUBJECTS = {
+    'primary': {
+        name: 'ابتدائي',
+        subjects: [
+            'القرآن الكريم والدراسات الإسلامية',
+            'اللغة العربية',
+            'الرياضيات',
+            'العلوم',
+            'اللغة الإنجليزية',
+            'التربية الفنية',
+            'التربية البدنية والدفاع عن النفس',
+            'المهارات الحياتية والأسرية',
+            'الدراسات الاجتماعية',
+            'المهارات الرقمية'
+        ]
+    },
+    'intermediate': {
+        name: 'متوسط',
+        subjects: [
+            'القرآن الكريم',
+            'الدراسات الإسلامية',
+            'اللغة العربية',
+            'اللغة الإنجليزية',
+            'الرياضيات',
+            'العلوم',
+            'الدراسات الاجتماعية',
+            'المهارات الرقمية',
+            'التربية الفنية',
+            'التربية البدنية والدفاع عن النفس',
+            'المهارات الحياتية والأسرية',
+            'التفكير الناقد'
+        ]
+    },
+    'secondary': {
+        name: 'ثانوي',
+        subjects: [
+            'القرآن الكريم',
+            'التوحيد',
+            'الدراسات الإسلامية',
+            'اللغة الإنجليزية',
+            'الرياضيات',
+            'الكفايات اللغوية',
+            'الفيزياء',
+            'الكيمياء',
+            'الأحياء',
+            'التقنية الرقمية',
+            'التفكير الناقد',
+            'التربية البدنية والدفاع عن النفس',
+            'الهندسة',
+            'مبادئ العلوم الصحية',
+            'مقدمة في الأعمال',
+            'الإدارة المالية',
+            'القانون',
+            'التفسير',
+            'الحديث',
+            'الفقه',
+            'التاريخ',
+            'الذكاء الاصطناعي',
+            'الأمن السيبراني',
+            'علوم البيانات',
+            'الجيولوجيا',
+            'الدراسات الاجتماعية',
+            'التسويق',
+            'أصول الفقه',
+            'البلاغة والنقد'
+        ]
+    }
+};
+
+// خريطة ربط اسم المرحلة بالمعرف
+const STAGE_NAME_TO_ID = { 'طفولة مبكرة': 'kindergarten', 'ابتدائي': 'primary', 'متوسط': 'intermediate', 'ثانوي': 'secondary' };
+const STAGE_ID_TO_NAME = { 'kindergarten': 'طفولة مبكرة', 'primary': 'ابتدائي', 'intermediate': 'متوسط', 'secondary': 'ثانوي' };
+
+// استخراج المرحلة من بيانات الطالب (المرحلة أو من اسم الصف)
+function detectStudentStage(student) {
+    if (student['المرحلة']) return student['المرحلة'];
+    const grade = (student['الصف'] || '').toString();
+    if (grade.includes('متوسط')) return 'متوسط';
+    if (grade.includes('ثانوي')) return 'ثانوي';
+    if (grade.includes('ابتدائي')) return 'ابتدائي';
+    if (grade.includes('طفولة')) return 'طفولة مبكرة';
+    return '';
+}
+
+// استخراج المراحل المفعلة من الهيكل
+function getEnabledStages() {
+    const structure = settings_structureData || {};
+    if (!structure.stages) return [];
+    return SETTINGS_STAGES.filter(s => {
+        const sd = structure.stages[s.id];
+        if (!sd) return false;
+        const grades = s.id === 'secondary' ? SETTINGS_SECONDARY_TRACKS[structure.secondary_system || 'فصلي'] : s.grades;
+        return grades.some(g => sd[g]?.enabled);
+    });
+}
+
+// استخراج الفصول المتاحة لمرحلة معينة
+function getClassesForStage(stageName) {
+    const stageId = STAGE_NAME_TO_ID[stageName];
+    if (!stageId) return [];
+    const structure = settings_structureData || {};
+    const stageData = structure.stages?.[stageId];
+    if (!stageData) return [];
+    const stage = SETTINGS_STAGES.find(s => s.id === stageId);
+    const grades = stageId === 'secondary' ? SETTINGS_SECONDARY_TRACKS[structure.secondary_system || 'فصلي'] : stage.grades;
+    const classes = [];
+    grades.forEach(g => {
+        if (!stageData[g]?.enabled) return;
+        const count = stageData[g].classCount || 0;
+        SETTINGS_CLASS_LETTERS.slice(0, count).forEach(letter => {
+            classes.push({ grade: g, letter: letter, label: `${g} (${letter})`, key: `${g}_${stageId}_${letter}` });
+        });
+    });
+    return classes;
+}
+
+// فلترة الطلاب حسب المرحلة
+function filterStudentsByStage(students, stageName) {
+    if (!stageName) return students;
+    if (stageName === '__unclassified__') {
+        return students.filter(s => !detectStudentStage(s));
+    }
+    return students.filter(s => {
+        const st = detectStudentStage(s);
+        return st === stageName;
+    });
+}
+
+// فلترة المعلمين حسب المرحلة (عبر الفصول المسندة)
+function filterTeachersByStage(teachers, stageName) {
+    if (!stageName) return teachers;
+    const stageId = STAGE_NAME_TO_ID[stageName];
+    if (!stageId) return teachers;
+    return teachers.filter(t => {
+        if (!t.assigned_classes || t.assigned_classes.length === 0) return false;
+        return t.assigned_classes.some(c => { const p = c.split('_'); return p.length >= 2 && p[p.length - 2] === stageId; });
+    });
+}
+
+// الأدوار المحدثة
+const SETTINGS_ADMIN_ROLES = [
+    'مدير المدرسة',
+    'وكيل شؤون الطلاب',
+    'وكيل الشؤون التعليمية',
+    'وكيل الشؤون المدرسية',
+    'موجه طلابي',
+    'إداري',
+    'حارس'
+];
+
+// ★ تم حذف SETTINGS_PERMISSIONS — كل دور له واجهة محددة تلقائياً
+// خريطة وصف الواجهة حسب الدور
+const ROLE_INTERFACE_DESC = {
+    'مدير المدرسة': 'واجهة شاملة: مخالفات + غياب + استئذان + تأخر + سلوك + ملاحظات',
+    'وكيل شؤون الطلاب': 'واجهة شاملة: مخالفات + غياب + استئذان + تأخر + سلوك + ملاحظات',
+    'وكيل الشؤون التعليمية': 'واجهة شاملة: مخالفات + غياب + استئذان + تأخر + سلوك + ملاحظات',
+    'وكيل الشؤون المدرسية': 'واجهة شاملة: مخالفات + غياب + استئذان + تأخر + سلوك + ملاحظات',
+    'موجه طلابي': 'واجهة الموجه: استئذان + ملاحظات تربوية + سلوك متمايز',
+    'إداري': 'تسجيل التأخر الصباحي فقط',
+    'حارس': 'استعراض المستأذنين فقط'
+};
+
+// =================================================================
+// دالة التنبيهات (تظهر أمام كل شيء)
+// =================================================================
+function showSettingsToast(type, message) {
+    const existingToast = document.getElementById('settings-toast');
+    if (existingToast) existingToast.remove();
+
+    const colors = {
+        success: 'bg-green-500',
+        danger: 'bg-red-500',
+        warning: 'bg-amber-500',
+        info: 'bg-blue-500'
+    };
+
+    const icons = {
+        success: 'check_circle',
+        danger: 'error',
+        warning: 'warning',
+        info: 'info'
+    };
+
+    const toast = document.createElement('div');
+    toast.id = 'settings-toast';
+    toast.className = `fixed top-4 left-1/2 -translate-x-1/2 ${colors[type]} text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 z-[9999]`;
+    toast.innerHTML = `
+        <span class="material-symbols-outlined">${icons[type]}</span>
+        <span class="font-medium">${escapeHtml(message)}</span>
+    `;
+
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translate(-50%, -20px)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// =================================================================
+// 1. رسم الصفحة الرئيسية
+// =================================================================
+function renderSettingsPage() {
+    const main = document.getElementById('main-content');
+    main.innerHTML = `
+        <div class="max-w-full">
+            <!-- العنوان -->
+            <div class="flex items-center gap-3 mb-5">
+                <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                    <span class="material-symbols-outlined text-slate-600 text-2xl">settings</span>
+                </div>
+                <div>
+                    <h2 class="text-xl font-extrabold text-gray-900">إعدادات النظام</h2>
+                    <p class="text-sm text-gray-500">إدارة بيانات المدرسة والمستخدمين والطلاب</p>
+                </div>
+            </div>
+
+            <!-- التبويبات -->
+            <div class="bg-white rounded-t-2xl shadow-sm border border-gray-100 border-b-0 flex overflow-x-auto">
+                <button onclick="switchSettingsTab('school')" id="settings-tab-school" 
+                    class="settings-tab-btn flex-1 min-w-[120px] py-4 text-sm font-bold transition-all border-b-4 border-indigo-600 bg-indigo-50 text-indigo-700 flex justify-center items-center gap-2">
+                    <span class="material-symbols-outlined text-xl">apartment</span>
+                    <span class="hidden sm:inline">بيانات المدرسة</span>
+                </button>
+                <button onclick="switchSettingsTab('structure')" id="settings-tab-structure" 
+                    class="settings-tab-btn flex-1 min-w-[120px] py-4 text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all border-b-4 border-transparent flex justify-center items-center gap-2">
+                    <span class="material-symbols-outlined text-xl">account_tree</span>
+                    <span class="hidden sm:inline">هيكل الصفوف</span>
+                </button>
+                <button onclick="switchSettingsTab('admins')" id="settings-tab-admins" 
+                    class="settings-tab-btn flex-1 min-w-[120px] py-4 text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all border-b-4 border-transparent flex justify-center items-center gap-2">
+                    <span class="material-symbols-outlined text-xl">admin_panel_settings</span>
+                    <span class="hidden sm:inline">الهيئة الإدارية</span>
+                </button>
+                <button onclick="switchSettingsTab('teachers')" id="settings-tab-teachers" 
+                    class="settings-tab-btn flex-1 min-w-[120px] py-4 text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all border-b-4 border-transparent flex justify-center items-center gap-2">
+                    <span class="material-symbols-outlined text-xl">school</span>
+                    <span class="hidden sm:inline">المعلمين</span>
+                </button>
+                <button onclick="switchSettingsTab('students')" id="settings-tab-students" 
+                    class="settings-tab-btn flex-1 min-w-[120px] py-4 text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all border-b-4 border-transparent flex justify-center items-center gap-2">
+                    <span class="material-symbols-outlined text-xl">groups</span>
+                    <span class="hidden sm:inline">الطلاب</span>
+                </button>
+                <button onclick="switchSettingsTab('links')" id="settings-tab-links" 
+                    class="settings-tab-btn flex-1 min-w-[120px] py-4 text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all border-b-4 border-transparent flex justify-center items-center gap-2">
+                    <span class="material-symbols-outlined text-xl">link</span>
+                    <span class="hidden sm:inline">روابط النماذج</span>
+                </button>
+            </div>
+
+            <!-- محتوى التبويبات -->
+            <div id="settings-content" class="bg-white rounded-b-2xl shadow-sm border border-gray-100 border-t-0 p-6 min-h-[400px]">
+                <div class="flex justify-center items-center py-12">
+                    <div class="text-center">
+                        <div class="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                        <p class="text-gray-500 mt-4">جاري التحميل...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="settings-modal-container"></div>
+    `;
+
+    loadInitialSettingsData();
+}
+
+// =================================================================
+// 2. تحميل البيانات
+// =================================================================
+function loadInitialSettingsData() {
+    google.script.run
+        .withSuccessHandler(res => {
+            if (res && res.success) {
+                settings_schoolData = res.data || {};
+            }
+            renderSchoolTab();
+        })
+        .withFailureHandler(err => {
+            console.error('خطأ:', err);
+            renderSchoolTab();
+        })
+        .getSchoolSettings();
+}
+
+function loadStructureData(callback) {
+    google.script.run
+        .withSuccessHandler(res => {
+            if (res && res.success) {
+                settings_structureData = res.structure || {};
+            }
+            if (callback) callback();
+        })
+        .withFailureHandler(err => {
+            console.error('خطأ:', err);
+            if (callback) callback();
+        })
+        .getSchoolStructure();
+}
+
+function loadUsersData(callback) {
+    google.script.run
+        .withSuccessHandler(res => {
+            if (res && res.success) {
+                settings_usersData = res.users || [];
+                settings_availableRoles = res.roles || SETTINGS_ADMIN_ROLES;
+            } else {
+                settings_usersData = [];
+            }
+            if (callback) callback();
+        })
+        .withFailureHandler(err => {
+            console.error('خطأ في تحميل المستخدمين:', err);
+            settings_usersData = [];
+            if (callback) callback();
+        })
+        .getUsers();
+}
+
+function loadTeachersData(callback) {
+    loadStructureData(() => {
+        google.script.run
+            .withSuccessHandler(res => {
+                if (res && res.success) {
+                    settings_teachersData = res.teachers || [];
+                    settings_subjectsData = res.subjects || [];
+                } else {
+                    settings_teachersData = [];
+                    settings_subjectsData = [];
+                }
+                if (callback) callback();
+            })
+            .withFailureHandler(err => {
+                console.error('خطأ في تحميل المعلمين:', err);
+                settings_teachersData = [];
+                settings_subjectsData = [];
+                if (callback) callback();
+            })
+            .getTeachers();
+    });
+}
+
+function loadStudentsData(callback) {
+    google.script.run
+        .withSuccessHandler(res => {
+            if (res && res.success) {
+                settings_studentsData = res.students || [];
+            } else {
+                settings_studentsData = [];
+            }
+            if (callback) callback();
+        })
+        .withFailureHandler(err => {
+            console.error('خطأ:', err);
+            settings_studentsData = [];
+            if (callback) callback();
+        })
+        .getAllStudents();
+}
+
+// =================================================================
+// 3. التبديل بين التبويبات
+// =================================================================
+function switchSettingsTab(tabId) {
+    settings_currentTab = tabId;
+    
+    // مزامنة فلتر المرحلة مع القائمة الرئيسية عند كل دخول للتبويب
+    if (tabId === 'students') {
+        settings_currentStageFilter = currentStage || '';
+        settings_currentClassFilter = '';
+    }
+    // المعلمين: فتح على "الكل" افتراضياً لعرض جميع المعلمين (بما فيهم بدون فصول)
+    if (tabId === 'teachers') {
+        settings_currentStageFilter = '__all__';
+        settings_currentClassFilter = '';
+    }
+
+    document.querySelectorAll('.settings-tab-btn').forEach(btn => {
+        btn.className = 'settings-tab-btn flex-1 min-w-[120px] py-4 text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all border-b-4 border-transparent flex justify-center items-center gap-2';
+    });
+    
+    const activeBtn = document.getElementById(`settings-tab-${tabId}`);
+    if (activeBtn) {
+        activeBtn.className = 'settings-tab-btn flex-1 min-w-[120px] py-4 text-sm font-bold transition-all border-b-4 border-indigo-600 bg-indigo-50 text-indigo-700 flex justify-center items-center gap-2';
+    }
+
+    const content = document.getElementById('settings-content');
+    content.innerHTML = '<div class="flex justify-center py-12"><div class="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div></div>';
+
+    switch(tabId) {
+        case 'school': renderSchoolTab(); break;
+        case 'structure': loadStructureData(() => renderStructureTab()); break;
+        case 'admins': loadUsersData(() => renderAdminsTab()); break;
+        case 'teachers': loadTeachersData(() => renderTeachersTab()); break;
+        case 'students': loadStudentsData(() => renderStudentsTab()); break;
+        case 'links': renderLinksTab(); break;
+    }
+}
+
+// =================================================================
+// 4. تبويب: بيانات المدرسة (كليشة موحدة)
+// =================================================================
+var _schoolEditMode = false;
+
+// ★ تحذير عند مغادرة الصفحة أثناء التعديل
+window.addEventListener('beforeunload', function(e) {
+    if (_schoolEditMode) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});
+
+function renderSchoolTab() {
+    const content = document.getElementById('settings-content');
+    const data = settings_schoolData;
+    const mode = data.letterhead_mode || 'image';
+    const hasSavedData = !!(data.letterhead_image_url || data.edu_admin || data.school_name);
+    _schoolEditMode = !hasSavedData;
+
+    content.innerHTML = `
+        <div class="max-w-2xl mx-auto">
+            <div class="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-indigo-500">apartment</span>
+                    <h3 class="text-lg font-bold text-gray-800">بيانات المدرسة والكليشة</h3>
+                </div>
+                <div id="school-edit-toggle" class="${hasSavedData ? '' : 'hidden'}">
+                    <button id="btn-school-edit" onclick="enableSchoolEdit()" 
+                        class="${_schoolEditMode ? 'hidden' : ''} flex items-center gap-1.5 px-4 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl text-sm font-bold hover:bg-amber-100 transition">
+                        <span class="material-symbols-outlined" style="font-size:18px">edit</span>
+                        تعديل البيانات
+                    </button>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <!-- ★ معاينة الكليشة الواقعية -->
+                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div class="flex items-center gap-2 px-5 py-3 bg-gray-50 border-b border-gray-200">
+                        <span class="material-symbols-outlined text-gray-500" style="font-size:20px">preview</span>
+                        <span class="font-bold text-gray-700 text-sm">الكليشة المعتمدة حالياً</span>
+                        <span id="preview-status" class="mr-auto text-xs px-2 py-0.5 rounded-full ${hasSavedData ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'} font-bold">${hasSavedData ? '✓ محفوظة' : 'لم تُحفظ بعد'}</span>
+                    </div>
+                    <div id="letterhead-preview-box" style="padding:24px 30px;background:white;font-family:'Traditional Arabic','Amiri',serif;direction:rtl;text-align:center;border-bottom:3px solid #1a365d;margin:16px 20px;border-radius:0">
+                    </div>
+                </div>
+
+                <!-- ★ حقول التعديل -->
+                <div id="school-edit-fields" class="${_schoolEditMode ? '' : 'hidden'}">
+                    <div class="bg-gradient-to-l from-indigo-50 to-purple-50 rounded-xl p-5 border border-indigo-100 mb-5">
+                        <div class="flex items-center gap-2 mb-4">
+                            <span class="material-symbols-outlined text-indigo-600">print</span>
+                            <h4 class="font-bold text-gray-800">نوع الكليشة في المطبوعات</h4>
+                        </div>
+                        
+                        <div class="space-y-3 mb-5">
+                            <label class="flex items-start gap-3 p-3 bg-white rounded-xl border border-gray-200 cursor-pointer hover:border-indigo-300 transition">
+                                <input type="radio" name="letterhead_mode" value="image" ${mode === 'image' ? 'checked' : ''} 
+                                    onchange="toggleLetterheadMode()" class="w-5 h-5 text-indigo-600 mt-0.5">
+                                <div>
+                                    <span class="font-bold text-gray-800">صورة كليشة جاهزة</span>
+                                    <p class="text-xs text-gray-500 mt-1">ارفع صورة الكليشة الكاملة كما هي (شعارات + نصوص)</p>
+                                </div>
+                            </label>
+                            
+                            <label class="flex items-start gap-3 p-3 bg-white rounded-xl border border-gray-200 cursor-pointer hover:border-indigo-300 transition">
+                                <input type="radio" name="letterhead_mode" value="text" ${mode === 'text' ? 'checked' : ''} 
+                                    onchange="toggleLetterheadMode()" class="w-5 h-5 text-indigo-600 mt-0.5">
+                                <div>
+                                    <span class="font-bold text-gray-800">كليشة نصية</span>
+                                    <p class="text-xs text-gray-500 mt-1">أدخل بيانات المدرسة وسيتم بناء الكليشة تلقائياً</p>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div id="letterhead-image-section" class="${mode === 'image' ? '' : 'hidden'}">
+                            <label class="block text-sm font-bold text-gray-700 mb-2">رابط صورة الكليشة</label>
+                            <input id="letterhead_image_url" type="url" dir="ltr"
+                                value="${data.letterhead_image_url || ''}"
+                                placeholder="https://i.ibb.co/xxxxx/logo.png"
+                                oninput="updateLetterheadPreview()"
+                                class="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm">
+                            <p class="text-xs text-gray-400 mt-2">يمكنك رفع الصورة على <a href="https://imgbb.com/" target="_blank" class="text-indigo-500 underline">imgbb.com</a> ولصق الرابط المباشر هنا</p>
+                        </div>
+
+                        <div id="letterhead-text-section" class="${mode === 'text' ? '' : 'hidden'} space-y-3">
+                            <div class="bg-white rounded-lg p-3 border border-gray-200 text-center text-sm text-gray-500">
+                                <div class="font-bold text-gray-700">المملكة العربية السعودية</div>
+                                <div class="text-gray-600">وزارة التعليم</div>
+                                <div class="text-xs text-gray-400 mt-1">↑ ثابت تلقائياً ↑</div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">الإدارة التعليمية</label>
+                                <input id="edu_admin" type="text" value="${data.edu_admin || ''}"
+                                    placeholder="مثال: الإدارة العامة للتعليم بمنطقة عسير"
+                                    oninput="updateLetterheadPreview()"
+                                    class="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm text-center">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">القسم / المكتب</label>
+                                <input id="edu_dept" type="text" value="${data.edu_dept || ''}"
+                                    placeholder="مثال: مكتب التعليم بخميس مشيط"
+                                    oninput="updateLetterheadPreview()"
+                                    class="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm text-center">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">اسم المدرسة</label>
+                                <input id="school_name" type="text" value="${data.school_name || ''}"
+                                    placeholder="مثال: متوسطة وثانوية العرين"
+                                    oninput="updateLetterheadPreview()"
+                                    class="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm text-center font-bold">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ★ نمط الواتساب -->
+                <div class="bg-gradient-to-l from-green-50 to-emerald-50 rounded-xl p-5 border border-green-100">
+                    <div class="flex items-center gap-2 mb-4">
+                        <span class="material-symbols-outlined text-green-600">chat</span>
+                        <h4 class="font-bold text-gray-800">نمط الواتساب</h4>
+                    </div>
+                    <div class="space-y-3">
+                        <label class="flex items-start gap-3 p-3 bg-white rounded-xl border border-gray-200 cursor-pointer hover:border-green-300 transition">
+                            <input type="radio" name="whatsapp_mode" value="per_stage" ${(!data.whatsapp_mode || data.whatsapp_mode === 'per_stage') ? 'checked' : ''} class="w-5 h-5 text-green-600 mt-0.5">
+                            <div><span class="font-bold text-gray-800">رقم لكل مرحلة</span><p class="text-xs text-gray-500 mt-1">كل مرحلة لها رقم رئيسي مستقل</p></div>
+                        </label>
+                        <label class="flex items-start gap-3 p-3 bg-white rounded-xl border border-gray-200 cursor-pointer hover:border-green-300 transition">
+                            <input type="radio" name="whatsapp_mode" value="unified" ${data.whatsapp_mode === 'unified' ? 'checked' : ''} class="w-5 h-5 text-green-600 mt-0.5">
+                            <div><span class="font-bold text-gray-800">رقم واحد لجميع المراحل</span><p class="text-xs text-gray-500 mt-1">رقم رئيسي واحد يُستخدم لجميع المراحل</p></div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- أزرار الحفظ -->
+            <div id="school-save-btns" class="${_schoolEditMode ? '' : 'hidden'} flex justify-end gap-3 mt-8 pt-6 border-t border-gray-100">
+                <button onclick="cancelSchoolEdit()" class="${hasSavedData ? '' : 'hidden'} flex items-center gap-2 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition">
+                    <span class="material-symbols-outlined">close</span> إلغاء
+                </button>
+                <button onclick="saveSchoolSettings()" 
+                    class="flex items-center gap-2 px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200">
+                    <span class="material-symbols-outlined">save</span> حفظ واعتماد الكليشة
+                </button>
+            </div>
+        </div>
+    `;
+    updateLetterheadPreview();
+}
+
+function enableSchoolEdit() {
+    _schoolEditMode = true;
+    document.getElementById('school-edit-fields')?.classList.remove('hidden');
+    document.getElementById('school-save-btns')?.classList.remove('hidden');
+    document.getElementById('btn-school-edit')?.classList.add('hidden');
+    var st = document.getElementById('preview-status');
+    if (st) { st.textContent = '⏳ جاري التعديل...'; st.className = 'mr-auto text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold'; }
+}
+
+function cancelSchoolEdit() {
+    _schoolEditMode = false;
+    renderSchoolTab();
+}
+
+function toggleLetterheadMode() {
+    var mode = document.querySelector('input[name="letterhead_mode"]:checked')?.value || 'image';
+    document.getElementById('letterhead-image-section').classList.toggle('hidden', mode !== 'image');
+    document.getElementById('letterhead-text-section').classList.toggle('hidden', mode !== 'text');
+    updateLetterheadPreview();
+}
+
+function updateLetterheadPreview() {
+    var box = document.getElementById('letterhead-preview-box');
+    if (!box) return;
+    var mode, imgUrl, admin, dept, sName;
+    if (_schoolEditMode) {
+        mode = document.querySelector('input[name="letterhead_mode"]:checked')?.value || 'image';
+        imgUrl = (document.getElementById('letterhead_image_url')?.value || '').trim();
+        admin = (document.getElementById('edu_admin')?.value || '').trim();
+        dept = (document.getElementById('edu_dept')?.value || '').trim();
+        sName = (document.getElementById('school_name')?.value || '').trim();
+    } else {
+        var d = settings_schoolData;
+        mode = d.letterhead_mode || 'image';
+        imgUrl = d.letterhead_image_url || '';
+        admin = d.edu_admin || '';
+        dept = d.edu_dept || '';
+        sName = d.school_name || '';
+    }
+    if (mode === 'image') {
+        if (imgUrl && isValidHttpsUrl(imgUrl)) {
+            box.innerHTML = '<img src="' + escapeHtml(imgUrl) + '" style="height:85px;max-width:100%;object-fit:contain" onerror="this.outerHTML=\'<p style=color:#dc2626;font-size:14px>⚠️ رابط الصورة غير صحيح</p>\'">';
+        } else if (imgUrl) {
+            box.innerHTML = '<p style="color:#dc2626;font-size:14px;font-family:sans-serif">⚠️ الرابط يجب أن يبدأ بـ https://</p>';
+        } else {
+            box.innerHTML = '<p style="color:#aaa;font-size:14px;font-family:sans-serif">لم يتم تحديد صورة كليشة بعد</p>';
+        }
+    } else {
+        var h = '';
+        h += '<p style="font-size:18px;font-weight:bold;margin:0 0 2px;color:#000">المملكة العربية السعودية</p>';
+        h += '<p style="font-size:18px;font-weight:bold;margin:0 0 6px;color:#000">وزارة التعليم</p>';
+        if (admin) h += '<p style="font-size:16px;margin:2px 0;color:#333">' + escapeHtml(admin) + '</p>';
+        if (dept)  h += '<p style="font-size:16px;margin:2px 0;color:#333">' + escapeHtml(dept) + '</p>';
+        if (sName) h += '<p style="font-size:20px;font-weight:bold;margin:8px 0 0;color:#1a365d">' + escapeHtml(sName) + '</p>';
+        if (!admin && !dept && !sName) h += '<p style="color:#aaa;font-size:14px;font-family:sans-serif;margin-top:8px">أدخل بيانات المدرسة من زر "تعديل البيانات"</p>';
+        box.innerHTML = h;
+    }
+}
+
+var _savingSchoolSettings = false;
+function saveSchoolSettings() {
+    if (_savingSchoolSettings) return;
+    _savingSchoolSettings = true;
+    const whatsappMode = document.querySelector('input[name="whatsapp_mode"]:checked');
+    const letterheadMode = document.querySelector('input[name="letterhead_mode"]:checked');
+    const data = {
+        letterhead_mode: letterheadMode ? letterheadMode.value : 'image',
+        letterhead_image_url: (document.getElementById('letterhead_image_url')?.value || '').trim(),
+        edu_admin: (document.getElementById('edu_admin')?.value || '').trim(),
+        edu_dept: (document.getElementById('edu_dept')?.value || '').trim(),
+        school_name: (document.getElementById('school_name')?.value || '').trim(),
+        letterhead: '',
+        whatsapp_mode: whatsappMode ? whatsappMode.value : 'per_stage'
+    };
+    showSettingsToast('info', 'جاري الحفظ...');
+    google.script.run
+        .withSuccessHandler(res => {
+            _savingSchoolSettings = false;
+            if (res && res.success) {
+                settings_schoolData = data;
+                _schoolEditMode = false;
+                if (typeof APP_DATA !== 'undefined' && APP_DATA.settings) {
+                    APP_DATA.settings.letterhead_mode = data.letterhead_mode;
+                    APP_DATA.settings.letterhead_image_url = data.letterhead_image_url;
+                    APP_DATA.settings.edu_admin = data.edu_admin;
+                    APP_DATA.settings.edu_dept = data.edu_dept;
+                    APP_DATA.settings.school_name = data.school_name;
+                    APP_DATA.settings.letterhead = data.letterhead;
+                }
+                showSettingsToast('success', 'تم حفظ واعتماد الكليشة — ستظهر في جميع المطبوعات ✓');
+                renderSchoolTab();
+            } else {
+                showSettingsToast('danger', res?.error || 'خطأ في الحفظ');
+            }
+        })
+        .withFailureHandler(err => {
+            _savingSchoolSettings = false;
+            showSettingsToast('danger', 'خطأ في الاتصال');
+        })
+        .saveSchoolSettings(data);
+}
+
+
+// =================================================================
+// 5. تبويب: هيكل الصفوف
+// =================================================================
+function renderStructureTab() {
+    const content = document.getElementById('settings-content');
+    const structure = settings_structureData || {};
+
+    content.innerHTML = `
+        <div class="max-w-4xl mx-auto">
+            <div class="flex items-center gap-2 mb-6 pb-4 border-b border-gray-100">
+                <span class="material-symbols-outlined text-indigo-500">account_tree</span>
+                <h3 class="text-lg font-bold text-gray-800">هيكل الصفوف والفصول</h3>
+            </div>
+
+            <!-- نوع المدرسة -->
+            <div class="bg-gray-50 rounded-xl p-5 border border-gray-200 mb-5">
+                <label class="block text-sm font-bold text-gray-700 mb-3">نوع المدرسة</label>
+                <div class="flex flex-wrap gap-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="school_type" value="بنين" ${structure.school_type === 'بنين' || !structure.school_type ? 'checked' : ''} class="w-5 h-5 text-indigo-600">
+                        <span class="font-medium">بنين</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="school_type" value="بنات" ${structure.school_type === 'بنات' ? 'checked' : ''} class="w-5 h-5 text-indigo-600">
+                        <span class="font-medium">بنات</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- المراحل -->
+            <div class="space-y-4">
+                ${SETTINGS_STAGES.map(stage => renderStageBlock(stage, structure)).join('')}
+            </div>
+
+            <div class="flex justify-end mt-8 pt-6 border-t border-gray-100">
+                <button onclick="saveSchoolStructure()" 
+                    class="flex items-center gap-2 px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200">
+                    <span class="material-symbols-outlined">save</span>
+                    حفظ الهيكل
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function renderStageBlock(stage, structure) {
+    const stageData = structure.stages?.[stage.id] || {};
+    const isSecondary = stage.id === 'secondary';
+    const secondarySystem = structure.secondary_system || 'فصلي';
+    const grades = isSecondary ? SETTINGS_SECONDARY_TRACKS[secondarySystem] : stage.grades;
+    const hasEnabledGrades = Object.values(stageData).some(g => g && g.enabled);
+
+    return `
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div class="bg-gray-50 px-5 py-4 flex items-center justify-between border-b border-gray-200">
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" class="stage-checkbox w-5 h-5 rounded border-gray-300 text-indigo-600" 
+                        data-stage="${stage.id}" ${hasEnabledGrades ? 'checked' : ''} onchange="onStageToggle('${stage.id}')">
+                    <span class="font-bold text-gray-800">${stage.name}</span>
+                </label>
+                ${isSecondary ? `
+                    <select id="secondary_system" onchange="onSecondarySystemChange()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white">
+                        <option value="فصلي" ${secondarySystem === 'فصلي' ? 'selected' : ''}>فصلي</option>
+                        <option value="مسارات" ${secondarySystem === 'مسارات' ? 'selected' : ''}>مسارات</option>
+                    </select>
+                ` : ''}
+            </div>
+            <div class="p-5 space-y-3 ${!hasEnabledGrades ? 'opacity-50' : ''}" id="grades-${stage.id}">
+                ${grades.map(gradeName => {
+                    const gradeData = stageData[gradeName] || { enabled: false, classCount: 0 };
+                    const classCount = gradeData.classCount || 0;
+                    const letters = SETTINGS_CLASS_LETTERS.slice(0, classCount);
+                    return `
+                        <div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                            <label class="flex items-center gap-3 cursor-pointer">
+                                <input type="checkbox" class="grade-checkbox w-5 h-5 rounded border-gray-300 text-indigo-600" 
+                                    data-stage="${stage.id}" data-grade="${gradeName}" ${gradeData.enabled ? 'checked' : ''} onchange="onGradeToggle('${stage.id}', '${gradeName}')">
+                                <span class="font-medium text-gray-700">${gradeName}</span>
+                            </label>
+                            <div class="flex items-center gap-3">
+                                <select class="class-count-select px-3 py-1 border border-gray-300 rounded-lg text-sm w-16" 
+                                    data-stage="${stage.id}" data-grade="${gradeName}" ${!gradeData.enabled ? 'disabled' : ''} onchange="onClassCountChange('${stage.id}', '${gradeName}')">
+                                    ${[0,1,2,3,4,5,6,7,8,9,10].map(n => `<option value="${n}" ${classCount === n ? 'selected' : ''}>${n}</option>`).join('')}
+                                </select>
+                                <div class="flex gap-1" id="classes-preview-${stage.id}-${gradeName.replace(/\s/g, '_')}">
+                                    ${letters.map(l => `<span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-sm font-bold">${l}</span>`).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function onStageToggle(stageId) {
+    const checkbox = document.querySelector(`.stage-checkbox[data-stage="${stageId}"]`);
+    document.getElementById(`grades-${stageId}`).classList.toggle('opacity-50', !checkbox.checked);
+}
+
+function onGradeToggle(stageId, gradeName) {
+    const checkbox = document.querySelector(`.grade-checkbox[data-stage="${stageId}"][data-grade="${gradeName}"]`);
+    const countSelect = document.querySelector(`.class-count-select[data-stage="${stageId}"][data-grade="${gradeName}"]`);
+    countSelect.disabled = !checkbox.checked;
+    if (!checkbox.checked) {
+        countSelect.value = '0';
+        updateClassesPreview(stageId, gradeName, 0);
+    }
+}
+
+function onClassCountChange(stageId, gradeName) {
+    const countSelect = document.querySelector(`.class-count-select[data-stage="${stageId}"][data-grade="${gradeName}"]`);
+    updateClassesPreview(stageId, gradeName, parseInt(countSelect.value));
+}
+
+function updateClassesPreview(stageId, gradeName, count) {
+    const preview = document.getElementById(`classes-preview-${stageId}-${gradeName.replace(/\s/g, '_')}`);
+    if (!preview) return;
+    const letters = SETTINGS_CLASS_LETTERS.slice(0, count);
+    preview.innerHTML = letters.map(l => `<span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-sm font-bold">${l}</span>`).join('');
+}
+
+function onSecondarySystemChange() {
+    settings_structureData.secondary_system = document.getElementById('secondary_system').value;
+    renderStructureTab();
+}
+
+var _savingStructure = false;
+function saveSchoolStructure(confirmedDeletion) {
+    if (_savingStructure) return;
+    _savingStructure = true;
+    const structure = {
+        school_type: document.querySelector('input[name="school_type"]:checked')?.value || 'بنين',
+        secondary_system: document.getElementById('secondary_system')?.value || 'فصلي',
+        stages: {},
+        confirmedDeletion: confirmedDeletion || false
+    };
+
+    document.querySelectorAll('.stage-checkbox').forEach(stageCheckbox => {
+        const stageId = stageCheckbox.dataset.stage;
+        structure.stages[stageId] = {};
+        document.querySelectorAll(`.grade-checkbox[data-stage="${stageId}"]`).forEach(gradeCheckbox => {
+            const gradeName = gradeCheckbox.dataset.grade;
+            const countSelect = document.querySelector(`.class-count-select[data-stage="${stageId}"][data-grade="${gradeName}"]`);
+            structure.stages[stageId][gradeName] = {
+                enabled: gradeCheckbox.checked,
+                classCount: parseInt(countSelect?.value || 0)
+            };
+        });
+    });
+
+    showSettingsToast('info', 'جاري الحفظ...');
+
+    google.script.run
+        .withSuccessHandler(res => {
+            _savingStructure = false;
+            if (res && res.success) {
+                settings_structureData = structure;
+                var msg = 'تم حفظ الهيكل بنجاح';
+                if (res.addedStages && res.addedStages.length > 0) {
+                    msg += ' — تم إنشاء شيتات: ' + res.addedStages.join('، ');
+                }
+                if (res.removedStages && res.removedStages.length > 0) {
+                    msg += ' — تم حذف شيتات: ' + res.removedStages.join('، ');
+                }
+                showSettingsToast('success', msg);
+                // ★ تحديث التطبيق بالكامل
+                setTimeout(() => { location.reload(); }, 1500);
+            } else if (res && res.needsConfirmation) {
+                // ★ عرض تأكيد الحذف
+                showDeleteConfirmationModal(res.removedStages, res.sheetsToDelete);
+            } else {
+                showSettingsToast('danger', res?.error || 'خطأ');
+            }
+        })
+        .withFailureHandler(err => {
+            _savingStructure = false;
+            showSettingsToast('danger', 'خطأ في الاتصال');
+        })
+        .saveSchoolStructure(structure);
+}
+
+// ★ Modal تأكيد حذف بيانات المراحل المُلغاة
+function showDeleteConfirmationModal(removedStages, sheetsToDelete) {
+    var existing = document.getElementById('delete-confirmation-modal');
+    if (existing) existing.remove();
+
+    var stagesList = removedStages.map(s => '<span class="inline-block bg-red-100 text-red-700 px-2 py-0.5 rounded font-bold text-sm mr-1">' + escapeHtml(s) + '</span>').join('');
+    var sheetsList = sheetsToDelete.map(s => '<li class="text-sm text-gray-600">' + escapeHtml(s) + '</li>').join('');
+
+    var modal = document.createElement('div');
+    modal.id = 'delete-confirmation-modal';
+    modal.className = 'fixed inset-0 bg-gray-900/60 z-[9999] flex items-center justify-center backdrop-blur-sm';
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+    modal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+            <div class="bg-gradient-to-r from-red-500 to-red-600 px-6 py-4 flex items-center gap-3">
+                <span class="material-symbols-outlined text-white text-2xl">warning</span>
+                <h3 class="font-bold text-white text-lg">تحذير: حذف بيانات نهائي</h3>
+            </div>
+            <div class="p-6">
+                <p class="text-gray-800 font-bold mb-3">سيتم حذف جميع بيانات المراحل التالية نهائياً:</p>
+                <div class="mb-4">${stagesList}</div>
+                <div class="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 max-h-48 overflow-y-auto">
+                    <p class="text-sm font-bold text-red-700 mb-2">الشيتات التي ستُحذف:</p>
+                    <ul class="space-y-1 list-disc list-inside">${sheetsList}</ul>
+                </div>
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                    <p class="text-sm text-amber-800"><span class="font-bold">تنبيه:</span> هذا الإجراء لا يمكن التراجع عنه. جميع بيانات الطلاب والسجلات لهذه المراحل ستُحذف نهائياً.</p>
+                </div>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+                <button onclick="document.getElementById('delete-confirmation-modal').remove()"
+                    class="px-5 py-2.5 text-gray-600 hover:bg-gray-200 rounded-lg text-sm font-bold transition">إلغاء</button>
+                <button onclick="document.getElementById('delete-confirmation-modal').remove(); saveSchoolStructure(true);"
+                    class="px-6 py-2.5 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 flex items-center gap-2 shadow-md transition">
+                    <span class="material-symbols-outlined text-[18px]">delete_forever</span> حذف وتحديث الهيكل
+                </button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+}
+
+// =================================================================
+// 6. تبويب: الهيئة الإدارية
+// =================================================================
+function renderAdminsTab() {
+    const content = document.getElementById('settings-content');
+    content.innerHTML = `
+        <div>
+            <div class="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-indigo-500">admin_panel_settings</span>
+                    <h3 class="text-lg font-bold text-gray-800">الهيئة الإدارية</h3>
+                    <span class="px-2 py-0.5 bg-gray-100 text-gray-600 text-sm rounded-full">${settings_usersData.length}</span>
+                </div>
+                <button onclick="openAdminModal()" class="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700">
+                    <span class="material-symbols-outlined">person_add</span>
+                    إضافة عضو
+                </button>
+            </div>
+            
+            ${settings_usersData.length === 0 ? `
+                <div class="text-center py-16 text-gray-500">
+                    <span class="material-symbols-outlined text-6xl text-gray-300 mb-4">group_off</span>
+                    <p class="text-lg font-medium">لا يوجد أعضاء مسجلين</p>
+                </div>
+            ` : `
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="bg-gray-50 text-right">
+                                <th class="px-4 py-3 text-sm font-bold text-gray-600">الاسم</th>
+                                <th class="px-4 py-3 text-sm font-bold text-gray-600">الدور</th>
+                                <th class="px-4 py-3 text-sm font-bold text-gray-600">الجوال</th>
+                                <th class="px-4 py-3 text-sm font-bold text-gray-600">الواجهة</th>
+                                <th class="px-4 py-3 text-sm font-bold text-gray-600 text-center">إجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            ${settings_usersData.map(user => `
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-4 py-3 font-bold text-gray-800">${escapeHtml(user.name)}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">${escapeHtml(user.role)}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">${escapeHtml(user.mobile || '-')}</td>
+                                    <td class="px-4 py-3">
+                                        <span class="px-2 py-1 bg-indigo-50 text-indigo-600 text-xs rounded-full font-bold">${ROLE_INTERFACE_DESC[user.role] || 'غير محدد'}</span>
+                                    </td>
+                                    <td class="px-4 py-3 text-center">
+                                        <button onclick="openAdminModal('${escapeHtml(user.id)}')" class="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg">
+                                            <span class="material-symbols-outlined">edit</span>
+                                        </button>
+                                        <button onclick="deleteAdmin('${escapeHtml(user.id)}')" class="p-1.5 text-red-600 hover:bg-red-50 rounded-lg">
+                                            <span class="material-symbols-outlined">delete</span>
+                                        </button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `}
+        </div>
+    `;
+}
+
+function openAdminModal(userId = null) {
+    const user = userId ? settings_usersData.find(u => u.id === userId) : null;
+    const isEdit = !!user;
+    const classesHTML = buildAdminClassesHTML(user?.scope_value);
+
+    const container = document.getElementById('settings-modal-container');
+    container.innerHTML = `
+        <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                <div class="px-6 py-4 bg-gradient-to-l from-indigo-50 to-purple-50 border-b flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-gray-800">${isEdit ? 'تعديل عضو' : 'إضافة عضو جديد'}</h3>
+                    <button onclick="closeSettingsModal()" class="p-2 hover:bg-gray-100 rounded-lg">
+                        <span class="material-symbols-outlined text-gray-400">close</span>
+                    </button>
+                </div>
+
+                <div class="p-6 space-y-4 overflow-y-auto flex-1">
+                    <input type="hidden" id="admin_id" value="${escapeHtml(user?.id || '')}">
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-600 mb-1">الاسم *</label>
+                            <input type="text" id="admin_name" value="${escapeHtml(user?.name || '')}" class="w-full h-11 px-3 border border-gray-300 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-600 mb-1">الدور *</label>
+                            <select id="admin_role" onchange="updateRoleInterfaceDesc()" class="w-full h-11 px-3 border border-gray-300 rounded-lg">
+                                <option value="">اختر</option>
+                                ${SETTINGS_ADMIN_ROLES.map(r => `<option value="${r}" ${user?.role === r ? 'selected' : ''}>${r}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-600 mb-1">الجوال *</label>
+                            <input type="tel" id="admin_mobile" value="${escapeHtml(user?.mobile || '')}" placeholder="05XXXXXXXX" class="w-full h-11 px-3 border border-gray-300 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-600 mb-1">البريد</label>
+                            <input type="email" id="admin_email" value="${escapeHtml(user?.email || '')}" class="w-full h-11 px-3 border border-gray-300 rounded-lg">
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="text-sm font-bold text-gray-600">الفصول المسندة</label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="admin_select_all_classes" onchange="toggleAdminSelectAllClasses()" class="rounded text-indigo-600">
+                                <span class="text-sm text-indigo-600 font-bold">تحديد الكل</span>
+                            </label>
+                        </div>
+                        <div class="bg-gray-50 rounded-xl p-4 border max-h-40 overflow-y-auto">${classesHTML}</div>
+                    </div>
+
+                    <div id="role_interface_desc_container" style="display:none;">
+                        <label class="block text-sm font-bold text-gray-600 mb-2">واجهة الدور</label>
+                        <div class="bg-indigo-50 rounded-xl p-4 border border-indigo-200 flex items-center gap-3">
+                            <span class="material-symbols-outlined text-indigo-500">devices</span>
+                            <span id="role_interface_desc_text" class="text-sm text-indigo-700 font-medium"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="px-6 py-4 bg-gray-50 border-t flex justify-end gap-3">
+                    <button onclick="closeSettingsModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg">إلغاء</button>
+                    <button onclick="saveAdmin(${isEdit})" class="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700">${isEdit ? 'حفظ' : 'إضافة'}</button>
+                </div>
+            </div>
+        </div>
+    `;
+    // ★ إظهار وصف الواجهة إذا كان الدور محدداً مسبقاً (وضع التعديل)
+    updateRoleInterfaceDesc();
+}
+
+// ★ تحديث وصف الواجهة عند تغيير الدور
+function updateRoleInterfaceDesc() {
+    const role = document.getElementById('admin_role')?.value;
+    const container = document.getElementById('role_interface_desc_container');
+    const text = document.getElementById('role_interface_desc_text');
+    if (!container || !text) return;
+    const desc = ROLE_INTERFACE_DESC[role];
+    if (desc) {
+        text.textContent = desc;
+        container.style.display = '';
+    } else {
+        container.style.display = 'none';
+    }
+}
+
+var _savingAdmin = false;
+function saveAdmin(isEdit) {
+    if (_savingAdmin) return;
+    const selectedClasses = [...document.querySelectorAll('.admin-class-checkbox:checked')].map(cb => cb.value);
+
+    const userData = {
+        id: document.getElementById('admin_id').value,
+        name: document.getElementById('admin_name').value.trim(),
+        role: document.getElementById('admin_role').value,
+        mobile: document.getElementById('admin_mobile').value.trim(),
+        email: document.getElementById('admin_email').value.trim(),
+        scope_type: selectedClasses.length > 0 ? 'classes' : 'all',
+        scope_value: selectedClasses.join(','),
+        status: 'active'
+    };
+
+    if (!userData.name || !userData.role || !userData.mobile) {
+        showSettingsToast('warning', 'يرجى ملء الحقول المطلوبة');
+        return;
+    }
+    if (!/^05\d{8}$/.test(userData.mobile)) {
+        showSettingsToast('warning', 'رقم الجوال يجب أن يكون 10 أرقام ويبدأ بـ 05');
+        return;
+    }
+
+    _savingAdmin = true;
+    showSettingsToast('info', 'جاري الحفظ...');
+
+    const func = isEdit ? 'updateUser' : 'addUser';
+    google.script.run
+        .withSuccessHandler(res => {
+            _savingAdmin = false;
+            if (res && res.success) {
+                showSettingsToast('success', 'تم الحفظ');
+                closeSettingsModal();
+                loadUsersData(() => renderAdminsTab());
+            } else {
+                showSettingsToast('danger', res?.error || 'خطأ');
+            }
+        })
+        .withFailureHandler(err => {
+            _savingAdmin = false;
+            showSettingsToast('danger', 'خطأ في الاتصال');
+        })
+        [func](userData);
+}
+
+function deleteAdmin(userId) {
+    var user = settings_usersData.find(function(u) { return u.id === userId; });
+    var userName = user ? user.name : '';
+    showConfirmModal(
+        'تأكيد الحذف',
+        'هل أنت متأكد من حذف "' + escapeHtml(userName) + '"؟',
+        function() {
+            showSettingsToast('info', 'جاري الحذف...');
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    if (res && res.success) {
+                        showSettingsToast('success', 'تم الحذف بنجاح');
+                        loadUsersData(function() { renderAdminsTab(); });
+                    } else {
+                        showSettingsToast('danger', (res && res.error) || 'خطأ');
+                    }
+                })
+                .withFailureHandler(function() { showSettingsToast('danger', 'خطأ'); })
+                .deleteUser(userId);
+        }
+    );
+}
+
+// =================================================================
+// 7. تبويب: المعلمين
+// =================================================================
+function renderTeachersTab() {
+    const content = document.getElementById('settings-content');
+    const enabledStages = getEnabledStages();
+    
+    // تحديد المرحلة الافتراضية: "الكل" إذا لم يكن محدداً أو غير معروف
+    if (!settings_currentStageFilter || 
+        (settings_currentStageFilter !== '__all__' && settings_currentStageFilter !== '__unassigned__' && !enabledStages.find(s => s.name === settings_currentStageFilter))) {
+        settings_currentStageFilter = '__all__';
+    }
+    
+    // فلترة المعلمين حسب الاختيار
+    let displayTeachers;
+    if (settings_currentStageFilter === '__all__') {
+        displayTeachers = settings_teachersData;
+    } else if (settings_currentStageFilter === '__unassigned__') {
+        displayTeachers = settings_teachersData.filter(t => !t.assigned_classes || t.assigned_classes.length === 0);
+    } else {
+        displayTeachers = filterTeachersByStage(settings_teachersData, settings_currentStageFilter);
+    }
+    
+    // المعلمين بدون فصول مسندة (للعداد)
+    const unassignedTeachers = settings_teachersData.filter(t => !t.assigned_classes || t.assigned_classes.length === 0);
+
+    content.innerHTML = `
+        <div>
+            <div class="flex items-center justify-between mb-4 pb-4 border-b border-gray-100">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-teal-500">school</span>
+                    <h3 class="text-lg font-bold text-gray-800">المعلمين</h3>
+                    <span class="px-2 py-0.5 bg-teal-100 text-teal-700 text-sm rounded-full font-bold">${displayTeachers.length}</span>
+                    <span class="text-gray-400 text-sm">/ ${settings_teachersData.length} إجمالي</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="openTeacherModal()" class="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200">
+                        <span class="material-symbols-outlined">person_add</span>
+                        إضافة يدوي
+                    </button>
+                    <input type="file" id="teachers-file-upload" accept=".xlsx,.xls" class="hidden" onchange="handleTeachersFileUpload(this)">
+                    <button onclick="document.getElementById('teachers-file-upload').click()" class="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">
+                        <span class="material-symbols-outlined">upload_file</span>
+                        استيراد Excel
+                    </button>
+                </div>
+            </div>
+            
+            <!-- فلتر المرحلة -->
+            <div class="flex items-center gap-2 mb-3">
+                <span class="text-sm font-bold text-gray-500">المرحلة:</span>
+                <div class="flex gap-1 bg-gray-100 rounded-lg p-1 flex-wrap">
+                    <button onclick="switchTeachersStage('__all__')" 
+                        class="px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${settings_currentStageFilter === '__all__' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}">
+                        الكل <span class="text-xs ${settings_currentStageFilter === '__all__' ? 'text-indigo-500' : 'text-gray-400'}">(${settings_teachersData.length})</span>
+                    </button>
+                    ${enabledStages.map(stage => {
+                        const count = filterTeachersByStage(settings_teachersData, stage.name).length;
+                        const isActive = settings_currentStageFilter === stage.name;
+                        const safeName = escapeHtml(stage.name);
+                        return `<button onclick="switchTeachersStage('${safeName}')"
+                            class="px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${isActive ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}">
+                            ${safeName} <span class="text-xs ${isActive ? 'text-teal-500' : 'text-gray-400'}">(${count})</span>
+                        </button>`;
+                    }).join('')}
+                    ${unassignedTeachers.length > 0 ? `
+                        <button onclick="switchTeachersStage('__unassigned__')" 
+                            class="px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${settings_currentStageFilter === '__unassigned__' ? 'bg-white text-orange-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}">
+                            بدون فصول <span class="text-xs ${settings_currentStageFilter === '__unassigned__' ? 'text-orange-500' : 'text-gray-400'}">(${unassignedTeachers.length})</span>
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+
+            <!-- بحث -->
+            <div class="mb-4">
+                <div class="relative">
+                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 material-symbols-outlined">search</span>
+                    <input type="text" id="teachers-search" onkeyup="filterTeachers()" placeholder="بحث بالاسم أو السجل المدني..." class="w-full h-10 pr-10 pl-4 border border-gray-300 rounded-lg">
+                </div>
+            </div>
+            
+            ${displayTeachers.length === 0 ? `
+                <div class="text-center py-16 text-gray-500">
+                    <span class="material-symbols-outlined text-6xl text-gray-300 mb-4">school</span>
+                    <p class="text-lg font-medium">لا يوجد معلمين ${settings_currentStageFilter === '__unassigned__' ? 'بدون فصول' : settings_currentStageFilter === '__all__' ? '' : 'في هذه المرحلة'}</p>
+                    <p class="text-sm">أضف معلماً أو استورد من Excel</p>
+                </div>
+            ` : `
+                <div class="bg-white rounded-xl border overflow-hidden">
+                    <div class="max-h-[400px] overflow-y-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50 sticky top-0">
+                                <tr class="text-right">
+                                    <th class="px-4 py-3 text-sm font-bold text-gray-600">الاسم</th>
+                                    <th class="px-4 py-3 text-sm font-bold text-gray-600">السجل المدني</th>
+                                    <th class="px-4 py-3 text-sm font-bold text-gray-600">المواد</th>
+                                    <th class="px-4 py-3 text-sm font-bold text-gray-600">الفصول</th>
+                                    <th class="px-4 py-3 text-sm font-bold text-gray-600 text-center">إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="teachers-table-body" class="divide-y divide-gray-100">
+                                ${renderTeachersRows(displayTeachers)}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `}
+        </div>
+    `;
+}
+
+// عرض صفوف المعلمين
+function renderTeachersRows(teachers) {
+    const stageId = STAGE_NAME_TO_ID[settings_currentStageFilter] || '';
+    return teachers.map(t => {
+        // عرض الفصول: كلها عند فلتر "الكل" أو "بدون فصول"، وفلترة حسب المرحلة عند الباقي
+        // classKey format: "gradeName_stageId_letter" — stageId هو الجزء الأوسط
+        const stageClasses = (stageId && t.assigned_classes) ?
+            t.assigned_classes.filter(c => { const p = c.split('_'); return p.length >= 2 && p[p.length - 2] === stageId; }) :
+            (t.assigned_classes || []);
+        const classLabels = stageClasses.map(c => {
+            const parts = c.split('_');
+            return parts.length >= 3 ? `${parts[0]} (${parts[2]})` : c;
+        });
+        // عند فلتر "الكل" ولا توجد فصول مسندة، عرض شارة "بدون فصول"
+        const noClassesBadge = (!t.assigned_classes || t.assigned_classes.length === 0) ? 
+            '<span class="px-2 py-0.5 bg-orange-50 text-orange-500 text-xs rounded-full">بدون فصول</span>' : '';
+        return `
+            <tr class="hover:bg-gray-50">
+                <td class="px-4 py-3">
+                    <div class="font-bold text-gray-800">${escapeHtml(t.name)}</div>
+                    <div class="text-xs text-gray-400">${escapeHtml(t.mobile || '')}</div>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-600 font-mono">${escapeHtml(t.civil_id || '-')}</td>
+                <td class="px-4 py-3 text-sm text-gray-600">${escapeHtml(t.subjects?.slice(0,2).join('، ') || '-')}${t.subjects?.length > 2 ? '...' : ''}</td>
+                <td class="px-4 py-3">
+                    <div class="flex flex-wrap gap-1">
+                        ${classLabels.length > 0 ? classLabels.slice(0, 4).map(cl =>
+                            `<span class="px-2 py-0.5 bg-teal-50 text-teal-600 text-xs rounded-full font-bold">${escapeHtml(cl)}</span>`
+                        ).join('') + (classLabels.length > 4 ? `<span class="text-xs text-gray-400">+${classLabels.length - 4}</span>` : '') :
+                        noClassesBadge || '<span class="text-xs text-gray-400">-</span>'}
+                    </div>
+                </td>
+                <td class="px-4 py-3 text-center">
+                    <button onclick="openTeacherModal('${escapeHtml(t.id)}')" class="p-1.5 text-teal-600 hover:bg-teal-50 rounded-lg">
+                        <span class="material-symbols-outlined">edit</span>
+                    </button>
+                    <button onclick="deleteTeacher('${escapeHtml(t.id)}')" class="p-1.5 text-red-600 hover:bg-red-50 rounded-lg">
+                        <span class="material-symbols-outlined">delete</span>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// تبديل مرحلة المعلمين
+function switchTeachersStage(stageName) {
+    settings_currentStageFilter = stageName;
+    renderTeachersTab();
+}
+
+// بحث المعلمين
+function filterTeachers() {
+    const search = (document.getElementById('teachers-search')?.value || '').toLowerCase();
+    
+    // تحديد القائمة الأساسية حسب الفلتر الحالي
+    let base;
+    if (settings_currentStageFilter === '__all__') {
+        base = settings_teachersData;
+    } else if (settings_currentStageFilter === '__unassigned__') {
+        base = settings_teachersData.filter(t => !t.assigned_classes || t.assigned_classes.length === 0);
+    } else {
+        base = filterTeachersByStage(settings_teachersData, settings_currentStageFilter);
+    }
+    
+    if (!search) {
+        document.getElementById('teachers-table-body').innerHTML = renderTeachersRows(base);
+        return;
+    }
+    
+    const filtered = base.filter(t => 
+        (t.name || '').toLowerCase().includes(search) || 
+        (t.civil_id || '').includes(search) ||
+        (t.mobile || '').includes(search)
+    );
+    document.getElementById('teachers-table-body').innerHTML = renderTeachersRows(filtered);
+}
+
+// ★ إدارة المواد اليدوية: تم حذفها - المواد الآن محددة مسبقاً حسب المنهج السعودي
+
+function openTeacherModal(teacherId = null) {
+    const teacher = teacherId ? settings_teachersData.find(t => t.id === teacherId) : null;
+    const isEdit = !!teacher;
+    const classesHTML = buildTeacherClassesHTML(teacher?.assigned_classes);
+
+    const container = document.getElementById('settings-modal-container');
+    container.innerHTML = `
+        <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                <div class="px-6 py-4 bg-gradient-to-l from-teal-50 to-emerald-50 border-b flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-gray-800">${isEdit ? 'تعديل معلم' : 'إضافة معلم جديد'}</h3>
+                    <button onclick="closeSettingsModal()" class="p-2 hover:bg-gray-100 rounded-lg">
+                        <span class="material-symbols-outlined text-gray-400">close</span>
+                    </button>
+                </div>
+
+                <div class="p-6 space-y-4 overflow-y-auto flex-1">
+                    <input type="hidden" id="teacher_id" value="${escapeHtml(teacher?.id || '')}">
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-600 mb-1">السجل المدني *</label>
+                            <input type="text" id="teacher_civil_id" value="${escapeHtml(teacher?.civil_id || '')}" maxlength="10" ${isEdit ? 'readonly style="background:#f3f4f6;cursor:not-allowed;"' : ''} class="w-full h-11 px-3 border border-gray-300 rounded-lg">
+                            ${isEdit ? '<p class="text-xs text-gray-400 mt-1">السجل المدني هو المعرّف ولا يمكن تغييره</p>' : ''}
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-600 mb-1">الاسم *</label>
+                            <input type="text" id="teacher_name" value="${escapeHtml(teacher?.name || '')}" class="w-full h-11 px-3 border border-gray-300 rounded-lg">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-600 mb-1">الجوال</label>
+                        <input type="tel" id="teacher_mobile" value="${escapeHtml(teacher?.mobile || '')}" placeholder="05XXXXXXXX" class="w-full h-11 px-3 border border-gray-300 rounded-lg">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-600 mb-2">الفصول المسندة</label>
+                        <div id="teacher-classes-container" class="bg-gray-50 rounded-xl p-4 border max-h-40 overflow-y-auto">${classesHTML}</div>
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="block text-sm font-bold text-gray-600">المواد</label>
+                            <span id="teacher-shared-badge" class="hidden px-3 py-1 bg-purple-100 text-purple-700 text-xs rounded-full font-bold"></span>
+                        </div>
+                        <div id="teacher-subjects-container" class="bg-gray-50 rounded-xl p-4 border max-h-48 overflow-y-auto">
+                            <p class="text-gray-400 text-sm text-center py-2">اختر الفصول أولاً لعرض المواد</p>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="px-6 py-4 bg-gray-50 border-t flex justify-end gap-3">
+                    <button onclick="closeSettingsModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg">إلغاء</button>
+                    <button onclick="saveTeacher(${isEdit})" class="px-6 py-2 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">${isEdit ? 'حفظ' : 'إضافة'}</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // ★ ربط تغيير الفصول بتحديث المواد
+    document.querySelectorAll('.teacher-class-checkbox').forEach(cb => {
+        cb.addEventListener('change', function() { updateTeacherSubjects(teacher); });
+    });
+
+    // ★ عرض المواد المحفوظة مسبقاً عند التعديل
+    updateTeacherSubjects(teacher);
+}
+
+// =================================================================
+// ★ تحديث المواد ديناميكياً حسب الفصول المختارة
+// =================================================================
+function updateTeacherSubjects(existingTeacher) {
+    const container = document.getElementById('teacher-subjects-container');
+    const badge = document.getElementById('teacher-shared-badge');
+    
+    // استخراج المراحل من الفصول المحددة
+    const checkedClasses = [...document.querySelectorAll('.teacher-class-checkbox:checked')].map(cb => cb.value);
+    const detectedStages = new Set();
+    
+    checkedClasses.forEach(classKey => {
+        const parts = classKey.split('_');
+        if (parts.length >= 3) {
+            detectedStages.add(parts[parts.length - 2]); // stageId
+        }
+    });
+    
+    if (detectedStages.size === 0) {
+        container.innerHTML = '<p class="text-gray-400 text-sm text-center py-2">اختر الفصول أولاً لعرض المواد</p>';
+        badge.classList.add('hidden');
+        return;
+    }
+    
+    // ★ كشف المعلم المشترك
+    if (detectedStages.size > 1) {
+        const stageNames = [...detectedStages].map(id => STAGE_SUBJECTS[id]?.name || id).join(' + ');
+        badge.textContent = '⚡ معلم مشترك: ' + stageNames;
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
+    
+    // ★ المواد المحفوظة مسبقاً (عند التعديل)
+    const savedSubjects = existingTeacher?.subjects || [];
+    
+    // ★ بناء HTML المواد مجمّعة حسب المرحلة
+    let html = '<div class="space-y-3">';
+    
+    const stageColors = {
+        'primary': { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-700', chip: 'bg-green-100 border-green-300 text-green-700', chipOff: 'bg-gray-100 border-gray-200 text-gray-500' },
+        'intermediate': { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', chip: 'bg-blue-100 border-blue-300 text-blue-700', chipOff: 'bg-gray-100 border-gray-200 text-gray-500' },
+        'secondary': { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700', chip: 'bg-purple-100 border-purple-300 text-purple-700', chipOff: 'bg-gray-100 border-gray-200 text-gray-500' }
+    };
+    
+    [...detectedStages].forEach(stageId => {
+        const stageInfo = STAGE_SUBJECTS[stageId];
+        if (!stageInfo) return;
+        
+        const colors = stageColors[stageId] || stageColors['intermediate'];
+        
+        html += `<div class="pb-3 ${detectedStages.size > 1 ? 'border-b border-gray-200 last:border-0' : ''}">
+            ${detectedStages.size > 1 ? `<div class="font-bold text-sm ${colors.text} mb-2 flex items-center gap-1">
+                <span class="material-symbols-outlined text-base">school</span>
+                ${stageInfo.name}
+            </div>` : ''}
+            <div class="flex flex-wrap gap-2">`;
+        
+        stageInfo.subjects.forEach(subjectName => {
+            const isSelected = savedSubjects.includes(subjectName);
+            html += `<label class="cursor-pointer" onclick="toggleChip(this,event)" data-on="${colors.chip}" data-off="${colors.chipOff}">
+                <input type="checkbox" class="teacher-subject-checkbox hidden" data-name="${subjectName}" ${isSelected ? 'checked' : ''}>
+                <span class="inline-block px-3 py-1 text-xs rounded-full border transition-all ${isSelected ? colors.chip : colors.chipOff}">${subjectName}</span>
+            </label>`;
+        });
+        
+        html += '</div></div>';
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function buildTeacherClassesHTML(assignedClasses) {
+    const structure = settings_structureData || {};
+    if (!structure.stages) return '<p class="text-gray-400 text-sm text-center py-2">لم يتم إعداد هيكل المدرسة</p>';
+
+    let html = '<div class="space-y-3">';
+    let hasClasses = false;
+
+    SETTINGS_STAGES.forEach(stage => {
+        const stageData = structure.stages?.[stage.id];
+        if (!stageData) return;
+        
+        const grades = stage.id === 'secondary' ? SETTINGS_SECONDARY_TRACKS[structure.secondary_system || 'فصلي'] : stage.grades;
+        const enabledGrades = grades.filter(g => stageData[g]?.enabled);
+        if (enabledGrades.length === 0) return;
+
+        hasClasses = true;
+        html += `<div class="border-b border-gray-200 pb-2 last:border-0">
+            <div class="font-bold text-gray-700 mb-2">${stage.name}</div>
+            <div class="grid grid-cols-3 gap-2">`;
+
+        enabledGrades.forEach(gradeName => {
+            const classCount = stageData[gradeName].classCount || 0;
+            SETTINGS_CLASS_LETTERS.slice(0, classCount).forEach(letter => {
+                const classKey = `${gradeName}_${stage.id}_${letter}`;
+                const isSelected = assignedClasses?.includes(classKey);
+                html += `<label class="flex items-center gap-2 p-1 hover:bg-white rounded cursor-pointer">
+                    <input type="checkbox" class="teacher-class-checkbox rounded text-teal-600" value="${classKey}" ${isSelected ? 'checked' : ''}>
+                    <span class="text-sm">${gradeName} (${letter})</span>
+                </label>`;
+            });
+        });
+
+        html += '</div></div>';
+    });
+
+    if (!hasClasses) return '<p class="text-gray-400 text-sm text-center py-2">لا توجد فصول مفعلة</p>';
+    return html + '</div>';
+}
+
+function toggleChip(label, event) {
+    event.preventDefault();
+    const cb = label.querySelector('input');
+    const span = label.querySelector('span');
+    cb.checked = !cb.checked;
+    const onClass = label.dataset.on || 'bg-teal-100 border-teal-300 text-teal-700';
+    const offClass = label.dataset.off || 'bg-gray-100 border-gray-200 text-gray-500';
+    span.className = 'inline-block px-3 py-1 text-xs rounded-full border transition-all ' + (cb.checked ? onClass : offClass);
+}
+
+var _savingTeacher = false;
+function saveTeacher(isEdit) {
+    if (_savingTeacher) return;
+    const civilId = document.getElementById('teacher_civil_id').value.trim();
+    const data = {
+        id: civilId,
+        civil_id: civilId,
+        name: document.getElementById('teacher_name').value.trim(),
+        mobile: document.getElementById('teacher_mobile').value.trim(),
+        subjects: [...document.querySelectorAll('.teacher-subject-checkbox:checked')].map(cb => cb.dataset.name),
+        assigned_classes: [...document.querySelectorAll('.teacher-class-checkbox:checked')].map(cb => cb.value)
+    };
+
+    if (!data.civil_id || !data.name) { showSettingsToast('warning', 'السجل المدني والاسم مطلوبان'); return; }
+    if (!/^[12]\d{9}$/.test(data.civil_id)) { showSettingsToast('warning', 'السجل المدني يجب أن يكون 10 أرقام ويبدأ بـ 1 أو 2'); return; }
+    if (data.mobile && !/^05\d{8}$/.test(data.mobile)) { showSettingsToast('warning', 'رقم الجوال يجب أن يكون 10 أرقام ويبدأ بـ 05'); return; }
+
+    _savingTeacher = true;
+    showSettingsToast('info', 'جاري الحفظ...');
+
+    const func = isEdit ? 'updateTeacher' : 'addTeacher';
+    google.script.run
+        .withSuccessHandler(res => {
+            _savingTeacher = false;
+            if (res?.success) {
+                showSettingsToast('success', 'تم الحفظ');
+                closeSettingsModal();
+                loadTeachersData(() => renderTeachersTab());
+            } else { showSettingsToast('danger', res?.error || 'خطأ'); }
+        })
+        .withFailureHandler(() => { _savingTeacher = false; showSettingsToast('danger', 'خطأ'); })
+        [func](data);
+}
+
+var _deletingTeacher = false;
+function deleteTeacher(teacherId) {
+    if (_deletingTeacher) return;
+    var teacher = settings_teachersData.find(function(t) { return t.id === teacherId; });
+    var name = teacher ? teacher.name : '';
+    showConfirmModal(
+        'تأكيد الحذف',
+        'هل أنت متأكد من حذف "' + escapeHtml(name) + '"؟',
+        function() {
+            _deletingTeacher = true;
+            showSettingsToast('info', 'جاري الحذف...');
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    _deletingTeacher = false;
+                    if (res && res.success) {
+                        showSettingsToast('success', 'تم الحذف');
+                        loadTeachersData(function() { renderTeachersTab(); });
+                    } else {
+                        showSettingsToast('danger', (res && res.error) || 'خطأ');
+                    }
+                })
+                .withFailureHandler(function() { _deletingTeacher = false; showSettingsToast('danger', 'خطأ'); })
+                .deleteTeacher(teacherId);
+        }
+    );
+}
+
+function handleTeachersFileUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    input.value = '';
+    
+    showSettingsToast('info', 'جاري قراءة الملف...');
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const wb = XLSX.read(data, {type: 'array'});
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            
+            // تحويل لمصفوفة مع معالجة الدمج
+            const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+            const maxR = Math.min(range.e.r, 200);
+            const maxC = Math.min(range.e.c, 30);
+            
+            // خريطة الخلايا المدمجة
+            const mergeMap = {};
+            (ws['!merges'] || []).forEach(mg => {
+                const tlAddr = XLSX.utils.encode_cell({r: mg.s.r, c: mg.s.c});
+                for (let mr = mg.s.r; mr <= mg.e.r; mr++) {
+                    for (let mc = mg.s.c; mc <= mg.e.c; mc++) {
+                        if (mr !== mg.s.r || mc !== mg.s.c) mergeMap[mr + ',' + mc] = tlAddr;
+                    }
+                }
+            });
+            
+            function getCell(r, c) {
+                const addr = XLSX.utils.encode_cell({r, c});
+                const lookupAddr = mergeMap[r + ',' + c] || addr;
+                const cell = ws[lookupAddr];
+                return cell && cell.v !== undefined ? String(cell.v) : '';
+            }
+            
+            // === كشف بنية نور: البحث عن "الإسم" و "رقم الهوية" في صف العناوين ===
+            let headerRow = -1, nameCol = -1, idCol = -1, mobileCol = -1;
+            
+            for (let r = 0; r <= Math.min(maxR, 20); r++) {
+                for (let c = 0; c <= maxC; c++) {
+                    const v = getCell(r, c);
+                    if (v.includes('\u0627\u0644\u0625\u0633\u0645') || v.includes('\u0627\u0644\u0627\u0633\u0645') || v === '\u0627\u0633\u0645') { headerRow = r; nameCol = c; }
+                    if (v.includes('\u0631\u0642\u0645 \u0627\u0644\u0647\u0648\u064a\u0629') || v.includes('\u0627\u0644\u0633\u062c\u0644')) idCol = c;
+                    if (v.includes('\u0627\u0644\u062c\u0648\u0627\u0644')) mobileCol = c;
+                }
+                if (headerRow >= 0) break;
+            }
+            
+            // fallback لبنية نور المعروفة
+            if (headerRow < 0) { headerRow = 14; nameCol = 21; idCol = 23; mobileCol = 5; }
+            if (nameCol < 0) nameCol = 21;
+            if (idCol < 0) idCol = 23;
+            if (mobileCol < 0) mobileCol = 5;
+            
+            // === استخراج المعلمين ===
+            const teachers = [];
+            for (let r = headerRow + 1; r <= maxR; r++) {
+                const name = getCell(r, nameCol).trim();
+                const identity = getCell(r, idCol).trim();
+                if (!name || !identity || identity.length < 5) continue;
+                
+                let mobile = getCell(r, mobileCol).trim();
+                // تحويل 966XXXXXXXXX → 05XXXXXXXX
+                if (mobile.startsWith('966') && mobile.length >= 12) {
+                    mobile = '0' + mobile.substring(3);
+                }
+                
+                teachers.push({ name, identity, mobile });
+            }
+            
+            if (teachers.length === 0) {
+                showSettingsToast('danger', '\u0644\u0645 \u064a\u062a\u0645 \u0627\u0644\u0639\u062b\u0648\u0631 \u0639\u0644\u0649 \u0628\u064a\u0627\u0646\u0627\u062a \u0645\u0639\u0644\u0645\u064a\u0646');
+                return;
+            }
+            
+            // عرض نافذة المعاينة
+            showTeachersImportPreview(teachers);
+            
+        } catch(err) {
+            showSettingsToast('danger', '\u062e\u0637\u0623 \u0641\u064a \u0642\u0631\u0627\u0621\u0629 \u0627\u0644\u0645\u0644\u0641: ' + err.message);
+        }
+    };
+    reader.onerror = function() { showSettingsToast('danger', 'خطأ في قراءة الملف'); };
+    reader.readAsArrayBuffer(file);
+}
+
+function showTeachersImportPreview(teachers) {
+    const container = document.getElementById('settings-modal-container');
+    
+    // البحث عن التكرار مع البيانات الحالية
+    const existingIds = new Set(settings_teachersData.map(t => String(t.civil_id || '')));
+    const newTeachers = teachers.filter(t => !existingIds.has(t.identity));
+    const duplicates = teachers.filter(t => existingIds.has(t.identity));
+    
+    container.innerHTML = `
+        <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+                <div class="px-6 py-4 bg-gradient-to-l from-teal-50 to-emerald-50 border-b flex justify-between items-center">
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-800">\u0627\u0633\u062a\u064a\u0631\u0627\u062f \u0627\u0644\u0645\u0639\u0644\u0645\u064a\u0646 - ${teachers.length} \u0645\u0639\u0644\u0645</h3>
+                        <div class="flex gap-3 mt-1 text-sm">
+                            <span class="text-green-600 font-bold">\u062c\u062f\u064a\u062f: ${newTeachers.length}</span>
+                            ${duplicates.length > 0 ? '<span class="text-amber-600 font-bold">\u0645\u0643\u0631\u0631: ' + duplicates.length + '</span>' : ''}
+                        </div>
+                    </div>
+                    <button onclick="closeSettingsModal()" class="p-2 hover:bg-gray-100 rounded-lg">
+                        <span class="material-symbols-outlined text-gray-400">close</span>
+                    </button>
+                </div>
+                <div class="p-6 overflow-y-auto flex-1">
+                    ${duplicates.length > 0 ? `
+                        <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="teachers-update-existing" class="rounded text-teal-600" checked>
+                                <span class="text-sm font-bold text-amber-700">\u062a\u062d\u062f\u064a\u062b \u062c\u0648\u0627\u0644 ${duplicates.length} \u0645\u0639\u0644\u0645 \u0645\u0648\u062c\u0648\u062f</span>
+                            </label>
+                        </div>
+                    ` : ''}
+                    <div class="border rounded-lg overflow-hidden">
+                        <div class="max-h-[350px] overflow-y-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-100 sticky top-0">
+                                    <tr class="text-right">
+                                        <th class="px-3 py-2 w-8">#</th>
+                                        <th class="px-3 py-2">\u0627\u0644\u0627\u0633\u0645</th>
+                                        <th class="px-3 py-2">\u0631\u0642\u0645 \u0627\u0644\u0647\u0648\u064a\u0629</th>
+                                        <th class="px-3 py-2">\u0627\u0644\u062c\u0648\u0627\u0644</th>
+                                        <th class="px-3 py-2">\u0627\u0644\u062d\u0627\u0644\u0629</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y">
+                                    ${teachers.map((t, i) => {
+                                        const isDup = existingIds.has(t.identity);
+                                        return `<tr class="${isDup ? 'bg-amber-50/50' : ''}">
+                                            <td class="px-3 py-2 text-gray-400">${i+1}</td>
+                                            <td class="px-3 py-2 font-bold">${escapeHtml(t.name)}</td>
+                                            <td class="px-3 py-2 font-mono text-gray-600">${escapeHtml(t.identity)}</td>
+                                            <td class="px-3 py-2 text-gray-600">${escapeHtml(t.mobile || '-')}</td>
+                                            <td class="px-3 py-2">${isDup ? '<span class="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">\u0645\u0648\u062c\u0648\u062f</span>' : '<span class="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">\u062c\u062f\u064a\u062f</span>'}</td>
+                                        </tr>`;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="px-6 py-4 bg-gray-50 border-t flex justify-between items-center">
+                    <p class="text-xs text-gray-400">\u0627\u0644\u062c\u0648\u0627\u0644 \u064a\u062a\u062d\u0648\u0644 \u062a\u0644\u0642\u0627\u0626\u064a\u0627\u064b \u0645\u0646 966 \u0625\u0644\u0649 05</p>
+                    <div class="flex gap-3">
+                        <button onclick="closeSettingsModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg">\u0625\u0644\u063a\u0627\u0621</button>
+                        <button onclick="executeTeachersImport()" class="px-6 py-2 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">\u0627\u0633\u062a\u064a\u0631\u0627\u062f</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // حفظ البيانات للاستيراد
+    window._pendingTeachersImport = teachers;
+}
+
+var _importingTeachers = false;
+function executeTeachersImport() {
+    if (_importingTeachers) return;
+    const teachers = window._pendingTeachersImport;
+    if (!teachers || !teachers.length) return;
+    _importingTeachers = true;
+
+    const updateExisting = document.getElementById('teachers-update-existing')?.checked ?? true;
+
+    closeSettingsModal();
+    showImportProgressModal('\u0627\u0644\u0645\u0639\u0644\u0645\u064a\u0646');
+    updateImportProgress('\u062c\u0627\u0631\u064a \u0627\u0644\u062d\u0641\u0638...', 50);
+    
+    google.script.run
+        .withSuccessHandler(function(res) {
+            _importingTeachers = false;
+            if (res && res.success) {
+                updateImportProgress('\u062a\u0645 \u0628\u0646\u062c\u0627\u062d!', 100, true);
+                setTimeout(function() {
+                    closeImportProgressModal();
+                    showSettingsToast('success', res.message);
+                    loadTeachersData(function() { renderTeachersTab(); });
+                }, 1200);
+            } else {
+                closeImportProgressModal();
+                showSettingsToast('danger', (res && res.error) || '\u062e\u0637\u0623');
+            }
+        })
+        .withFailureHandler(function(err) {
+            _importingTeachers = false;
+            closeImportProgressModal();
+            showSettingsToast('danger', '\u062e\u0637\u0623: ' + err.message);
+        })
+        .saveTeachersParsedData(JSON.stringify(teachers), updateExisting);
+
+    window._pendingTeachersImport = null;
+}
+
+// =================================================================
+// 8. تبويب: الطلاب
+// =================================================================
+function renderStudentsTab() {
+    const content = document.getElementById('settings-content');
+    
+    // تحميل هيكل المدرسة للفلاتر (إذا لم يكن محملاً)
+    const doRender = () => {
+        const enabledStages = getEnabledStages();
+        
+        // تحديد المرحلة الافتراضية
+        if (!settings_currentStageFilter || !enabledStages.find(s => s.name === settings_currentStageFilter)) {
+            settings_currentStageFilter = currentStage || (enabledStages.length > 0 ? enabledStages[0].name : '');
+        }
+        settings_currentClassFilter = '';
+        
+        // فلترة الطلاب حسب المرحلة
+        const stageStudents = filterStudentsByStage(settings_studentsData, settings_currentStageFilter);
+        
+        // استخراج الفصول الفعلية الموجودة في بيانات الطلاب
+        const uniqueGrades = [...new Set(stageStudents.map(s => s['الصف'] || '').filter(Boolean))].sort();
+        const uniqueClasses = [...new Set(stageStudents.map(s => {
+            const grade = s['الصف'] || '';
+            const cls = s['الفصل'] || '';
+            return grade && cls ? `${grade} - ${cls}` : '';
+        }).filter(Boolean))].sort();
+        
+        content.innerHTML = `
+            <div>
+                <div class="flex items-center justify-between mb-4 pb-4 border-b border-gray-100">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-emerald-500">groups</span>
+                        <h3 class="text-lg font-bold text-gray-800">الطلاب</h3>
+                        <span class="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-sm rounded-full font-bold">${stageStudents.length}</span>
+                        <span class="text-gray-400 text-sm">/ ${settings_studentsData.length} إجمالي</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="openStudentModal()" class="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200">
+                            <span class="material-symbols-outlined">person_add</span>
+                            إضافة يدوي
+                        </button>
+                        <input type="file" id="students-file-upload" accept=".xlsx,.xls" class="hidden" onchange="handleStudentsFileUpload(this)">
+                        <button onclick="document.getElementById('students-file-upload').click()" class="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700">
+                            <span class="material-symbols-outlined">upload_file</span>
+                            استيراد Excel
+                        </button>
+                    </div>
+                </div>
+
+                <!-- فلتر المرحلة -->
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="text-sm font-bold text-gray-500">المرحلة:</span>
+                    <div class="flex gap-1 bg-gray-100 rounded-lg p-1 flex-wrap">
+                        ${enabledStages.map(stage => {
+                            const count = filterStudentsByStage(settings_studentsData, stage.name).length;
+                            const isActive = settings_currentStageFilter === stage.name;
+                            const safeName = escapeHtml(stage.name);
+                            return `<button onclick="switchStudentsStage('${safeName}')"
+                                class="px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${isActive ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}">
+                                ${safeName} <span class="text-xs ${isActive ? 'text-emerald-500' : 'text-gray-400'}">(${count})</span>
+                            </button>`;
+                        }).join('')}
+                        ${(() => {
+                            const noStageCount = settings_studentsData.filter(s => !detectStudentStage(s)).length;
+                            if (noStageCount === 0) return '';
+                            const isActive = settings_currentStageFilter === '__unclassified__';
+                            return `<button onclick="switchStudentsStage('__unclassified__')" 
+                                class="px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${isActive ? 'bg-white text-orange-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}">
+                                بدون تصنيف <span class="text-xs ${isActive ? 'text-orange-500' : 'text-gray-400'}">(${noStageCount})</span>
+                            </button>`;
+                        })()}
+                    </div>
+                </div>
+
+                <!-- بحث + فلتر الفصل -->
+                <div class="flex gap-3 mb-4">
+                    <div class="flex-1 relative">
+                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 material-symbols-outlined">search</span>
+                        <input type="text" id="students-search" onkeyup="filterStudents()" placeholder="بحث بالاسم أو الرقم..." class="w-full h-10 pr-10 pl-4 border border-gray-300 rounded-lg">
+                    </div>
+                    <select id="students-grade-filter" onchange="filterStudents()" class="h-10 px-3 border border-gray-300 rounded-lg text-sm min-w-[140px]">
+                        <option value="">كل الصفوف</option>
+                        ${uniqueGrades.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('')}
+                    </select>
+                    <select id="students-class-filter" onchange="filterStudents()" class="h-10 px-3 border border-gray-300 rounded-lg text-sm min-w-[120px]">
+                        <option value="">كل الفصول</option>
+                        ${uniqueClasses.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
+                    </select>
+                </div>
+
+                <div class="bg-white rounded-xl border overflow-hidden">
+                    <div class="max-h-[400px] overflow-y-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50 sticky top-0">
+                                <tr>
+                                    <th class="px-4 py-3 text-right text-sm font-bold text-gray-600">رقم الطالب</th>
+                                    <th class="px-4 py-3 text-right text-sm font-bold text-gray-600">الاسم</th>
+                                    <th class="px-4 py-3 text-right text-sm font-bold text-gray-600">الصف</th>
+                                    <th class="px-4 py-3 text-right text-sm font-bold text-gray-600">الفصل</th>
+                                    <th class="px-4 py-3 text-center text-sm font-bold text-gray-600">حذف</th>
+                                </tr>
+                            </thead>
+                            <tbody id="students-table-body" class="divide-y divide-gray-100">
+                                ${renderStudentsRows(stageStudents)}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+    };
+    
+    // إذا كان الهيكل محمل مسبقاً لا نحتاج لاستدعاء الخادم
+    if (settings_structureData && settings_structureData.stages) {
+        doRender();
+    } else {
+        loadStructureData(doRender);
+    }
+}
+
+// تبديل مرحلة الطلاب
+function switchStudentsStage(stageName) {
+    settings_currentStageFilter = stageName;
+    settings_currentClassFilter = '';
+    renderStudentsTab();
+}
+
+function renderStudentsRows(students) {
+    if (students.length === 0) return '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">لا يوجد طلاب</td></tr>';
+    return students.map(s => `
+        <tr class="hover:bg-gray-50">
+            <td class="px-4 py-2 text-sm font-mono">${escapeHtml(String(s['رقم الطالب'] || '-'))}</td>
+            <td class="px-4 py-2 text-sm font-bold text-gray-800">${escapeHtml(s['اسم الطالب'] || '')}</td>
+            <td class="px-4 py-2 text-sm text-gray-600">${escapeHtml(s['الصف'] || '-')}</td>
+            <td class="px-4 py-2 text-sm text-gray-600">${escapeHtml(s['الفصل'] || '-')}</td>
+            <td class="px-4 py-2 text-center">
+                <button onclick="deleteStudent('${escapeHtml(String(s['رقم الطالب'] || ''))}')" class="p-1 text-red-500 hover:bg-red-50 rounded">
+                    <span class="material-symbols-outlined text-lg">delete</span>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function filterStudents() {
+    const search = (document.getElementById('students-search')?.value || '').toLowerCase();
+    const gradeFilter = document.getElementById('students-grade-filter')?.value || '';
+    const classFilter = document.getElementById('students-class-filter')?.value || '';
+    
+    // فلترة حسب المرحلة أولاً
+    let filtered = filterStudentsByStage(settings_studentsData, settings_currentStageFilter);
+    
+    // فلترة حسب الصف
+    if (gradeFilter) {
+        filtered = filtered.filter(s => (s['الصف'] || '') === gradeFilter);
+    }
+    
+    // فلترة حسب الفصل (صف - فصل)
+    if (classFilter) {
+        filtered = filtered.filter(s => {
+            const grade = s['الصف'] || '';
+            const cls = s['الفصل'] || '';
+            return `${grade} - ${cls}` === classFilter;
+        });
+    }
+    
+    // بحث نصي
+    if (search) {
+        filtered = filtered.filter(s => 
+            (s['اسم الطالب'] || '').toLowerCase().includes(search) || 
+            String(s['رقم الطالب'] || '').includes(search)
+        );
+    }
+    
+    document.getElementById('students-table-body').innerHTML = renderStudentsRows(filtered);
+}
+
+function openStudentModal() {
+    loadStructureData(() => {
+        const container = document.getElementById('settings-modal-container');
+        container.innerHTML = `
+            <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-md overflow-hidden">
+                    <div class="px-6 py-4 bg-gradient-to-l from-emerald-50 to-teal-50 border-b flex justify-between items-center">
+                        <h3 class="text-lg font-bold text-gray-800">إضافة طالب</h3>
+                        <button onclick="closeSettingsModal()" class="p-2 hover:bg-gray-100 rounded-lg">
+                            <span class="material-symbols-outlined text-gray-400">close</span>
+                        </button>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-600 mb-1">رقم الطالب *</label>
+                                <input type="text" id="new_student_id" maxlength="10" class="w-full h-11 px-3 border rounded-lg">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-600 mb-1">الاسم *</label>
+                                <input type="text" id="new_student_name" class="w-full h-11 px-3 border rounded-lg">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-600 mb-1">الصف</label>
+                                <select id="new_student_grade" onchange="onStudentGradeChange()" class="w-full h-11 px-3 border rounded-lg">
+                                    <option value="">اختر</option>
+                                    ${buildGradeOptions()}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-600 mb-1">الفصل</label>
+                                <select id="new_student_class" class="w-full h-11 px-3 border rounded-lg">
+                                    <option value="">اختر الصف أولاً</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-600 mb-1">جوال ولي الأمر</label>
+                            <input type="tel" id="new_student_mobile" placeholder="05XXXXXXXX" class="w-full h-11 px-3 border rounded-lg">
+                        </div>
+                    </div>
+                    <div class="px-6 py-4 bg-gray-50 border-t flex justify-end gap-3">
+                        <button onclick="closeSettingsModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg">إلغاء</button>
+                        <button onclick="saveNewStudent()" class="px-6 py-2 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700">إضافة</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+}
+
+function buildGradeOptions() {
+    const structure = settings_structureData || {};
+    let options = '';
+    SETTINGS_STAGES.forEach(stage => {
+        const stageData = structure.stages?.[stage.id];
+        if (!stageData) return;
+        const grades = stage.id === 'secondary' ? SETTINGS_SECONDARY_TRACKS[structure.secondary_system || 'فصلي'] : stage.grades;
+        grades.forEach(gradeName => {
+            if (!stageData[gradeName]?.enabled) return;
+            options += `<option value="${escapeHtml(gradeName)}_${escapeHtml(stage.id)}" data-stage="${escapeHtml(stage.name)}" data-classes="${stageData[gradeName].classCount}">${escapeHtml(gradeName)} ${escapeHtml(stage.name)}</option>`;
+        });
+    });
+    return options || '<option value="">لا توجد صفوف</option>';
+}
+
+function onStudentGradeChange() {
+    const gradeSelect = document.getElementById('new_student_grade');
+    const classSelect = document.getElementById('new_student_class');
+    const option = gradeSelect.options[gradeSelect.selectedIndex];
+    classSelect.innerHTML = '<option value="">اختر</option>';
+    if (option?.dataset?.classes) {
+        const count = parseInt(option.dataset.classes);
+        SETTINGS_CLASS_LETTERS.slice(0, count).forEach(l => {
+            classSelect.innerHTML += `<option value="${l}">${l}</option>`;
+        });
+    }
+}
+
+var _savingStudent = false;
+function saveNewStudent() {
+    if (_savingStudent) return;
+    const gradeSelect = document.getElementById('new_student_grade');
+    const option = gradeSelect.options[gradeSelect.selectedIndex];
+    const data = {
+        id: document.getElementById('new_student_id').value.trim(),
+        name: document.getElementById('new_student_name').value.trim(),
+        grade: option?.text || '',
+        class: document.getElementById('new_student_class').value,
+        mobile: document.getElementById('new_student_mobile').value.trim(),
+        stage: option?.dataset?.stage || ''
+    };
+
+    if (!data.id || !data.name) { showSettingsToast('warning', 'رقم الطالب والاسم مطلوبان'); return; }
+    if (!/^\d{4,10}$/.test(data.id)) { showSettingsToast('warning', 'رقم الطالب يجب أن يكون من 4 إلى 10 أرقام'); return; }
+    if (data.mobile && !/^05\d{8}$/.test(data.mobile)) { showSettingsToast('warning', 'رقم الجوال يجب أن يكون 10 أرقام ويبدأ بـ 05'); return; }
+
+    _savingStudent = true;
+    showSettingsToast('info', 'جاري الإضافة...');
+    google.script.run
+        .withSuccessHandler(res => {
+            _savingStudent = false;
+            if (res?.success) {
+                showSettingsToast('success', 'تمت الإضافة');
+                closeSettingsModal();
+                loadStudentsData(() => renderStudentsTab());
+            } else { showSettingsToast('danger', res?.error || 'خطأ'); }
+        })
+        .withFailureHandler(() => { _savingStudent = false; showSettingsToast('danger', 'خطأ'); })
+        .addStudentManually(data);
+}
+
+var _deletingStudent = false;
+function deleteStudent(id) {
+    if (_deletingStudent) return;
+    var student = settings_studentsData.find(function(s) { return String(s['رقم الطالب']) === String(id); });
+    var name = student ? student['اسم الطالب'] : '';
+    showConfirmModal({
+        icon: 'person_remove',
+        iconColor: 'red',
+        title: 'حذف طالب',
+        message: 'هل أنت متأكد من حذف الطالب <strong>' + escapeHtml(name) + '</strong>؟<br><small class="text-gray-500">لا يمكن التراجع عن هذا الإجراء</small>',
+        confirmText: 'نعم، احذف',
+        confirmColor: 'red',
+        cancelText: 'إلغاء',
+        onConfirm: function() {
+            _deletingStudent = true;
+            showSettingsToast('info', 'جاري الحذف...');
+            google.script.run
+                .withSuccessHandler(res => {
+                    _deletingStudent = false;
+                    if (res?.success) {
+                        showSettingsToast('success', 'تم الحذف بنجاح');
+                        loadStudentsData(() => renderStudentsTab());
+                    } else { showSettingsToast('danger', res?.error || 'خطأ'); }
+                })
+                .withFailureHandler(() => { _deletingStudent = false; showSettingsToast('danger', 'خطأ'); })
+                .deleteStudent(id);
+        }
+    });
+}
+
+var _importingStudents = false;
+function handleStudentsFileUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    if (_importingStudents) return;
+    _importingStudents = true;
+
+    // ★ إظهار نافذة تقدم جميلة
+    showImportProgressModal(file.name);
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const base64 = e.target.result.split(',')[1];
+        updateImportProgress('جاري تحليل الملف وقراءة البيانات...', 30);
+
+        google.script.run
+            .withSuccessHandler(res => {
+                _importingStudents = false;
+                if (res?.success) {
+                    updateImportProgress('تم بنجاح!', 100, true);
+                    setTimeout(() => {
+                        closeImportProgressModal();
+                        // ★ رسالة تفصيلية
+                        if (res.added > 0 || res.updated > 0) {
+                            let msg = '';
+                            if (res.added > 0) msg += '✅ إضافة ' + res.added + ' طالب جديد';
+                            if (res.updated > 0) msg += (msg ? '\n' : '') + '🔄 تحديث ' + res.updated + ' طالب';
+                            showSettingsToast('success', msg || res.message);
+                        } else {
+                            showSettingsToast('info', res.message);
+                        }
+                        loadStudentsData(() => renderStudentsTab());
+                    }, 1200);
+                } else {
+                    closeImportProgressModal();
+                    showSettingsToast('danger', res?.error || 'خطأ في الاستيراد');
+                }
+            })
+            .withFailureHandler(err => {
+                _importingStudents = false;
+                closeImportProgressModal();
+                showSettingsToast('danger', 'خطأ: ' + (err?.message || err));
+            })
+            .importStudentsFromExcel(base64, file.name);
+        
+        // ★ تحديث تدريجي للتقدم أثناء انتظار السيرفر
+        setTimeout(() => updateImportProgress('جاري فرز الطلاب حسب المرحلة...', 50), 2000);
+        setTimeout(() => updateImportProgress('جاري مقارنة البيانات بالموجود...', 65), 4000);
+        setTimeout(() => updateImportProgress('جاري كتابة الطلاب الجدد...', 80), 6000);
+        setTimeout(() => updateImportProgress('جاري الحفظ والتأكد...', 90), 9000);
+    };
+    reader.onerror = function() { _importingStudents = false; closeImportProgressModal(); showSettingsToast('danger', 'خطأ في قراءة الملف'); };
+    reader.readAsDataURL(file);
+    input.value = '';
+}
+
+// ★ نافذة تقدم الاستيراد
+function showImportProgressModal(fileName) {
+    var existing = document.getElementById('import-progress-modal');
+    if (existing) existing.remove();
+    
+    var overlay = document.createElement('div');
+    overlay.id = 'import-progress-modal';
+    overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center p-4';
+    overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    overlay.style.animation = 'fadeIn 0.2s ease';
+    
+    overlay.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 max-w-md w-full p-6 text-center" style="animation: scaleIn 0.2s ease">
+            <div class="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="material-symbols-outlined text-2xl text-indigo-600" id="import-progress-icon" style="animation: spin 1.5s linear infinite">sync</span>
+            </div>
+            <h3 class="text-lg font-bold text-gray-800 mb-1">استيراد الطلاب</h3>
+            <p class="text-sm text-gray-500 mb-4">${escapeHtml(fileName)}</p>
+            <p class="text-sm text-gray-600 mb-3 font-medium" id="import-progress-text">جاري رفع الملف...</p>
+            <div class="w-full bg-gray-200 rounded-full h-3 mb-2 overflow-hidden">
+                <div class="h-full bg-gradient-to-l from-indigo-500 to-blue-500 rounded-full transition-all duration-700 ease-out" id="import-progress-bar" style="width: 10%"></div>
+            </div>
+            <p class="text-xs text-gray-400" id="import-progress-pct">10%</p>
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
+}
+
+function updateImportProgress(text, pct, done) {
+    var modal = document.getElementById('import-progress-modal');
+    if (!modal) return;
+    
+    var bar = document.getElementById('import-progress-bar');
+    var textEl = document.getElementById('import-progress-text');
+    var pctEl = document.getElementById('import-progress-pct');
+    var icon = document.getElementById('import-progress-icon');
+    
+    if (bar) bar.style.width = pct + '%';
+    if (textEl) textEl.textContent = text;
+    if (pctEl) pctEl.textContent = pct + '%';
+    
+    if (done && icon) {
+        icon.textContent = 'check_circle';
+        icon.style.animation = 'none';
+        icon.className = 'material-symbols-outlined text-2xl text-green-600';
+        icon.parentElement.className = 'w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4';
+        if (bar) bar.className = bar.className.replace('from-indigo-500 to-blue-500', 'from-green-500 to-emerald-500');
+    }
+}
+
+function closeImportProgressModal() {
+    var modal = document.getElementById('import-progress-modal');
+    if (modal) modal.remove();
+}
+
+// =================================================================
+// 9. استيراد Excel
+// =================================================================
+function processImportFile(file) {
+    showSettingsToast('info', 'جاري رفع الملف...');
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const base64 = e.target.result.split(',')[1];
+        google.script.run
+            .withSuccessHandler(res => {
+                if (res?.success) {
+                    settings_uploadedFileData = res;
+                    openImportMappingModal(res);
+                } else { showSettingsToast('danger', res?.error || 'خطأ'); }
+            })
+            .withFailureHandler(() => showSettingsToast('danger', 'خطأ في معالجة الملف'))
+            .processUploadedFile(base64, file.name, settings_importType);
+    };
+    reader.onerror = function() { showSettingsToast('danger', 'خطأ في قراءة الملف'); };
+    reader.readAsDataURL(file);
+}
+
+function openImportMappingModal(data) {
+    const headers = data.headers || [];
+    const preview = data.preview || [];
+    const detected = data.columns || {};
+    const isTeachers = settings_importType === 'teachers';
+
+    const fields = isTeachers 
+        ? [{ id: 'civil_id', name: 'السجل المدني', req: true }, { id: 'name', name: 'الاسم', req: true }, { id: 'mobile', name: 'الجوال', req: false }]
+        : [{ id: 'studentId', name: 'رقم الطالب', req: true }, { id: 'name', name: 'الاسم', req: true }, { id: 'grade', name: 'الصف', req: false }, { id: 'class', name: 'الفصل', req: false }, { id: 'mobile', name: 'الجوال', req: false }];
+
+    const container = document.getElementById('settings-modal-container');
+    container.innerHTML = `
+        <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                <div class="px-6 py-4 bg-gradient-to-l from-blue-50 to-indigo-50 border-b flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-gray-800">${isTeachers ? 'استيراد المعلمين' : 'استيراد الطلاب'} - ${data.totalRows} صف</h3>
+                    <button onclick="closeSettingsModal()" class="p-2 hover:bg-gray-100 rounded-lg">
+                        <span class="material-symbols-outlined text-gray-400">close</span>
+                    </button>
+                </div>
+                <div class="p-6 overflow-y-auto flex-1">
+                    <div class="grid grid-cols-3 gap-4 mb-5">
+                        ${fields.map(f => `
+                            <div>
+                                <label class="block text-sm font-bold text-gray-600 mb-1">${f.name} ${f.req ? '*' : ''}</label>
+                                <select id="map_${f.id}" class="w-full h-10 px-3 border rounded-lg">
+                                    <option value="-1">-- اختر --</option>
+                                    ${headers.map((h, i) => `<option value="${i}" ${detected[f.id] === i ? 'selected' : ''}>${escapeHtml(h || 'عمود ' + (i+1))}</option>`).join('')}
+                                </select>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="border rounded-lg overflow-hidden">
+                        <div class="bg-gray-50 px-4 py-2 font-bold text-sm">معاينة</div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-100">
+                                    <tr>${headers.map((h, i) => `<th class="px-3 py-2 text-right whitespace-nowrap">${escapeHtml(h || 'عمود ' + (i+1))}</th>`).join('')}</tr>
+                                </thead>
+                                <tbody class="divide-y">
+                                    ${preview.slice(1, 5).map(row => `<tr>${row.map(cell => `<td class="px-3 py-2 whitespace-nowrap">${escapeHtml(String(cell || '-'))}</td>`).join('')}</tr>`).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="px-6 py-4 bg-gray-50 border-t flex justify-end gap-3">
+                    <button onclick="closeSettingsModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg">إلغاء</button>
+                    <button onclick="executeImport()" class="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700">استيراد</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function executeImport() {
+    const isTeachers = settings_importType === 'teachers';
+    const mapping = isTeachers ? {
+        civil_id: parseInt(document.getElementById('map_civil_id').value),
+        name: parseInt(document.getElementById('map_name').value),
+        mobile: parseInt(document.getElementById('map_mobile').value)
+    } : {
+        studentId: parseInt(document.getElementById('map_studentId').value),
+        name: parseInt(document.getElementById('map_name').value),
+        grade: parseInt(document.getElementById('map_grade').value),
+        class: parseInt(document.getElementById('map_class').value),
+        mobile: parseInt(document.getElementById('map_mobile').value)
+    };
+
+    const idField = isTeachers ? mapping.civil_id : mapping.studentId;
+    if (idField === -1 || mapping.name === -1) {
+        showSettingsToast('warning', 'حدد الأعمدة المطلوبة');
+        return;
+    }
+
+    closeSettingsModal();
+    showImportProgressModal(isTeachers ? 'المعلمين' : 'الطلاب');
+    updateImportProgress('جاري الاستيراد...', 40);
+
+    const func = isTeachers ? 'importTeachersWithMapping' : 'importStudentsWithMapping';
+    google.script.run
+        .withSuccessHandler(res => {
+            if (res?.success) {
+                updateImportProgress('تم بنجاح!', 100, true);
+                setTimeout(() => {
+                    closeImportProgressModal();
+                    showSettingsToast('success', res.message || 'تم الاستيراد');
+                    if (isTeachers) loadTeachersData(() => renderTeachersTab());
+                    else loadStudentsData(() => renderStudentsTab());
+                }, 1200);
+            } else {
+                closeImportProgressModal();
+                showSettingsToast('danger', res?.error || 'خطأ');
+            }
+        })
+        .withFailureHandler(() => {
+            closeImportProgressModal();
+            showSettingsToast('danger', 'خطأ');
+        })
+        [func](settings_uploadedFileData, mapping);
+    
+    setTimeout(() => updateImportProgress('جاري مقارنة البيانات...', 60), 2000);
+    setTimeout(() => updateImportProgress('جاري الكتابة والحفظ...', 80), 5000);
+}
+
+// =================================================================
+// 10. دوال مساعدة
+// =================================================================
+function closeSettingsModal() {
+    document.getElementById('settings-modal-container').innerHTML = '';
+}
+
+// =================================================================
+// رسالة تأكيد جميلة
+// =================================================================
+let confirmCallback = null;
+
+// showConfirmModal - تم توحيدها في الأسفل (تدعم نمطين: كائن أو معاملات منفصلة)
+
+// =================================================================
+// دوال نطاق صلاحيات الهيئة الإدارية
+// =================================================================
+function buildAdminClassesHTML(selectedClasses) {
+    const selected = selectedClasses ? selectedClasses.split(',').map(s => s.trim()) : [];
+    const structure = settings_structureData || {};
+    
+    if (!structure.stages) return '<p class="text-gray-400 text-sm text-center py-2">لم يتم إعداد هيكل المدرسة</p>';
+
+    let html = '<div class="space-y-3">';
+    let hasClasses = false;
+
+    SETTINGS_STAGES.forEach(stage => {
+        const stageData = structure.stages?.[stage.id];
+        if (!stageData) return;
+        
+        const grades = stage.id === 'secondary' ? SETTINGS_SECONDARY_TRACKS[structure.secondary_system || 'فصلي'] : stage.grades;
+        const enabledGrades = grades.filter(g => stageData[g]?.enabled);
+        if (enabledGrades.length === 0) return;
+
+        hasClasses = true;
+        html += `<div class="border-b border-gray-200 pb-2 last:border-0">
+            <div class="font-bold text-indigo-600 mb-2">${stage.name}</div>
+            <div class="grid grid-cols-3 gap-2">`;
+
+        enabledGrades.forEach(gradeName => {
+            const classCount = stageData[gradeName].classCount || 0;
+            SETTINGS_CLASS_LETTERS.slice(0, classCount).forEach(letter => {
+                const classKey = `${gradeName}_${stage.id}_${letter}`;
+                const isSelected = selected.includes(classKey);
+                html += `<label class="flex items-center gap-2 p-1 hover:bg-white rounded cursor-pointer">
+                    <input type="checkbox" class="admin-class-checkbox rounded text-indigo-600" value="${classKey}" ${isSelected ? 'checked' : ''}>
+                    <span class="text-sm">${gradeName} (${letter})</span>
+                </label>`;
+            });
+        });
+
+        html += '</div></div>';
+    });
+
+    if (!hasClasses) return '<p class="text-gray-400 text-sm text-center py-2">لا توجد فصول مفعلة</p>';
+    return html + '</div>';
+}
+
+function toggleAdminSelectAllClasses() {
+    const selectAll = document.getElementById('admin_select_all_classes').checked;
+    document.querySelectorAll('.admin-class-checkbox').forEach(cb => {
+        cb.checked = selectAll;
+    });
+}
+
+// =================================================================
+// 11. تبويب: روابط النماذج
+// ★★★ الإصلاح الرئيسي: يستخدم البيانات المحملة مسبقاً بدل استدعاء سيرفر جديد ★★★
+// =================================================================
+
+function renderLinksTab() {
+    var container = document.getElementById('settings-content');
+    if (!container) return;
+    
+    // عرض مؤشر التحميل
+    container.innerHTML = '<div class="flex justify-center items-center py-16"><div class="text-center"><div class="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div><p class="text-gray-500 mt-4">جاري تحميل بيانات الروابط...</p></div></div>';
+    
+    // ★ استدعاء getLinksTabData() مباشرة من السيرفر
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result && result.success) {
+                linksData.teachers = result.teachers || [];
+                linksData.admins = result.admins || [];
+                linksData.linkedPersons = result.linkedPersons || [];
+                linksData.availableStages = result.availableStages || [];
+                renderLinksContent();
+            } else {
+                // في حالة فشل الدالة الجديدة، نحاول الطريقة البديلة
+                renderLinksTabFallback();
+            }
+        })
+        .withFailureHandler(function(error) {
+            renderLinksTabFallback();
+        })
+        .getLinksTabData();
+}
+
+// ★ طريقة بديلة: استخدام البيانات المحملة مسبقاً
+function renderLinksTabFallback() {
+    linksData.teachers = (settings_teachersData || []).map(function(t, i) {
+        return {
+            id: t.id || String(i),
+            name: t.name || '',
+            phone: t.mobile || '',
+            subject: Array.isArray(t.subjects) ? t.subjects.join('، ') : (t.subjects || ''),
+            classes: Array.isArray(t.assigned_classes) ? t.assigned_classes.join(',') : (t.assigned_classes || '')
+        };
+    });
+    
+    linksData.admins = (settings_usersData || []).map(function(u, i) {
+        return {
+            id: u.id || String(i),
+            name: u.name || '',
+            phone: u.mobile || '',
+            role: u.role || '',
+            scope: u.scope_value || '',
+            classes: u.scope_value || ''
+        };
+    });
+    
+    linksData.linkedPersons = [];
+    renderLinksContent();
+}
+
+// ==================== عرض محتوى الروابط ====================
+function renderLinksContent() {
+    var container = document.getElementById('settings-content');
+    if (!container) return;
+    
+    var html = `
+        <div class="space-y-6">
+            <!-- العنوان والشرح -->
+            <div class="flex items-center gap-2 pb-4 border-b border-gray-100">
+                <span class="material-symbols-outlined text-indigo-500">link</span>
+                <h3 class="text-lg font-bold text-gray-800">إدارة روابط النماذج</h3>
+            </div>
+            
+            <!-- شرح -->
+            <div class="bg-blue-50 rounded-xl p-4 border border-blue-200">
+                <div class="flex items-start gap-3">
+                    <span class="material-symbols-outlined text-blue-600 mt-0.5">info</span>
+                    <div>
+                        <p class="font-bold text-blue-800 mb-1">ما هي روابط النماذج؟</p>
+                        <p class="text-sm text-blue-700">روابط فريدة لكل شخص تمكنه من إدخال البيانات عبر الجوال. كل رابط جديد يلغي القديم تلقائياً.</p>
+                        <div class="mt-2 text-xs text-blue-600 space-y-1">
+                            <div><span class="font-bold">• المعلمين:</span> غياب، مخالفات، ملاحظات تربوية، سلوك متمايز</div>
+                            <div><span class="font-bold">• الإداريين (وكيل، موجه، مدير، إداري):</span> تأخر، استئذان</div>
+                            <div><span class="font-bold">• الحارس:</span> عرض المستأذنين</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- شريط البحث والفلتر -->
+            <div class="flex items-center gap-3">
+                <div class="flex-1 relative">
+                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 material-symbols-outlined">search</span>
+                    <input type="text" id="links-search" oninput="filterLinksList()" placeholder="بحث..." class="w-full h-10 pr-10 pl-4 border border-gray-300 rounded-lg">
+                </div>
+                <select id="links-filter" onchange="filterLinksList()" class="h-10 px-3 border border-gray-300 rounded-lg bg-white">
+                    <option value="all">الكل</option>
+                    <option value="teachers">المعلمين</option>
+                    <option value="admins">الإداريين</option>
+                    <option value="linked">المربوطين</option>
+                    <option value="not-linked">غير المربوطين</option>
+                </select>
+            </div>
+            
+            <!-- قسم المعلمين -->
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div class="bg-gradient-to-l from-indigo-50 to-purple-50 px-5 py-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between flex-wrap gap-3">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-indigo-600">school</span>
+                            <h4 class="font-bold text-gray-800">روابط المعلمين</h4>
+                            <span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full text-xs font-bold">${linksData.teachers.length}</span>
+                            <span class="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-bold">${countLinked('teacher')} مفعّل</span>
+                        </div>
+                        <button onclick="createAllTeachersLinks()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center gap-2">
+                            <span class="material-symbols-outlined">bolt</span>
+                            إنشاء للجميع
+                        </button>
+                    </div>
+                </div>
+                <div id="teachers-list" class="p-4 space-y-3 max-h-80 overflow-y-auto">
+                    ${renderPersonsList(linksData.teachers, 'teacher')}
+                </div>
+            </div>
+            
+            <!-- قسم الهيئة الإدارية -->
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div class="bg-gradient-to-l from-amber-50 to-orange-50 px-5 py-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between flex-wrap gap-3">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-amber-600">admin_panel_settings</span>
+                            <h4 class="font-bold text-gray-800">روابط الهيئة الإدارية</h4>
+                            <span class="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-xs font-bold">${linksData.admins.length}</span>
+                            <span class="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-bold">${countLinked('admin')} مفعّل</span>
+                        </div>
+                        <button onclick="createAllUsersLinks()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center gap-2">
+                            <span class="material-symbols-outlined">bolt</span>
+                            إنشاء للجميع
+                        </button>
+                    </div>
+                </div>
+                <div id="admins-list" class="p-4 space-y-3 max-h-80 overflow-y-auto">
+                    ${renderPersonsList(linksData.admins, 'admin')}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+// ==================== عد المربوطين ====================
+function countLinked(type) {
+    return linksData.linkedPersons.filter(function(linked) {
+        return linked.type === type;
+    }).length;
+}
+
+// ==================== عرض قائمة الأشخاص ====================
+function renderPersonsList(persons, type) {
+    if (!persons || persons.length === 0) {
+        return '<div class="text-center py-8 text-gray-500">لا توجد بيانات</div>';
+    }
+
+    var unlinkedCount = persons.filter(function(p) { return !isPersonLinked(p, type); }).length;
+    var html = '';
+
+    // ★ شريط التحديد الجماعي (يظهر فقط إذا يوجد غير مربوطين)
+    if (unlinkedCount > 1) {
+        html += '<div class="flex items-center justify-between mb-3 px-1">' +
+            '<label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="rounded text-indigo-600" onchange="toggleSelectAll(this, \'' + type + '\')"><span class="text-sm text-gray-500">تحديد الكل غير المربوطين</span></label>' +
+            '<div id="' + type + '-selection-bar" class="hidden flex items-center gap-2">' +
+                '<span id="' + type + '-selected-count" class="text-sm font-bold text-indigo-700"></span>' +
+                '<button onclick="createSelectedLinks(\'' + type + '\')" class="px-4 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-bold flex items-center gap-1"><span class="material-symbols-outlined text-base">add_link</span>إنشاء للمحددين</button>' +
+            '</div>' +
+        '</div>';
+    }
+
+    for (var i = 0; i < persons.length; i++) {
+        var person = persons[i];
+        var stages = getPersonStages(person);
+        var stagesText = stages.join(' - ');
+        var isLinked = isPersonLinked(person, type);
+
+        var icon = type === 'teacher' ? 'school' : 'person';
+        var bgColor = type === 'teacher' ? 'bg-indigo-100' : 'bg-amber-100';
+        var iconColor = type === 'teacher' ? 'text-indigo-600' : 'text-amber-600';
+
+        if (type === 'admin') {
+            var role = person.role || '';
+            if (role.indexOf('حارس') !== -1) {
+                icon = 'security'; bgColor = 'bg-emerald-100'; iconColor = 'text-emerald-600';
+            } else if (role.indexOf('موجه') !== -1) {
+                icon = 'psychology'; bgColor = 'bg-blue-100'; iconColor = 'text-blue-600';
+            } else if (role.indexOf('مدير') !== -1) {
+                icon = 'admin_panel_settings'; bgColor = 'bg-purple-100'; iconColor = 'text-purple-600';
+            }
+        }
+
+        html += `
+            <div class="person-card ${isLinked ? 'border-r-4 border-green-500' : ''} flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200 hover:shadow-md transition-all" data-type="${type}" data-index="${i}">
+                <div class="flex items-center gap-3">
+                    ${!isLinked ? '<input type="checkbox" class="link-select-cb rounded text-indigo-600 mt-1" data-type="' + type + '" data-index="' + i + '" onchange="updateSelectionBar(\'' + type + '\')">' : ''}
+                    <div class="w-12 h-12 ${bgColor} rounded-full flex items-center justify-center">
+                        <span class="material-symbols-outlined ${iconColor}">${icon}</span>
+                    </div>
+                    <div>
+                        <p class="font-bold text-gray-800">${escapeHtml(person.name || 'بدون اسم')}</p>
+                        <p class="text-sm text-gray-500">
+                            <span class="material-symbols-outlined text-xs align-middle">phone</span>
+                            ${escapeHtml(person.phone || 'غير محدد')}
+                        </p>
+                        ${stagesText ? '<p class="text-xs text-blue-500"><span class="material-symbols-outlined text-xs align-middle">school</span> ' + escapeHtml(stagesText) + '</p>' : ''}
+                        ${isLinked ? '<p class="text-xs text-green-600 font-bold mt-1"><span class="material-symbols-outlined text-xs align-middle">check_circle</span> مربوط</p>' : ''}
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    ${!isLinked ?
+                        '<button onclick="createLinkForPerson(\'' + type + '\', ' + i + ')" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium flex items-center gap-2"><span class="material-symbols-outlined text-lg">add_link</span><span class="hidden sm:inline">إنشاء</span></button>'
+                    :
+                        '<button onclick="copyPersonLink(\'' + type + '\', ' + i + ')" class="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm font-medium flex items-center gap-1" title="نسخ الرابط"><span class="material-symbols-outlined text-lg">content_copy</span></button>' +
+                        '<button onclick="removeLinkForPerson(\'' + type + '\', ' + i + ')" class="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm font-medium flex items-center gap-1"><span class="material-symbols-outlined text-lg">link_off</span><span class="hidden sm:inline">إلغاء</span></button>'
+                    }
+                </div>
+            </div>
+        `;
+    }
+
+    return html;
+}
+
+// ==================== تحديد الكل / إلغاء التحديد ====================
+function toggleSelectAll(masterCb, type) {
+    var checkboxes = document.querySelectorAll('.link-select-cb[data-type="' + type + '"]');
+    checkboxes.forEach(function(cb) { cb.checked = masterCb.checked; });
+    updateSelectionBar(type);
+}
+
+// ==================== تحديث شريط التحديد ====================
+function updateSelectionBar(type) {
+    var checked = document.querySelectorAll('.link-select-cb[data-type="' + type + '"]:checked');
+    var bar = document.getElementById(type + '-selection-bar');
+    var countEl = document.getElementById(type + '-selected-count');
+    if (bar && countEl) {
+        if (checked.length > 0) {
+            bar.classList.remove('hidden');
+            bar.classList.add('flex');
+            countEl.textContent = checked.length + ' محدد';
+        } else {
+            bar.classList.add('hidden');
+            bar.classList.remove('flex');
+        }
+    }
+}
+
+// ==================== إنشاء روابط للمحددين ====================
+function createSelectedLinks(type) {
+    var checked = document.querySelectorAll('.link-select-cb[data-type="' + type + '"]:checked');
+    if (checked.length === 0) { showSettingsToast('warning', 'لم يتم تحديد أحد'); return; }
+
+    var indices = [];
+    checked.forEach(function(cb) { indices.push(parseInt(cb.dataset.index)); });
+
+    var persons = type === 'teacher' ? linksData.teachers : linksData.admins;
+    var names = indices.map(function(i) { return persons[i] ? persons[i].name : ''; }).filter(Boolean);
+
+    showConfirmModal({
+        icon: 'group_add',
+        iconColor: 'green',
+        title: 'إنشاء روابط للمحددين',
+        message: 'سيتم إنشاء روابط لـ <strong>' + indices.length + '</strong> شخص',
+        confirmText: 'إنشاء',
+        confirmColor: 'green',
+        onConfirm: function() {
+            doCreateSelectedLinks(type, indices);
+        }
+    });
+}
+
+// ==================== تنفيذ إنشاء روابط المحددين (واحد تلو الآخر) ====================
+function doCreateSelectedLinks(type, indices) {
+    var persons = type === 'teacher' ? linksData.teachers : linksData.admins;
+    var total = indices.length;
+    var done = 0;
+    var failed = 0;
+
+    showImportProgressModal('إنشاء ' + total + ' رابط');
+    updateImportProgress('جاري إنشاء الروابط...', 5);
+
+    function processNext() {
+        if (indices.length === 0) {
+            updateImportProgress('تم بنجاح!', 100, true);
+            setTimeout(function() {
+                closeImportProgressModal();
+                var msg = 'تم إنشاء ' + done + ' رابط';
+                if (failed > 0) msg += ' (فشل ' + failed + ')';
+                showSettingsToast(failed > 0 ? 'warning' : 'success', msg);
+                switchSettingsTab('links');
+            }, 1200);
+            return;
+        }
+
+        var idx = indices.shift();
+        var person = persons[idx];
+        if (!person || !person.phone) {
+            failed++;
+            done++;
+            updateImportProgress('جاري... ' + done + '/' + total, Math.round((done / total) * 95));
+            processNext();
+            return;
+        }
+
+        var stages = getPersonStages(person);
+        var stage = stages.length > 0 ? stages[0] : ((linksData.availableStages && linksData.availableStages[0]) || '');
+
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                    person.hasToken = true;
+                    linksData.linkedPersons.push({ identifier: person.phone, type: type });
+                } else { failed++; }
+                done++;
+                updateImportProgress('جاري... ' + done + '/' + total, Math.round((done / total) * 95));
+                processNext();
+            })
+            .withFailureHandler(function() {
+                failed++;
+                done++;
+                updateImportProgress('جاري... ' + done + '/' + total, Math.round((done / total) * 95));
+                processNext();
+            })
+            .sendLinkToPersonWithStage({
+                name: person.name,
+                phone: person.phone,
+                type: type,
+                stage: stage,
+                classes: person.classes || ''
+            });
+    }
+
+    processNext();
+}
+
+// ==================== استخراج مراحل الشخص ====================
+function getPersonStages(person) {
+    var stages = [];
+    var classes = person.classes || person.assigned_classes || '';
+    
+    if (typeof classes === 'string') {
+        classes = classes.split(',').map(function(c) { return c.trim(); });
+    }
+    
+    if (Array.isArray(classes)) {
+        classes.forEach(function(cls) {
+            var stage = getStageFromClass(cls);
+            if (stage && stages.indexOf(stage) === -1) {
+                stages.push(stage);
+            }
+        });
+    }
+    
+    if (person.scope) {
+        var scope = person.scope;
+        var validStages = (linksData && linksData.availableStages) ? linksData.availableStages : [];
+        if (validStages.indexOf(scope) !== -1 && stages.indexOf(scope) === -1) {
+            stages.push(scope);
+        }
+    }
+    
+    return stages;
+}
+
+// ==================== تحديد المرحلة من الفصل ====================
+function getStageFromClass(className) {
+    if (!className) return null;
+    className = String(className).trim();
+    if (className.match(/ابتدائي|primary/i)) return 'ابتدائي';
+    if (className.match(/متوسط|intermediate/i)) return 'متوسط';
+    if (className.match(/ثانوي|secondary/i)) return 'ثانوي';
+    return null;
+}
+
+// ==================== التحقق من الربط ====================
+function isPersonLinked(person, type) {
+    // ★ أولاً: التحقق من hasToken مباشرة (الأدق)
+    if (person.hasToken === false) return false;
+    
+    var identifier = person.phone || person.id;
+    return linksData.linkedPersons.some(function(linked) {
+        return linked.identifier === identifier && linked.type === type;
+    });
+}
+
+// ==================== إنشاء رابط لشخص ====================
+function createLinkForPerson(type, index) {
+    var person = type === 'teacher' ? linksData.teachers[index] : linksData.admins[index];
+    var stages = getPersonStages(person);
+    
+    if (stages.length === 0) {
+        // ★ بدلاً من المنع، نستخدم المرحلة الافتراضية من القائمة المنسدلة الحالية
+        var currentStageEl = document.querySelector('.stage-selector, #stage-select');
+        var defaultStage = (linksData && linksData.availableStages && linksData.availableStages[0]) || '';
+        
+        showStageInputModal(person, type, index, defaultStage);
+        return;
+    }
+    
+    if (stages.length === 1) {
+        sendLinkToPersonDirect(person, type, stages[0]);
+    } else {
+        showStageSelectionModal(person, type, stages, index);
+    }
+}
+
+// ==================== نافذة اختيار المرحلة (إذا مشترك) ====================
+function showStageSelectionModal(person, type, stages, index) {
+    var personName = escapeHtml(person.name);
+    
+    var stagesButtons = stages.map(function(stage) {
+        var safeStage = escapeHtml(stage);
+        var stageColor = getStageColor(stage);
+        return '<button class="px-6 py-4 rounded-xl text-white font-bold hover:opacity-90 transition-all flex flex-col items-center gap-2" style="background-color: ' + stageColor + ';" onclick="selectStageAndSend(\'' + type + '\', ' + index + ', \'' + safeStage + '\')">' +
+            '<span class="material-symbols-outlined text-2xl">school</span>' + safeStage + '</button>';
+    }).join('');
+
+    var container = document.getElementById('settings-modal-container');
+    container.innerHTML = `
+        <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-md overflow-hidden">
+                <div class="px-6 py-4 bg-gradient-to-l from-amber-50 to-orange-50 border-b flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-amber-600">warning</span>
+                        معلم/إداري مشترك
+                    </h3>
+                    <button onclick="closeSettingsModal()" class="p-2 hover:bg-gray-100 rounded-lg">
+                        <span class="material-symbols-outlined text-gray-400">close</span>
+                    </button>
+                </div>
+                <div class="p-6">
+                    <p class="text-center text-gray-700 mb-4"><strong>${personName}</strong> مشترك في عدة مراحل.</p>
+                    <p class="text-center text-sm text-gray-500 mb-5">اختر المرحلة التي تريد إرسال الرابط منها:</p>
+                    <div class="flex flex-col gap-3">${stagesButtons}</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ==================== نافذة اختيار المرحلة (إذا لا توجد فصول مسندة) ====================
+function showStageInputModal(person, type, index, defaultStage) {
+    var personName = escapeHtml(person.name);
+    var allStages = (linksData && linksData.availableStages) ? linksData.availableStages : [];
+    
+    var stagesButtons = allStages.map(function(stage) {
+        var safeStage = escapeHtml(stage);
+        var stageColor = getStageColor(stage);
+        return '<button class="px-6 py-4 rounded-xl text-white font-bold hover:opacity-90 transition-all flex flex-col items-center gap-2" style="background-color: ' + stageColor + ';" onclick="selectStageAndSend(\'' + type + '\', ' + index + ', \'' + safeStage + '\')">' +
+            '<span class="material-symbols-outlined text-2xl">school</span>' + safeStage + '</button>';
+    }).join('');
+    
+    var container = document.getElementById('settings-modal-container');
+    container.innerHTML = `
+        <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-md overflow-hidden">
+                <div class="px-6 py-4 bg-gradient-to-l from-blue-50 to-indigo-50 border-b flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-blue-600">school</span>
+                        اختر المرحلة
+                    </h3>
+                    <button onclick="closeSettingsModal()" class="p-2 hover:bg-gray-100 rounded-lg">
+                        <span class="material-symbols-outlined text-gray-400">close</span>
+                    </button>
+                </div>
+                <div class="p-6">
+                    <p class="text-center text-gray-700 mb-4">لم يتم تحديد فصول لـ <strong>${personName}</strong></p>
+                    <p class="text-center text-sm text-gray-500 mb-5">اختر المرحلة لإرسال الرابط:</p>
+                    <div class="flex flex-col gap-3">${stagesButtons}</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ==================== اختيار المرحلة والإرسال ====================
+function selectStageAndSend(type, index, stage) {
+    closeSettingsModal();
+    var person = type === 'teacher' ? linksData.teachers[index] : linksData.admins[index];
+    sendLinkToPersonDirect(person, type, stage);
+}
+
+// ==================== إرسال الرابط ====================
+var _sendingLink = false;
+function sendLinkToPersonDirect(person, type, stage) {
+    if (_sendingLink) return;
+    var personName = person.name;
+    var personPhone = person.phone;
+
+    if (!personPhone) {
+        showSettingsToast('danger', 'رقم الجوال غير موجود لـ ' + personName);
+        return;
+    }
+
+    _sendingLink = true;
+    showSettingsToast('info', 'جاري إرسال الرابط إلى ' + personName + '...');
+    
+    // ★ نحاول أولاً الدالة الجديدة، وإذا فشلت نستخدم الدالة القديمة
+    try {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                _sendingLink = false;
+                if (result && result.success) {
+                    if (result.whatsappSent) {
+                        showSettingsToast('success', 'تم إرسال الرابط إلى ' + personName + ' عبر واتساب ✅');
+                    } else {
+                        showSettingsToast('warning', result.message || 'تم إنشاء الرابط بدون إرسال واتساب');
+                    }
+                    // ★ عرض الرابط للنسخ دائماً (حتى لو نجح الواتساب — للحاجة لاحقاً)
+                    if (result.link) {
+                        showLinkCopyModal(personName, result.link);
+                    }
+                    // تحديث حالة الربط محلياً
+                    person.hasToken = true;
+                    linksData.linkedPersons.push({ identifier: personPhone, type: type });
+                    renderLinksContent();
+                } else {
+                    showSettingsToast('danger', (result && result.message) || 'فشل الإرسال');
+                }
+            })
+            .withFailureHandler(function(error) {
+                _sendingLink = false;
+                // ★ fallback: استخدام الدوال القديمة
+                fallbackCreateLink(person, type);
+            })
+            .sendLinkToPersonWithStage({
+                name: personName,
+                phone: personPhone,
+                type: type,
+                stage: stage,
+                classes: person.classes || ''
+            });
+    } catch(e) {
+        fallbackCreateLink(person, type);
+    }
+}
+
+// ★ دالة بديلة تستخدم createTeacherLink أو createUserLink الموجودة أصلاً
+function fallbackCreateLink(person, type) {
+    // ★ الإصلاح: createTeacherLink/createUserLink تبحث بالمعرّف (ID) وليس الجوال
+    var personId = person.id;
+    var funcName = type === 'teacher' ? 'createTeacherLink' : 'createUserLink';
+    
+    try {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                    showSettingsToast('warning', 'تم إنشاء الرابط (بدون واتساب) — انسخه وأرسله يدوياً');
+                    // ★ إصلاح: عرض الرابط للنسخ
+                    if (result.link) {
+                        showLinkCopyModal(person.name, result.link);
+                    }
+                    person.hasToken = true;
+                    linksData.linkedPersons.push({ identifier: person.phone, type: type });
+                    renderLinksContent();
+                } else {
+                    showSettingsToast('danger', (result && result.message) || 'فشل إنشاء الرابط');
+                }
+            })
+            .withFailureHandler(function(err) {
+                showSettingsToast('danger', 'خطأ: ' + err.message);
+            })
+            [funcName](personId);
+    } catch(e) {
+        showSettingsToast('danger', 'الدالة غير متوفرة على السيرفر');
+    }
+}
+
+// ==================== نسخ رابط شخص مربوط ====================
+function copyPersonLink(type, index) {
+    var person = type === 'teacher' ? linksData.teachers[index] : linksData.admins[index];
+    var link = person.link || '';
+    
+    if (!link) {
+        showSettingsToast('warning', 'الرابط غير متوفر — جرب إنشاء رابط جديد');
+        return;
+    }
+    
+    showLinkCopyModal(person.name, link);
+}
+
+// ==================== إلغاء ربط شخص ====================
+function removeLinkForPerson(type, index) {
+    var person = type === 'teacher' ? linksData.teachers[index] : linksData.admins[index];
+    var personName = person.name;
+    
+    // ★ نافذة تأكيد جميلة بدل confirm()
+    showConfirmModal({
+        icon: 'link_off',
+        iconColor: 'red',
+        title: 'إلغاء الربط',
+        message: 'هل تريد إلغاء ربط <strong>' + escapeHtml(personName) + '</strong>؟<br><small class="text-gray-500">سيتم حذف الرابط ولن يتمكن من الوصول للنموذج</small>',
+        confirmText: 'نعم، إلغاء الربط',
+        confirmColor: 'red',
+        cancelText: 'تراجع',
+        onConfirm: function() {
+            doRemoveLink(type, index, personName, person);
+        }
+    });
+}
+
+var _removingLink = false;
+function doRemoveLink(type, index, personName, person) {
+    if (_removingLink) return;
+    _removingLink = true;
+    showSettingsToast('info', 'جاري إلغاء الربط...');
+
+    google.script.run
+        .withSuccessHandler(function(result) {
+            _removingLink = false;
+            if (result && result.success) {
+                showSettingsToast('success', 'تم إلغاء ربط ' + personName);
+                // إزالة محلياً وتحديث الواجهة
+                var identifier = person.phone || person.id;
+                linksData.linkedPersons = linksData.linkedPersons.filter(function(linked) {
+                    return !(linked.identifier === identifier && linked.type === type);
+                });
+                // ★ تحديث hasToken و hasLink محلياً
+                if (type === 'teacher' && linksData.teachers[index]) {
+                    linksData.teachers[index].hasToken = false;
+                    linksData.teachers[index].hasLink = false;
+                } else if (type === 'admin' && linksData.admins[index]) {
+                    linksData.admins[index].hasToken = false;
+                    linksData.admins[index].hasLink = false;
+                }
+                renderLinksContent();
+            } else {
+                showSettingsToast('danger', (result && result.message) || 'فشل إلغاء الربط');
+            }
+        })
+        .withFailureHandler(function(error) {
+            _removingLink = false;
+            showSettingsToast('danger', 'خطأ في الاتصال - حاول مرة أخرى');
+        })
+        .removeLinkForPerson({
+            phone: person.phone,
+            name: personName,
+            type: type
+        });
+}
+
+// ==================== نافذة تأكيد جميلة ====================
+function showConfirmModal(titleOrOptions, message, onConfirmFn) {
+    // دعم نمطين: showConfirmModal({...}) أو showConfirmModal(title, message, callback)
+    var options;
+    if (typeof titleOrOptions === 'object' && titleOrOptions !== null) {
+        options = titleOrOptions;
+    } else {
+        options = {
+            title: titleOrOptions,
+            message: message,
+            onConfirm: onConfirmFn,
+            icon: 'delete_forever',
+            iconColor: 'red',
+            confirmText: 'نعم، احذف'
+        };
+    }
+    
+    // إزالة أي نافذة سابقة
+    var existing = document.getElementById('custom-confirm-modal');
+    if (existing) existing.remove();
+    
+    var colorMap = {
+        red: { bg: 'bg-red-100', text: 'text-red-600', btn: 'bg-red-600 hover:bg-red-700' },
+        green: { bg: 'bg-green-100', text: 'text-green-600', btn: 'bg-green-600 hover:bg-green-700' },
+        blue: { bg: 'bg-blue-100', text: 'text-blue-600', btn: 'bg-blue-600 hover:bg-blue-700' },
+        amber: { bg: 'bg-amber-100', text: 'text-amber-600', btn: 'bg-amber-600 hover:bg-amber-700' }
+    };
+    var colors = colorMap[options.iconColor || 'blue'] || colorMap.blue;
+    
+    var overlay = document.createElement('div');
+    overlay.id = 'custom-confirm-modal';
+    overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center p-4';
+    overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    overlay.style.animation = 'fadeIn 0.2s ease';
+    
+    overlay.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 max-w-sm w-full p-6 text-center" style="animation: scaleIn 0.2s ease">
+            <div class="w-16 h-16 ${colors.bg} rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="material-symbols-outlined text-3xl ${colors.text}">${options.icon || 'help'}</span>
+            </div>
+            <h3 class="text-lg font-bold text-gray-800 mb-2">${options.title || 'تأكيد'}</h3>
+            <p class="text-gray-600 text-sm mb-5">${options.message || 'هل أنت متأكد؟'}</p>
+            <div class="flex gap-3 justify-center">
+                <button id="confirm-modal-cancel" class="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition">
+                    ${options.cancelText || 'إلغاء'}
+                </button>
+                <button id="confirm-modal-ok" class="px-6 py-2.5 ${colors.btn} text-white rounded-xl font-bold transition">
+                    ${options.confirmText || 'تأكيد'}
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    
+    // أحداث الأزرار
+    document.getElementById('confirm-modal-cancel').onclick = function() {
+        overlay.remove();
+    };
+    document.getElementById('confirm-modal-ok').onclick = function() {
+        overlay.remove();
+        if (options.onConfirm) options.onConfirm();
+    };
+    // إغلاق بالنقر خارج النافذة
+    overlay.onclick = function(e) {
+        if (e.target === overlay) overlay.remove();
+    };
+}
+
+// ==================== إنشاء روابط لجميع المعلمين ====================
+function createAllTeachersLinks() {
+    var count = linksData.teachers.length;
+    if (count === 0) { showSettingsToast('warning', 'لا يوجد معلمين'); return; }
+    
+    showConfirmModal({
+        icon: 'group_add',
+        iconColor: 'green',
+        title: 'إنشاء روابط للجميع',
+        message: 'سيتم إنشاء روابط جديدة لـ <strong>' + count + ' معلم</strong>',
+        confirmText: 'إنشاء الروابط',
+        confirmColor: 'green',
+        onConfirm: function() {
+            doCreateAllTeachersLinks(count);
+        }
+    });
+}
+
+var _creatingAllLinks = false;
+function doCreateAllTeachersLinks(count) {
+    if (_creatingAllLinks) return;
+    _creatingAllLinks = true;
+    showSettingsToast('info', 'جاري إنشاء الروابط...');
+
+    google.script.run
+        .withSuccessHandler(function(result) {
+            _creatingAllLinks = false;
+            if (result && result.success) {
+                showSettingsToast('success', 'تم إنشاء ' + (result.created || count) + ' رابط بنجاح!');
+                switchSettingsTab('links');
+            } else {
+                showSettingsToast('danger', (result && result.error) || 'فشل إنشاء الروابط');
+            }
+        })
+        .withFailureHandler(function(error) {
+            _creatingAllLinks = false;
+            showSettingsToast('danger', 'خطأ: ' + error.message);
+        })
+        .createAllTeachersLinks();
+}
+
+// ==================== إنشاء روابط لجميع المستخدمين ====================
+function createAllUsersLinks() {
+    var count = linksData.admins.length;
+    if (count === 0) { showSettingsToast('warning', 'لا يوجد مستخدمين'); return; }
+    
+    showConfirmModal({
+        icon: 'group_add',
+        iconColor: 'green',
+        title: 'إنشاء روابط للجميع',
+        message: 'سيتم إنشاء روابط جديدة لـ <strong>' + count + ' مستخدم</strong>',
+        confirmText: 'إنشاء الروابط',
+        confirmColor: 'green',
+        onConfirm: function() {
+            doCreateAllUsersLinks(count);
+        }
+    });
+}
+
+function doCreateAllUsersLinks(count) {
+    if (_creatingAllLinks) return;
+    _creatingAllLinks = true;
+    showSettingsToast('info', 'جاري إنشاء الروابط...');
+
+    google.script.run
+        .withSuccessHandler(function(result) {
+            _creatingAllLinks = false;
+            if (result && result.success) {
+                showSettingsToast('success', 'تم إنشاء ' + (result.created || count) + ' رابط بنجاح!');
+                switchSettingsTab('links');
+            } else {
+                showSettingsToast('danger', (result && result.error) || 'فشل إنشاء الروابط');
+            }
+        })
+        .withFailureHandler(function(error) {
+            _creatingAllLinks = false;
+            showSettingsToast('danger', 'خطأ: ' + error.message);
+        })
+        .createAllUsersLinks();
+}
+
+// ==================== فلترة القائمة ====================
+function filterLinksList() {
+    var searchTerm = (document.getElementById('links-search')?.value || '').toLowerCase();
+    var filterType = document.getElementById('links-filter')?.value || 'all';
+    
+    var cards = document.querySelectorAll('.person-card');
+    
+    cards.forEach(function(card) {
+        var nameElement = card.querySelector('.font-bold');
+        var name = nameElement ? nameElement.textContent.toLowerCase() : '';
+        var type = card.dataset.type;
+        var isLinked = card.classList.contains('border-green-500') || card.querySelector('.text-green-600') !== null;
+        
+        var matchesSearch = name.includes(searchTerm);
+        var matchesFilter = true;
+        
+        switch (filterType) {
+            case 'teachers': matchesFilter = type === 'teacher'; break;
+            case 'admins': matchesFilter = type === 'admin'; break;
+            case 'linked': matchesFilter = isLinked; break;
+            case 'not-linked': matchesFilter = !isLinked; break;
+        }
+        
+        card.style.display = (matchesSearch && matchesFilter) ? '' : 'none';
+    });
+}
+
+// ==================== نافذة نسخ الرابط (إذا الواتساب غير متصل) ====================
+function showLinkCopyModal(personName, link) {
+    var container = document.getElementById('settings-modal-container');
+    container.innerHTML = `
+        <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-lg overflow-hidden">
+                <div class="px-6 py-4 bg-gradient-to-l from-green-50 to-emerald-50 border-b flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-green-600">link</span>
+                        تم إنشاء الرابط بنجاح
+                    </h3>
+                    <button onclick="closeSettingsModal()" class="p-2 hover:bg-gray-100 rounded-lg">
+                        <span class="material-symbols-outlined text-gray-400">close</span>
+                    </button>
+                </div>
+                <div class="p-6">
+                    <p class="text-gray-700 mb-4">تم إنشاء رابط لـ <strong>${escapeHtml(personName)}</strong></p>
+                    <p class="text-sm text-amber-600 mb-4">⚠️ لا يوجد واتساب متصل لإرسال الرابط تلقائياً. يمكنك نسخ الرابط وإرساله يدوياً:</p>
+                    <div class="bg-gray-50 rounded-xl p-3 border border-gray-200 mb-4 flex items-center gap-2">
+                        <input type="text" id="link-copy-input" value="${escapeHtml(link)}" readonly class="flex-1 bg-transparent text-sm text-gray-700 outline-none" dir="ltr">
+                        <button onclick="copyLinkToClipboard()" class="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">content_copy</span>
+                            نسخ
+                        </button>
+                    </div>
+                    <button onclick="closeSettingsModal()" class="w-full py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200">
+                        إغلاق
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function copyLinkToClipboard() {
+    var input = document.getElementById('link-copy-input');
+    if (!input) return;
+    var text = input.value;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+            showSettingsToast('success', 'تم نسخ الرابط ✅');
+        }).catch(function() {
+            input.select(); document.execCommand('copy');
+            showSettingsToast('success', 'تم نسخ الرابط ✅');
+        });
+    } else {
+        input.select(); document.execCommand('copy');
+        showSettingsToast('success', 'تم نسخ الرابط ✅');
+    }
+}
+
+// ==================== لون المرحلة ====================
+function getStageColor(stage) {
+    switch (stage) {
+        case 'ابتدائي': return '#27ae60';
+        case 'متوسط': return '#3498db';
+        case 'ثانوي': return '#9b59b6';
+        default: return '#7f8c8d';
+    }
+}
+</script>

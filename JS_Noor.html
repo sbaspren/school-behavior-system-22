@@ -1,0 +1,283 @@
+<script>
+// ═══════════════════════════════════════════════════════════════
+// واجهة اختبار v7 — إدخال يدوي لطالب غائب
+// ═══════════════════════════════════════════════════════════════
+
+var _inbox = null, _outbox = null;
+var _noorConnected = false, _noorUser = '', _noorRole = '', _noorStages = [];
+var _manualStudents = [];
+
+var GRADE_MAPS = {
+  'ابتدائي': { 'الأول': '1,1', 'الثاني': '2,1', 'الثالث': '3,1', 'الرابع': '4,1', 'الخامس': '5,1', 'السادس': '6,1' },
+  'متوسط':   { 'الأول': '7,1', 'الثاني': '8,1', 'الثالث': '9,1' },
+  'ثانوي':    { 'الأول': '10,1', 'الثاني': '11,1', 'الثالث': '12,1' }
+};
+
+var ABSENCE_TYPES = [
+  { label: 'غياب بدون عذر', value: '48,' },
+  { label: 'غياب بعذر', value: '141,' },
+  { label: 'غياب منصة بعذر', value: '800667,' },
+  { label: 'غياب منصة بدون عذر', value: '1201153,' }
+];
+
+function diagInit() {
+  var existing = document.getElementById('diag-overlay');
+  if (existing) existing.remove();
+
+  // تحديد المرحلة الافتراضية
+  var defStage = typeof currentStage !== 'undefined' ? currentStage : 'ثانوي';
+
+  var stageOpts = ['ابتدائي','متوسط','ثانوي'].map(function(s) {
+    return '<option value="' + s + '"' + (s === defStage ? ' selected' : '') + '>' + s + '</option>';
+  }).join('');
+
+  var absOpts = ABSENCE_TYPES.map(function(a, i) {
+    return '<option value="' + a.value + '"' + (i === 0 ? ' selected' : '') + '>' + a.label + '</option>';
+  }).join('');
+
+  var overlay = document.createElement('div');
+  overlay.id = 'diag-overlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:999999;background:#fff;overflow-y:auto;direction:rtl;font-family:Segoe UI,Tahoma,sans-serif;padding:16px';
+  overlay.innerHTML = ''
+    + '<h2 style="text-align:center;color:#00695c;margin-bottom:12px">🔧 اختبار الغياب v7 — إدخال يدوي</h2>'
+    + '<div style="max-width:800px;margin:0 auto">'
+
+    // حالة
+    + '<div id="d-status" style="background:#f0f0f0;border-radius:10px;padding:10px;margin-bottom:8px;font-size:13px"></div>'
+
+    // Ping
+    + '<div style="text-align:center;margin-bottom:10px">'
+    + '<button onclick="dPing()" style="padding:8px 20px;border:none;border-radius:8px;background:#00695c;color:#fff;font-size:13px;cursor:pointer;font-weight:600">١. Ping (فحص الاتصال)</button>'
+    + '</div>'
+
+    // إدخال الطالب
+    + '<div style="background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:14px;margin-bottom:10px">'
+    + '<div style="font-weight:700;margin-bottom:8px;font-size:14px;color:#166534">📝 إدخال طالب غائب يدوياً</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+    + '  <div><label style="font-size:11px;color:#555;display:block;margin-bottom:2px">المرحلة</label>'
+    + '  <select id="d-stage" style="width:100%;padding:6px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px" onchange="dUpdateGrades()">' + stageOpts + '</select></div>'
+    + '  <div><label style="font-size:11px;color:#555;display:block;margin-bottom:2px">الصف</label>'
+    + '  <select id="d-grade" style="width:100%;padding:6px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px"></select></div>'
+    + '  <div><label style="font-size:11px;color:#555;display:block;margin-bottom:2px">الفصل</label>'
+    + '  <input id="d-section" value="1" style="width:100%;padding:6px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;box-sizing:border-box"></div>'
+    + '  <div><label style="font-size:11px;color:#555;display:block;margin-bottom:2px">نوع الغياب</label>'
+    + '  <select id="d-abstype" style="width:100%;padding:6px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px">' + absOpts + '</select></div>'
+    + '</div>'
+    + '<div style="margin-bottom:8px"><label style="font-size:11px;color:#555;display:block;margin-bottom:2px">اسم الطالب (أو عدة أسماء — كل سطر اسم)</label>'
+    + '<textarea id="d-names" rows="3" placeholder="أحمد محمد العلي&#10;خالد عبدالله السعيد" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical;box-sizing:border-box"></textarea></div>'
+    + '<div style="display:flex;gap:8px;justify-content:center">'
+    + '<button onclick="dAddStudents()" style="padding:8px 16px;border:none;border-radius:8px;background:#7c3aed;color:#fff;font-size:12px;cursor:pointer;font-weight:600">➕ إضافة للقائمة</button>'
+    + '<button onclick="dClearList()" style="padding:8px 16px;border:none;border-radius:8px;background:#dc2626;color:#fff;font-size:12px;cursor:pointer">🗑️ مسح القائمة</button>'
+    + '</div>'
+    + '</div>'
+
+    // قائمة الطلاب المضافين
+    + '<div id="d-list-box" style="background:#f8f9fa;border-radius:10px;padding:10px;margin-bottom:10px;display:none">'
+    + '<div style="font-weight:700;margin-bottom:6px;font-size:13px">📋 الطلاب المضافين:</div>'
+    + '<div id="d-list-body"></div>'
+    + '<div style="text-align:center;margin-top:8px">'
+    + '<button onclick="dSendToNoor()" id="btn-send" style="padding:10px 24px;border:none;border-radius:8px;background:#f97316;color:#fff;font-size:14px;cursor:pointer;font-weight:700">🚀 إرسال لنور</button>'
+    + '</div>'
+    + '</div>'
+
+    // سجل
+    + '<div style="background:#1a1a2e;border-radius:10px;padding:12px">'
+    + '<div style="color:#fff;font-weight:700;margin-bottom:6px;font-size:13px">📜 سجل الأحداث</div>'
+    + '<div id="d-log" style="font-size:11px;font-family:monospace;color:#a8dadc;max-height:350px;overflow-y:auto;line-height:1.5"></div>'
+    + '</div>'
+
+    + '<div style="text-align:center;margin-top:10px"><button onclick="document.getElementById(\'diag-overlay\').remove()" style="padding:8px 20px;border:none;border-radius:8px;background:#c62828;color:#fff;font-size:12px;cursor:pointer">✕ إغلاق</button></div>'
+    + '</div>';
+
+  document.body.appendChild(overlay);
+  findElements();
+  dUpdateGrades();
+  dRefresh();
+}
+
+function dUpdateGrades() {
+  var stage = document.getElementById('d-stage').value;
+  var gradeMap = GRADE_MAPS[stage] || {};
+  var sel = document.getElementById('d-grade');
+  sel.innerHTML = Object.keys(gradeMap).map(function(g) {
+    return '<option value="' + g + '">' + g + ' ' + stage + '</option>';
+  }).join('');
+}
+
+function findElements() {
+  _inbox = document.getElementById('noor-bridge-inbox');
+  _outbox = document.getElementById('noor-bridge-outbox');
+  if (!_inbox) { try { _inbox = window.parent.document.getElementById('noor-bridge-inbox'); } catch(e) {} }
+  if (!_outbox) { try { _outbox = window.parent.document.getElementById('noor-bridge-outbox'); } catch(e) {} }
+
+  if (_outbox && !_outbox._watched) {
+    _outbox._watched = true;
+    new MutationObserver(function() {
+      if (!_outbox.textContent) return;
+      try {
+        var data = JSON.parse(_outbox.textContent);
+        _outbox.textContent = '';
+        handleResponse(data);
+      } catch(e) {}
+    }).observe(_outbox, { childList: true, characterData: true, subtree: true });
+  }
+}
+
+function handleResponse(data) {
+  dLog('📩 رد: ' + data.action, '#06d6a0');
+  if (data.action === 'connected') {
+    _noorConnected = true; _noorUser = data.userName || ''; _noorRole = data.role || ''; _noorStages = data.stages || [];
+    dLog('    ✅ ' + _noorUser + ' — ' + _noorRole + ' — ' + (_noorStages.join('+') || ''), '#06d6a0');
+    dRefresh();
+  }
+  if (data.action === 'progress') {
+    dLog('    📊 ' + data.done + '/' + data.total + ' — ' + (data.current || '') + ' ' + (data.detail || ''), '#ffd166');
+  }
+  if (data.action === 'done') {
+    var r = data.results || {};
+    dLog('    🎉 اكتمل! نجح: ' + (r.success||0) + ' فشل: ' + (r.failed||0), '#06d6a0');
+    if (r.updates) r.updates.forEach(function(u,i) {
+      dLog('       ' + (u.status==='تم'?'✅':'❌') + ' ' + (u.type||'') + ' — ' + u.status + (u.error?' — '+u.error:''), u.status==='تم'?'#06d6a0':'#ef476f');
+    });
+  }
+  if (data.action === 'error') dLog('    ❌ ' + (data.message||''), '#ef476f');
+  if (data.action === 'disconnected') { _noorConnected = false; dRefresh(); }
+}
+
+function dLog(msg, color) {
+  var el = document.getElementById('d-log');
+  if (!el) return;
+  var t = new Date().toLocaleTimeString('ar-SA');
+  el.innerHTML = '<div style="color:' + (color||'#a8dadc') + '">[' + t + '] ' + msg + '</div>' + el.innerHTML;
+}
+
+function dRefresh() {
+  findElements();
+  var el = document.getElementById('d-status');
+  if (!el) return;
+  el.innerHTML = '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:center">'
+    + '<span>' + ((_inbox&&_outbox)?'✅':'❌') + ' جسر</span>'
+    + '<span>' + (_noorConnected?'🟢 متصل ('+_noorUser+')':'🔴 غير متصل') + '</span>'
+    + '<span>📋 ' + _manualStudents.length + ' طالب</span>'
+    + '</div>';
+}
+
+function sendToExt(data) {
+  findElements();
+  if (!_inbox) { dLog('❌ inbox غير موجود!', '#ef476f'); return; }
+  dLog('📤 ' + data.action, '#118ab2');
+  _inbox.textContent = JSON.stringify(data);
+}
+
+function dPing() {
+  dLog('━━━ Ping ━━━', '#fff');
+  sendToExt({ source: 'school-system', action: 'ping' });
+}
+
+function dAddStudents() {
+  var names = document.getElementById('d-names').value.trim();
+  if (!names) { dLog('⚠️ أدخل اسم طالب واحد على الأقل', '#ffd166'); return; }
+
+  var stage = document.getElementById('d-stage').value;
+  var grade = document.getElementById('d-grade').value;
+  var section = document.getElementById('d-section').value || '1';
+  var absVal = document.getElementById('d-abstype').value;
+  var absLabel = '';
+  ABSENCE_TYPES.forEach(function(a) { if (a.value === absVal) absLabel = a.label; });
+
+  var lines = names.split('\n').filter(function(l) { return l.trim(); });
+  lines.forEach(function(name) {
+    _manualStudents.push({
+      name: name.trim(),
+      stage: stage,
+      grade: grade,
+      section: section,
+      absValue: absVal,
+      absLabel: absLabel
+    });
+  });
+
+  document.getElementById('d-names').value = '';
+  dLog('✅ أضفت ' + lines.length + ' طالب', '#06d6a0');
+  dRenderList();
+  dRefresh();
+}
+
+function dRemoveStudent(idx) {
+  _manualStudents.splice(idx, 1);
+  dRenderList();
+  dRefresh();
+}
+
+function dClearList() {
+  _manualStudents = [];
+  dRenderList();
+  dRefresh();
+}
+
+function dRenderList() {
+  var box = document.getElementById('d-list-box');
+  var body = document.getElementById('d-list-body');
+  if (_manualStudents.length === 0) { box.style.display = 'none'; return; }
+
+  box.style.display = 'block';
+  var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff;border-radius:8px;overflow:hidden">'
+    + '<tr style="background:#00695c;color:#fff"><th style="padding:6px">#</th><th>الاسم</th><th>الصف</th><th>الفصل</th><th>نوع الغياب</th><th>حذف</th></tr>';
+  _manualStudents.forEach(function(s, i) {
+    html += '<tr style="border-bottom:1px solid #eee">'
+      + '<td style="padding:4px;text-align:center">' + (i+1) + '</td>'
+      + '<td style="padding:4px">' + s.name + '</td>'
+      + '<td style="padding:4px">' + s.grade + ' ' + s.stage + '</td>'
+      + '<td style="padding:4px">' + s.section + '</td>'
+      + '<td style="padding:4px;font-size:11px">' + s.absLabel + '</td>'
+      + '<td style="padding:4px;text-align:center"><button onclick="dRemoveStudent(' + i + ')" style="border:none;background:#fee2e2;color:#dc2626;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:11px">✕</button></td>'
+      + '</tr>';
+  });
+  html += '</table>';
+  body.innerHTML = html;
+}
+
+function dSendToNoor() {
+  if (!_noorConnected) { dLog('⚠️ اضغط Ping أولاً', '#ffd166'); return; }
+  if (_manualStudents.length === 0) { dLog('⚠️ أضف طالب واحد على الأقل', '#ffd166'); return; }
+
+  var stage = _manualStudents[0].stage;
+  var gradeMap = GRADE_MAPS[stage] || {};
+
+  var records = _manualStudents.map(function(s, i) {
+    return {
+      'اسم_الطالب': s.name,
+      'اسم الطالب': s.name,
+      'الصف': s.grade + ' ' + s.stage,
+      'الفصل': s.section,
+      'نوع_الغياب': s.absLabel,
+      '_noorValue': s.absValue,
+      '_noorMode': { mowadaba: '2', deductType: null },
+      '_rowIndex': i
+    };
+  });
+
+  dLog('━━━ إرسال ' + records.length + ' سجل غياب لنور ━━━', '#fff');
+  records.forEach(function(r,i) {
+    dLog('    [' + i + '] ' + r['اسم_الطالب'] + ' — ' + r['الصف'] + '/' + r['الفصل'] + ' — ' + r._noorValue, '#a8dadc');
+  });
+
+  sendToExt({
+    source: 'school-system',
+    action: 'execute',
+    operation: 'absence',
+    records: records,
+    stage: stage,
+    gradeMap: gradeMap
+  });
+
+  dLog('⏳ ننتظر الرد من نور...', '#ffd166');
+}
+
+window.addEventListener('message', function(e) {
+  if (e.data && e.data.source === 'noor-extension') handleResponse(e.data);
+});
+
+if (document.body) diagInit();
+else document.addEventListener('DOMContentLoaded', diagInit);
+</script>

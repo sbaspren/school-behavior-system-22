@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>تسجيل التأخر الصباحي</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI','Tahoma','Arial',sans-serif;-webkit-tap-highlight-color:transparent}
+body{background:#f0f2f5;min-height:100vh;min-height:100dvh;color:#1f2937}
+.header{background:linear-gradient(135deg,#c2410c,#ea580c);padding:16px 20px;position:sticky;top:0;z-index:40;box-shadow:0 2px 12px rgba(194,65,12,.3)}
+.hdr-row{display:flex;align-items:center;justify-content:space-between;max-width:600px;margin:0 auto}
+.hdr-info h1{font-size:20px;font-weight:800;color:#fff}
+.hdr-sub{font-size:12px;color:rgba(255,255,255,.8);margin-top:2px}
+.hdr-btn{width:42px;height:42px;border-radius:12px;border:none;background:rgba(255,255,255,.15);color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.hdr-btn:active{transform:scale(.9)}
+@keyframes spin{to{transform:rotate(360deg)}}.spinning{animation:spin .8s linear infinite}
+.main{max-width:600px;margin:0 auto;padding:16px 16px 120px}
+.card{background:#fff;border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,.05);border:2px solid rgba(234,88,12,.15)}
+.card-title{font-size:14px;font-weight:700;color:#374151;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.fr{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.fl{font-size:12px;font-weight:700;color:#6b7280;margin-bottom:4px}
+.sel{width:100%;padding:12px 14px;border:2px solid #e5e7eb;border-radius:12px;font-size:15px;font-family:inherit;background:#fff;color:#1f2937;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L1 3h10z' fill='%239ca3af'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:12px center;cursor:pointer}
+.sel:focus{outline:none;border-color:#ea580c;box-shadow:0 0 0 3px rgba(234,88,12,.1)}
+.sb{width:100%;padding:10px 14px;border:2px solid #e5e7eb;border-radius:12px;font-size:14px;font-family:inherit;margin-bottom:10px}
+.sb:focus{outline:none;border-color:#ea580c;box-shadow:0 0 0 3px rgba(234,88,12,.1)}
+.sl{max-height:350px;overflow-y:auto;border:2px solid #e5e7eb;border-radius:12px;-webkit-overflow-scrolling:touch}
+.si{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid #f3f4f6;cursor:pointer;user-select:none;-webkit-user-select:none}
+.si:last-child{border-bottom:none}
+.si.on{background:#fff7ed}
+.ck{width:22px;height:22px;border-radius:6px;border:2px solid #d1d5db;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;transition:all .15s}
+.si.on .ck{background:#ea580c;border-color:#ea580c}
+.sn{font-size:15px;font-weight:600;color:#1f2937;flex:1}
+.ct{font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px;background:#f3f4f6;color:#6b7280;flex-shrink:0}
+.sa{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f9fafb;border-bottom:2px solid #e5e7eb;cursor:pointer;user-select:none}
+.sat{font-size:13px;font-weight:700;color:#6b7280}
+.badge{font-size:12px;font-weight:800;padding:2px 10px;border-radius:100px;color:#fff;background:#ea580c}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:100px;font-size:12px;font-weight:700;color:#fff;background:#ea580c;animation:ci .2s ease}
+.chip-c{opacity:.75;font-size:10px}.chip-x{cursor:pointer;font-size:14px;opacity:.8}
+@keyframes ci{from{transform:scale(.8);opacity:0}to{transform:scale(1);opacity:1}}
+.bbar{position:fixed;bottom:0;left:0;right:0;padding:14px 16px;background:#fff;border-top:1px solid #e5e7eb;z-index:30;box-shadow:0 -4px 12px rgba(0,0,0,.06)}
+.bbar-in{max-width:600px;margin:0 auto;display:flex;gap:10px}
+.btn-s{flex:1;padding:16px;border:none;border-radius:14px;color:#fff;font-size:17px;font-weight:800;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 14px rgba(0,0,0,.15);background:linear-gradient(135deg,#c2410c,#ea580c)}
+.btn-s:disabled{opacity:.4;cursor:not-allowed}
+.btn-s:active:not(:disabled){transform:scale(.98)}
+.toast{position:fixed;top:80px;left:50%;transform:translateX(-50%) translateY(-20px);padding:14px 24px;border-radius:14px;color:#fff;font-size:15px;font-weight:700;z-index:60;opacity:0;transition:all .3s;pointer-events:none;text-align:center;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.ts{background:#16a34a}.toast.te{background:#dc2626}.toast.ti{background:#3b82f6}
+.err-s{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;padding:32px}
+.err-i{font-size:64px;margin-bottom:16px}.err-t{font-size:20px;font-weight:800;margin-bottom:8px}.err-m{color:#6b7280;font-size:14px}
+.hid{display:none!important}
+</style>
+</head>
+<body>
+
+<div class="header"><div class="hdr-row">
+  <div class="hdr-info"><h1>⏰ تسجيل التأخر الصباحي</h1><div class="hdr-sub" id="staffName"></div></div>
+  <button class="hdr-btn" onclick="doRefresh()" id="refreshBtn">🔄</button>
+</div></div>
+
+<div id="errScr" class="err-s hid"><div class="err-i">🔒</div><div class="err-t">رابط غير صالح</div><div class="err-m" id="errMsg">تأكد من صحة الرابط</div></div>
+
+<div id="appWrap" class="hid">
+<div class="main">
+  <div class="card"><div class="card-title">🏫 المرحلة والصف</div>
+    <div class="fr">
+      <div><div class="fl">المرحلة</div><select class="sel" id="l_stage" onchange="upGrades()"><option value="">اختر</option></select></div>
+      <div><div class="fl">الصف</div><select class="sel" id="l_grade" onchange="loadGrade()"><option value="">اختر</option></select></div>
+    </div>
+  </div>
+  <div class="card"><div class="card-title">👥 المتأخرين <span id="l-badge" class="badge hid">0</span></div>
+    <input type="text" class="sb" id="l_search" placeholder="🔍 ابحث عن طالب..." oninput="doFilter()">
+    <div class="sl" id="l_list"><div class="empty" style="text-align:center;padding:40px 20px;color:#9ca3af;font-size:15px">اختر المرحلة والصف أولاً</div></div>
+    <div class="chips" id="l_chips"></div>
+  </div>
+</div></div>
+
+<div class="bbar" id="botBar" style="display:none"><div class="bbar-in">
+  <button class="btn-s" id="subBtn" onclick="doSubmit()" disabled>✅ تسجيل التأخر</button>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var PAGE_DATA;
+try { PAGE_DATA = <?!= pageData ?>; } catch(e) { PAGE_DATA = {success:false, error:'خطأ في تحليل البيانات: ' + e.message}; }
+
+var D=document, allStu=null, staff=null, selected=[];
+var GM;
+try { GM = <?!= gradeMap ?>; } catch(e) { GM = {}; }
+
+function init(){
+  if(!PAGE_DATA || typeof PAGE_DATA !== 'object') { showErr('فشل تحميل البيانات'); return; }
+  if(!PAGE_DATA.success) { showErr(PAGE_DATA.error || 'رابط غير صالح أو منتهي'); return; }
+  staff = PAGE_DATA.staff;
+  D.getElementById('staffName').textContent = '👤 ' + staff.name + (staff.role ? ' — ' + staff.role : '');
+  var stages = Object.keys(GM);
+  var sel = D.getElementById('l_stage');
+  stages.forEach(function(s) {
+    var opt = D.createElement('option');
+    opt.value = s; opt.textContent = s;
+    sel.appendChild(opt);
+  });
+  D.getElementById('appWrap').classList.remove('hid');
+  D.getElementById('botBar').style.display = '';
+  loadStu();
+}
+
+function showErr(m){ D.getElementById('errScr').classList.remove('hid'); D.getElementById('errMsg').textContent = m; }
+
+function loadStu(){
+  google.script.run.withSuccessHandler(function(r){
+    if(r&&r.success){allStu=r.students;toast('تم تحميل الطلاب','ti');}else toast('فشل تحميل الطلاب','te');
+  }).withFailureHandler(function(e){toast('خطأ: '+e.message,'te');}).getAllStudentsForStaff();
+}
+
+function upGrades(){
+  var st=D.getElementById('l_stage').value,g=D.getElementById('l_grade');
+  g.innerHTML='<option value="">اختر</option>';selected=[];upChips();
+  if(st&&GM[st])GM[st].forEach(function(v){var o=D.createElement('option');o.value=v;o.textContent=v;g.appendChild(o);});
+  D.getElementById('l_list').innerHTML='<div class="empty" style="text-align:center;padding:40px 20px;color:#9ca3af;font-size:15px">اختر المرحلة والصف أولاً</div>';upSub();
+}
+
+function loadGrade(){
+  var st=D.getElementById('l_stage').value,gr=D.getElementById('l_grade').value;
+  D.getElementById('l_search').value='';selected=[];upChips();
+  var list=D.getElementById('l_list');
+  if(!allStu||!st||!gr){list.innerHTML='<div class="empty" style="text-align:center;padding:40px 20px;color:#9ca3af;font-size:15px">اختر المرحلة والصف أولاً</div>';upSub();return;}
+  var arr=[];
+  Object.keys(allStu[st]||{}).forEach(function(cls){
+    if(cls.indexOf(gr)===0){var sec=cls.replace(gr,'').trim();
+      (allStu[st][cls]||[]).forEach(function(s){arr.push({name:s.name,id:s.id||'',phone:s.phone||'',cls:cls,sec:sec||cls});});}
+  });
+  arr.sort(function(a,b){return a.name.localeCompare(b.name,'ar');});
+  render(arr);upSub();
+}
+
+function render(arr){
+  var list=D.getElementById('l_list');
+  if(!arr.length){list.innerHTML='<div class="empty" style="text-align:center;padding:40px 20px;color:#9ca3af;font-size:15px">لا يوجد طلاب</div>';return;}
+  var h='<div class="sa" onclick="togAll()"><span class="sat">تحديد الكل ('+arr.length+')</span></div>';
+  arr.forEach(function(s){
+    var on=selected.some(function(x){return x.name===s.name&&x.cls===s.cls;});
+    h+='<div class="si'+(on?' on':'')+'" onclick="tog(this)" data-n="'+E(s.name)+'" data-c="'+E(s.cls)+'" data-s="'+E(s.sec)+'" data-i="'+E(s.id)+'" data-p="'+E(s.phone)+'">';
+    h+='<div class="ck">'+(on?'✓':'')+'</div><span class="sn">'+E(s.name)+'</span><span class="ct">'+E(s.sec)+'</span></div>';
+  });
+  list.innerHTML=h;
+}
+
+function E(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+
+function tog(el){
+  var n=el.getAttribute('data-n'),c=el.getAttribute('data-c');
+  var i=selected.findIndex(function(x){return x.name===n&&x.cls===c;});
+  if(i>-1){selected.splice(i,1);el.classList.remove('on');el.querySelector('.ck').textContent='';}
+  else{selected.push({name:n,cls:c,sec:el.getAttribute('data-s'),id:el.getAttribute('data-i'),phone:el.getAttribute('data-p')});el.classList.add('on');el.querySelector('.ck').textContent='✓';}
+  upChips();upSub();
+}
+
+function togAll(){
+  var items=D.getElementById('l_list').querySelectorAll('.si'),allOn=selected.length===items.length;
+  selected=[];
+  if(!allOn){items.forEach(function(el){selected.push({name:el.getAttribute('data-n'),cls:el.getAttribute('data-c'),sec:el.getAttribute('data-s'),id:el.getAttribute('data-i'),phone:el.getAttribute('data-p')});el.classList.add('on');el.querySelector('.ck').textContent='✓';});}
+  else{items.forEach(function(el){el.classList.remove('on');el.querySelector('.ck').textContent='';});}
+  upChips();upSub();
+}
+
+function remStu(n,c){
+  var i=selected.findIndex(function(x){return x.name===n&&x.cls===c;});
+  if(i>-1)selected.splice(i,1);
+  D.getElementById('l_list').querySelectorAll('.si').forEach(function(el){if(el.getAttribute('data-n')===n&&el.getAttribute('data-c')===c){el.classList.remove('on');el.querySelector('.ck').textContent='';}});
+  upChips();upSub();
+}
+
+function upChips(){
+  var box=D.getElementById('l_chips'),bg=D.getElementById('l-badge'),cnt=selected.length;
+  if(!cnt){box.innerHTML='';bg.classList.add('hid');return;}
+  bg.textContent=cnt;bg.classList.remove('hid');
+  var h='';selected.forEach(function(s){var sh=s.name.split(' ').slice(0,2).join(' ');h+='<span class="chip">'+E(sh)+' <span class="chip-c">('+E(s.sec)+')</span> <span class="chip-x" data-rn="'+E(s.name)+'" data-rc="'+E(s.cls)+'">✕</span></span>';});
+  box.innerHTML=h;
+}
+
+function doFilter(){
+  var q=D.getElementById('l_search').value.trim();
+  D.getElementById('l_list').querySelectorAll('.si').forEach(function(el){el.style.display=(!q||(el.getAttribute('data-n')||'').indexOf(q)>-1)?'':'none';});
+}
+
+function upSub(){
+  D.getElementById('subBtn').disabled=!(selected.length>0&&D.getElementById('l_stage').value&&D.getElementById('l_grade').value);
+}
+
+var _submitting=false;
+function doSubmit(){
+  if(_submitting)return;_submitting=true;
+  var btn=D.getElementById('subBtn');btn.disabled=true;var orig=btn.innerHTML;btn.innerHTML='⏳ جاري...';
+  var stage=D.getElementById('l_stage').value;
+  var byC={};selected.forEach(function(s){if(!byC[s.cls])byC[s.cls]=[];byC[s.cls].push({name:s.name,id:s.id,phone:s.phone});});
+  var keys=Object.keys(byC),total=selected.length,done=0,fail=0;
+  function fin(){
+    _submitting=false;
+    if(fail)toast('⚠️ نجح '+(total-fail)+' وفشل '+fail,'te');
+    else toast('✅ تم تسجيل التأخر — '+total+' طالب','ts');
+    resetF();btn.disabled=false;btn.innerHTML=orig;
+  }
+  keys.forEach(function(cls){
+    var stu=byC[cls];
+    google.script.run.withSuccessHandler(function(r){if(r&&r.success)done+=stu.length;else fail+=stu.length;if(done+fail>=total)fin();}).withFailureHandler(function(){fail+=stu.length;if(done+fail>=total)fin();})
+    .saveStaffLatecomers({stage:stage,className:cls,students:stu,staffName:staff.name});
+  });
+}
+
+function resetF(){
+  selected=[];D.getElementById('l_list').querySelectorAll('.si').forEach(function(el){el.classList.remove('on');el.querySelector('.ck').textContent='';});
+  upChips();upSub();
+}
+
+function doRefresh(){
+  var b=D.getElementById('refreshBtn');b.classList.add('spinning');b.disabled=true;
+  google.script.run.withSuccessHandler(function(r){
+    if(r&&r.success){allStu=r.students;toast('✅ تم التحديث','ts');
+      // ★ تحديث العرض الحالي
+      var gr=D.getElementById('l_grade').value;if(gr)loadGrade();
+    }else toast('❌ فشل','te');
+    b.classList.remove('spinning');b.disabled=false;
+  }).withFailureHandler(function(){toast('❌ فشل','te');b.classList.remove('spinning');b.disabled=false;}).getAllStudentsForStaff();
+}
+
+function toast(m,c){var t=D.getElementById('toast');t.textContent=m;t.className='toast '+(c||'ti')+' show';clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove('show');},2500);}
+
+D.addEventListener('click',function(e){
+  var cx=e.target.closest('.chip-x');if(cx){e.stopPropagation();remStu(cx.getAttribute('data-rn'),cx.getAttribute('data-rc'));return;}
+});
+
+init();
+</script>
+</body>
+</html>

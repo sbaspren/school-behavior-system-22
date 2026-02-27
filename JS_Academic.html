@@ -1,0 +1,689 @@
+<script>
+// =================================================================
+// نظام التحصيل الدراسي - الإصدار الشامل
+// 3 تبويبات: لوحة المؤشرات (+ استيراد مطوي) | تقارير | رسوم بيانية
+// المرحلة = currentStage | الفصل = تلقائي | الفترة = يدوي
+// =================================================================
+
+let academicData = { summary: [], grades: [], periods: [] };
+let academicCurrentTab = 'dashboard';
+let academicStats = null;
+
+// =================================================================
+// 1. الصفحة الرئيسية
+// =================================================================
+function renderAcademicPage() {
+    const main = document.getElementById('main-content');
+    main.innerHTML = `
+        <div class="max-w-full relative">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 bg-teal-50 rounded-lg border border-teal-200">
+                        <span class="material-symbols-outlined text-3xl text-teal-600">analytics</span>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-extrabold text-gray-900">التحصيل الدراسي</h2>
+                        <p class="text-sm text-gray-400 font-medium">المرحلة: <span class="text-teal-600 font-bold">${currentStage}</span></p>
+                    </div>
+                </div>
+                <div class="flex gap-3">
+                    <div class="bg-teal-50 border border-teal-200 rounded-lg px-4 py-2 text-center">
+                        <div class="text-2xl font-bold text-teal-600" id="acad-h-students">-</div>
+                        <div class="text-xs text-gray-500">طالب</div>
+                    </div>
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-center">
+                        <div class="text-2xl font-bold text-blue-600" id="acad-h-periods">-</div>
+                        <div class="text-xs text-gray-500">فترة</div>
+                    </div>
+                    <div class="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-center">
+                        <div class="text-2xl font-black text-amber-600" id="acad-h-avg">-</div>
+                        <div class="text-xs text-gray-500">المعدل العام</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-5">
+                <div class="flex border-b border-gray-200">
+                    <button onclick="switchAcadTab('dashboard')" id="acad-tab-dashboard" class="flex-1 px-4 py-4 text-center font-bold transition-all border-b-2 border-teal-500 text-teal-600 bg-teal-50 whitespace-nowrap">
+                        <span class="material-symbols-outlined align-middle ml-1">dashboard</span> لوحة المؤشرات
+                    </button>
+                    <button onclick="switchAcadTab('reports')" id="acad-tab-reports" class="flex-1 px-4 py-4 text-center font-bold transition-all border-b-2 border-transparent text-gray-500 hover:text-purple-600 whitespace-nowrap">
+                        <span class="material-symbols-outlined align-middle ml-1">description</span> تقارير تفصيلية
+                    </button>
+                    <button onclick="switchAcadTab('charts')" id="acad-tab-charts" class="flex-1 px-4 py-4 text-center font-bold transition-all border-b-2 border-transparent text-gray-500 hover:text-indigo-600 whitespace-nowrap">
+                        <span class="material-symbols-outlined align-middle ml-1">bar_chart</span> رسوم بيانية
+                    </button>
+                </div>
+            </div>
+            <div id="acad-tab-content"></div>
+        </div>
+    `;
+    loadAcademicData();
+    switchAcadTab('dashboard');
+}
+
+// =================================================================
+// 2. تبديل التبويبات
+// =================================================================
+function switchAcadTab(tab) {
+    academicCurrentTab = tab;
+    ['dashboard','reports','charts'].forEach(t => {
+        var btn = document.getElementById('acad-tab-' + t);
+        if (!btn) return;
+        var colors = {dashboard:'teal', reports:'purple', charts:'indigo'};
+        var c = colors[t];
+        btn.className = t === tab
+            ? 'flex-1 px-4 py-4 text-center font-bold transition-all border-b-2 border-'+c+'-500 text-'+c+'-600 bg-'+c+'-50 whitespace-nowrap'
+            : 'flex-1 px-4 py-4 text-center font-bold transition-all border-b-2 border-transparent text-gray-500 hover:text-'+c+'-600 whitespace-nowrap';
+    });
+    var content = document.getElementById('acad-tab-content');
+    if (tab === 'dashboard') renderDashboardTab(content);
+    else if (tab === 'reports') renderReportsTab(content);
+    else if (tab === 'charts') renderChartsTab(content);
+}
+
+// =================================================================
+// 3. تحميل البيانات
+// =================================================================
+function loadAcademicData() {
+    google.script.run.withSuccessHandler(function(result) {
+        if (result && result.success) {
+            academicData = result;
+            updateHeaderStats();
+            var lp = academicData.periods.length > 0 ? academicData.periods[academicData.periods.length - 1] : null;
+            google.script.run.withSuccessHandler(function(res) {
+                if (res && res.success) { academicStats = res.stats; if (academicCurrentTab === 'dashboard') switchAcadTab('dashboard'); }
+            }).getAcademicQuickStats(currentStage, lp ? lp.semester : '', lp ? lp.period : '');
+        }
+    }).getAcademicAllData(currentStage);
+}
+
+function updateHeaderStats() {
+    var ls = academicData.summary;
+    if (academicData.periods.length > 0) {
+        var lp = academicData.periods[academicData.periods.length - 1];
+        ls = academicData.summary.filter(r => r['\u0627\u0644\u0641\u0635\u0644_\u0627\u0644\u062f\u0631\u0627\u0633\u064a'] === lp.semester && r['\u0627\u0644\u0641\u062a\u0631\u0629'] === lp.period);
+    }
+    var avgs = ls.map(r => parseFloat(r['\u0627\u0644\u0645\u0639\u062f\u0644'])).filter(a => !isNaN(a) && a > 0);
+    var avgAll = avgs.length > 0 ? (avgs.reduce((a,b)=>a+b,0) / avgs.length).toFixed(1) : '-';
+    var e1 = document.getElementById('acad-h-students'); if(e1) e1.textContent = ls.length || '-';
+    var e2 = document.getElementById('acad-h-periods'); if(e2) e2.textContent = academicData.periods.length || '-';
+    var e3 = document.getElementById('acad-h-avg'); if(e3) e3.textContent = avgAll !== '-' ? avgAll + '%' : '-';
+}
+
+// =================================================================
+// 4. لوحة المؤشرات مع الاستيراد المطوي
+// =================================================================
+function renderDashboardTab(container) {
+    var periodsChips = academicData.periods.map(p => {
+        var cnt = academicData.summary.filter(r => r['\u0627\u0644\u0641\u0635\u0644_\u0627\u0644\u062f\u0631\u0627\u0633\u064a'] === p.semester && r['\u0627\u0644\u0641\u062a\u0631\u0629'] === p.period).length;
+        return '<span class="inline-flex items-center gap-1 bg-teal-100 text-teal-700 px-3 py-1.5 rounded-full text-xs font-bold">'
+            + p.semester + ' \u2014 ' + p.period + ' (' + cnt + ' \u0637\u0627\u0644\u0628)'
+            + ' <button onclick="event.stopPropagation();deleteAcadPeriod(\'' + p.semester + '\',\'' + p.period + '\')" class="text-teal-400 hover:text-red-500 mr-1" title="\u062d\u0630\u0641">\u2715</button></span>';
+    }).join(' ');
+
+    var importHTML = '<div class="bg-white rounded-xl shadow-sm border mb-6 overflow-hidden">'
+        + '<button onclick="toggleAcadImport()" class="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-all">'
+        + '<div class="flex items-center gap-2"><span class="material-symbols-outlined text-teal-500">upload_file</span>'
+        + '<span class="font-bold text-gray-700">\u0627\u0633\u062a\u064a\u0631\u0627\u062f \u0634\u0647\u0627\u062f\u0627\u062a \u0646\u0648\u0631</span>'
+        + (academicData.periods.length > 0 ? '<span class="text-xs text-gray-400 mr-2">(' + academicData.periods.length + ' \u0641\u062a\u0631\u0629 \u0645\u0633\u062a\u0648\u0631\u062f\u0629)</span>' : '<span class="text-xs text-amber-500 mr-2">\u0644\u0645 \u064a\u062a\u0645 \u0627\u0644\u0627\u0633\u062a\u064a\u0631\u0627\u062f \u0628\u0639\u062f</span>')
+        + '</div><span class="material-symbols-outlined text-gray-400 transition-transform" id="acad-import-arrow">expand_more</span></button>'
+        + '<div id="acad-import-body" class="' + (academicData.summary.length > 0 ? 'hidden' : '') + '" style="border-top:1px solid #e5e7eb"><div class="p-5">'
+        + '<div class="flex flex-wrap gap-3 mb-4"><div class="flex-1 min-w-[160px]">'
+        + '<label class="block text-xs font-bold text-gray-500 mb-1">\u0627\u0644\u0641\u062a\u0631\u0629</label>'
+        + '<select id="acad-import-period" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-300">'
+        + '<option value="\u0627\u0644\u0641\u062a\u0631\u0629 \u0627\u0644\u0623\u0648\u0644\u0649">\u0627\u0644\u0641\u062a\u0631\u0629 \u0627\u0644\u0623\u0648\u0644\u0649</option>'
+        + '<option value="\u0627\u0644\u0641\u062a\u0631\u0629 \u0627\u0644\u062b\u0627\u0646\u064a\u0629">\u0627\u0644\u0641\u062a\u0631\u0629 \u0627\u0644\u062b\u0627\u0646\u064a\u0629</option>'
+        + '<option value="\u0646\u0647\u0627\u064a\u0629 \u0627\u0644\u0641\u0635\u0644" selected>\u0646\u0647\u0627\u064a\u0629 \u0627\u0644\u0641\u0635\u0644</option></select></div>'
+        + '<div class="text-xs text-gray-400 self-end pb-2">\u0627\u0644\u0641\u0635\u0644 \u0627\u0644\u062f\u0631\u0627\u0633\u064a \u064a\u064f\u0633\u062a\u062e\u0631\u062c \u062a\u0644\u0642\u0627\u0626\u064a\u0627\u064b \u0645\u0646 \u0627\u0644\u0634\u0647\u0627\u062f\u0629</div></div>'
+        + '<div id="acad-import-dropzone" class="border-2 border-dashed border-teal-300 rounded-xl p-6 text-center bg-teal-50/30 cursor-pointer hover:border-teal-500 hover:bg-teal-50/60 transition-all" onclick="document.getElementById(\'acad-import-file\').click()">'
+        + '<span class="material-symbols-outlined text-4xl text-teal-400 mb-2">cloud_upload</span>'
+        + '<p class="text-gray-600 font-bold text-sm">\u0627\u0636\u063a\u0637 \u0644\u0631\u0641\u0639 \u0645\u0644\u0641 Excel \u0623\u0648 \u0627\u0633\u062d\u0628\u0647 \u0647\u0646\u0627</p>'
+        + '<p class="text-xs text-gray-400 mt-1">\u0645\u0644\u0641\u0627\u062a \u0634\u0647\u0627\u062f\u0627\u062a \u0646\u0648\u0631 (.xlsx)</p>'
+        + '<input type="file" id="acad-import-file" accept=".xlsx,.xls" class="hidden" onchange="handleAcadFileSelect(this)"></div>'
+        + '<div id="acad-import-status" class="hidden mt-4"></div>'
+        + (periodsChips ? '<div class="flex flex-wrap gap-2 mt-4">' + periodsChips + '</div>' : '')
+        + '</div></div></div>';
+
+    if (!academicStats && academicData.summary.length === 0) {
+        container.innerHTML = importHTML + '<div class="bg-white rounded-xl shadow-sm border p-12 text-center"><span class="material-symbols-outlined text-6xl text-gray-300">inbox</span><p class="text-gray-400 mt-3 text-lg">\u0644\u0627 \u062a\u0648\u062c\u062f \u0628\u064a\u0627\u0646\u0627\u062a \u0628\u0639\u062f</p><p class="text-gray-300 text-sm mt-1">\u0627\u0633\u062a\u0648\u0631\u062f \u0634\u0647\u0627\u062f\u0627\u062a \u0646\u0648\u0631 \u0645\u0646 \u0627\u0644\u0632\u0631 \u0623\u0639\u0644\u0627\u0647</p></div>';
+        return;
+    }
+    if (!academicStats) {
+        container.innerHTML = importHTML + '<div class="text-center py-8"><span class="material-symbols-outlined animate-spin text-teal-500 text-4xl">sync</span><p class="text-gray-500 mt-2">\u062c\u0627\u0631\u064a \u062a\u062d\u0644\u064a\u0644 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a...</p></div>';
+        return;
+    }
+
+    var st = academicStats, cat = st.categories;
+    var totalCat = cat.excellent + cat.good + cat.average + cat.weak + cat.danger || 1;
+
+    container.innerHTML = importHTML
+    // البطاقات السريعة
+    + '<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">'
+    + acadCard(st.totalStudents, '\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0637\u0644\u0627\u0628', 'teal')
+    + acadCard(st.avgAll + '%', '\u0627\u0644\u0645\u0639\u062f\u0644 \u0627\u0644\u0639\u0627\u0645', 'blue')
+    + acadCard(st.maxAvg + '%', '\u0623\u0639\u0644\u0649 \u0645\u0639\u062f\u0644', 'green')
+    + acadCard(st.minAvg + '%', '\u0623\u0642\u0644 \u0645\u0639\u062f\u0644', 'red')
+    + acadCard(st.absence.studentsWithAbsence, '\u0637\u0644\u0627\u0628 \u0644\u062f\u064a\u0647\u0645 \u063a\u064a\u0627\u0628', 'amber')
+    + '</div>'
+    // تصنيف الطلاب
+    + '<div class="bg-white rounded-xl shadow-sm border p-5 mb-5"><h4 class="font-bold text-gray-700 mb-4">\ud83c\udff7\ufe0f \u062a\u0635\u0646\u064a\u0641 \u0627\u0644\u0637\u0644\u0627\u0628</h4><div class="grid grid-cols-2 md:grid-cols-5 gap-3">'
+    + acadCatCard(cat.excellent, totalCat, 'emerald', '\ud83c\udf1f \u0645\u062a\u0641\u0648\u0642 (\u226595)', 'excellent')
+    + acadCatCard(cat.good, totalCat, 'blue', '\u2705 \u062c\u064a\u062f (80-94)', 'good')
+    + acadCatCard(cat.average, totalCat, 'amber', '\u26a0\ufe0f \u0645\u062a\u0648\u0633\u0637 (65-79)', 'average')
+    + acadCatCard(cat.weak, totalCat, 'orange', '\ud83d\udd34 \u0636\u0639\u064a\u0641 (50-64)', 'weak')
+    + acadCatCard(cat.danger, totalCat, 'red', '\ud83d\udea8 \u062e\u0637\u0631 (<50)', 'danger')
+    + '</div></div>'
+    // المواد + الفصول
+    + '<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-5">'
+    + '<div class="bg-white rounded-xl shadow-sm border p-5"><h4 class="font-bold text-gray-700 mb-3">\ud83d\udcda \u062a\u0631\u062a\u064a\u0628 \u0627\u0644\u0645\u0648\u0627\u062f (\u0627\u0644\u0623\u0635\u0639\u0628 \u2190 \u0627\u0644\u0623\u0633\u0647\u0644)</h4><div class="space-y-2" id="acad-subjects-rank"></div></div>'
+    + '<div class="bg-white rounded-xl shadow-sm border p-5"><h4 class="font-bold text-gray-700 mb-3">\ud83c\udfeb \u0645\u0642\u0627\u0631\u0646\u0629 \u0627\u0644\u0641\u0635\u0648\u0644</h4><div class="space-y-2" id="acad-class-compare"></div></div></div>'
+    // الأوائل + الأقل
+    + '<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-5">'
+    + '<div class="bg-white rounded-xl shadow-sm border p-5"><h4 class="font-bold text-gray-700 mb-3">\ud83c\udfc6 \u0627\u0644\u0639\u0634\u0631\u0629 \u0627\u0644\u0623\u0648\u0627\u0626\u0644</h4><div class="space-y-1" id="acad-top-ten"></div></div>'
+    + '<div class="bg-white rounded-xl shadow-sm border p-5"><h4 class="font-bold text-gray-700 mb-3">\u26a0\ufe0f \u0623\u0642\u0644 10 \u0637\u0644\u0627\u0628</h4><div class="space-y-1" id="acad-bottom-ten"></div></div></div>'
+    // طلاب الخطر
+    + (st.dangerStudents && st.dangerStudents.length > 0 ? '<div class="bg-red-50 rounded-xl border border-red-200 p-5 mb-5"><h4 class="font-bold text-red-700 mb-3">\ud83d\udea8 \u0637\u0644\u0627\u0628 \u0645\u0646\u0637\u0642\u0629 \u0627\u0644\u062e\u0637\u0631 (3+ \u0645\u0648\u0627\u062f \u0623\u0642\u0644 \u0645\u0646 60%)</h4><div class="space-y-2" id="acad-danger-students"></div></div>' : '');
+
+    fillSubjectsRank(st.subjects);
+    fillClassCompare(st.classSummary);
+    fillTopBottom(st.topTen, 'acad-top-ten', true);
+    fillTopBottom(st.bottomTen, 'acad-bottom-ten', false);
+    if (st.dangerStudents) fillDangerStudents(st.dangerStudents);
+}
+
+function acadCard(val, label, color) {
+    return '<div class="bg-white rounded-xl shadow-sm border p-4 text-center hover:shadow-md transition-all"><div class="text-3xl font-bold text-'+color+'-600">'+val+'</div><div class="text-xs text-gray-500 mt-1">'+label+'</div></div>';
+}
+function acadCatCard(count, total, color, label, catName) {
+    var pct = (count / total * 100).toFixed(0);
+    return '<div class="text-center p-3 bg-'+color+'-50 border border-'+color+'-100 rounded-xl cursor-pointer hover:shadow-md transition-all" onclick="filterStudentsByCategory(\''+catName+'\')">'
+    + '<div class="text-2xl font-bold text-'+color+'-600">'+count+'</div><div class="text-xs text-gray-600 mt-1">'+label+'</div>'
+    + '<div class="w-full bg-gray-200 rounded-full h-1.5 mt-2"><div class="bg-'+color+'-500 h-1.5 rounded-full" style="width:'+pct+'%"></div></div></div>';
+}
+
+function toggleAcadImport() {
+    var body = document.getElementById('acad-import-body');
+    var arrow = document.getElementById('acad-import-arrow');
+    if (body) body.classList.toggle('hidden');
+    if (arrow) arrow.style.transform = body && body.classList.contains('hidden') ? '' : 'rotate(180deg)';
+}
+
+function fillSubjectsRank(subjects) {
+    var el = document.getElementById('acad-subjects-rank'); if (!el || !subjects) return;
+    el.innerHTML = subjects.map(function(s, i) {
+        var c = s.avg >= 90 ? 'emerald' : s.avg >= 80 ? 'blue' : s.avg >= 70 ? 'amber' : 'red';
+        return '<div class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50"><span class="text-xs font-bold text-gray-400 w-5">'+(i+1)+'</span><div class="flex-1"><div class="flex justify-between items-center mb-1"><span class="text-sm font-bold">'+s.name+'</span><span class="text-sm font-bold text-'+c+'-600">'+s.avg+'%</span></div><div class="w-full bg-gray-200 rounded-full h-2"><div class="bg-'+c+'-500 h-2 rounded-full" style="width:'+s.avg+'%"></div></div><div class="flex justify-between text-xs text-gray-400 mt-1"><span>\u226590: '+s.above90+'</span><span><60: '+(s.below60||0)+'</span><span><50: '+(s.below50||0)+'</span></div></div></div>';
+    }).join('');
+}
+
+function fillClassCompare(classes) {
+    var el = document.getElementById('acad-class-compare'); if (!el || !classes) return;
+    el.innerHTML = classes.map(function(c) {
+        var co = c.avg >= 90 ? 'emerald' : c.avg >= 80 ? 'blue' : 'amber';
+        return '<div class="p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-all"><div class="flex justify-between items-center mb-2"><span class="font-bold text-gray-800">'+c.label+'</span><span class="text-xs text-gray-400">'+c.count+' \u0637\u0627\u0644\u0628</span></div><div class="w-full bg-gray-200 rounded-full h-2.5 mb-2"><div class="bg-'+co+'-500 h-2.5 rounded-full" style="width:'+c.avg+'%"></div></div><div class="flex justify-between text-xs"><span class="text-'+co+'-600 font-bold">\u0627\u0644\u0645\u0639\u062f\u0644: '+c.avg+'%</span><span class="text-emerald-600">\u0645\u062a\u0641\u0648\u0642: '+c.excellent+'</span><span class="text-red-600">\u0636\u0639\u064a\u0641: '+c.weak+'</span></div></div>';
+    }).join('');
+}
+
+function fillTopBottom(list, elId, isTop) {
+    var el = document.getElementById(elId); if (!el || !list) return;
+    el.innerHTML = list.map(function(s, i) {
+        var avg = parseFloat(s['\u0627\u0644\u0645\u0639\u062f\u0644']) || 0;
+        var medal = isTop ? (i===0?'\ud83e\udd47':i===1?'\ud83e\udd48':i===2?'\ud83e\udd49':'<span class="text-xs text-gray-400">'+(i+1)+'</span>') : '<span class="text-xs text-gray-400">'+(i+1)+'</span>';
+        var c = isTop ? 'emerald' : 'red';
+        return '<div class="flex items-center gap-3 p-2 rounded-lg hover:bg-'+c+'-50 cursor-pointer transition-all" onclick="showStudentReport(\''+s['\u0631\u0642\u0645_\u0627\u0644\u0647\u0648\u064a\u0629']+'\')"><span class="w-7 text-center text-lg">'+medal+'</span><span class="flex-1 text-sm font-bold text-gray-800 truncate">'+s['\u0627\u0633\u0645_\u0627\u0644\u0637\u0627\u0644\u0628']+'</span><span class="text-xs text-gray-400">'+s['\u0627\u0644\u0635\u0641']+' / '+s['\u0627\u0644\u0641\u0635\u0644']+'</span><span class="text-sm font-bold text-'+c+'-600">'+avg.toFixed(1)+'%</span></div>';
+    }).join('');
+}
+
+function fillDangerStudents(list) {
+    var el = document.getElementById('acad-danger-students'); if (!el) return;
+    el.innerHTML = list.map(function(s) {
+        return '<div class="flex items-center gap-3 p-2 bg-white rounded-lg border border-red-100 cursor-pointer hover:shadow transition-all" onclick="showStudentReport(\''+s.identity+'\')"><span class="material-symbols-outlined text-red-500">warning</span><span class="font-bold text-sm">'+s.name+'</span><span class="text-xs text-red-600 flex-1">'+s.weakCount+' \u0645\u0648\u0627\u062f: '+s.weakSubjects.join('\u060c ')+'</span></div>';
+    }).join('');
+}
+
+// =================================================================
+// 5. الاستيراد
+// =================================================================
+function handleAcadFileSelect(input) {
+    if (!input.files || !input.files.length) return;
+    var file = input.files[0];
+    var period = document.getElementById('acad-import-period').value;
+
+    if (currentStage !== '\u0645\u062a\u0648\u0633\u0637') {
+        showEnhancedToast('warning', '\u062d\u0627\u0644\u064a\u0627\u064b \u0627\u0644\u0627\u0633\u062a\u064a\u0631\u0627\u062f \u064a\u062f\u0639\u0645 \u0627\u0644\u0645\u0631\u062d\u0644\u0629 \u0627\u0644\u0645\u062a\u0648\u0633\u0637\u0629 \u0641\u0642\u0637');
+        input.value = ''; return;
+    }
+
+    var statusEl = document.getElementById('acad-import-status');
+    statusEl.className = 'mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4 text-center';
+    statusEl.innerHTML = '<span class="material-symbols-outlined animate-spin text-blue-500">sync</span><p class="text-blue-700 font-bold mt-2">\u062c\u0627\u0631\u064a \u0642\u0631\u0627\u0621\u0629 \u0627\u0644\u0645\u0644\u0641...</p>';
+
+    var t0 = Date.now();
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            // ═══ تحليل Excel في المتصفح ═══
+            statusEl.innerHTML = '<span class="material-symbols-outlined animate-spin text-blue-500">sync</span><p class="text-blue-700 font-bold mt-2">\u062c\u0627\u0631\u064a \u062a\u062d\u0644\u064a\u0644 \u0627\u0644\u0634\u0647\u0627\u062f\u0627\u062a...</p>';
+            var data = new Uint8Array(e.target.result);
+            var wb = XLSX.read(data, {type: 'array'});
+            var parseTime = ((Date.now() - t0) / 1000).toFixed(1);
+            
+            var students = [];
+            var errors = [];
+            var detectedSemester = '';
+            
+            for (var i = 0; i < wb.SheetNames.length; i++) {
+                try {
+                    var ws = wb.Sheets[wb.SheetNames[i]];
+                    var arr = sheetTo2DArray(ws);
+                    if (!arr || arr.length < 30) continue;
+                    
+                    var st = parseStudentFromArray(arr, detectedSemester);
+                    if (!st) continue;
+                    
+                    if (!detectedSemester && st.semester) detectedSemester = st.semester;
+                    if (!st.semester) st.semester = detectedSemester || '\u063a\u064a\u0631 \u0645\u062d\u062f\u062f';
+                    students.push(st);
+                } catch(ex) {
+                    errors.push('\u0634\u064a\u062a ' + (i+1) + ': ' + ex.toString());
+                }
+            }
+            
+            if (students.length === 0) {
+                statusEl.className = 'mt-4 bg-red-50 border border-red-200 rounded-lg p-4 text-center';
+                statusEl.innerHTML = '<span class="material-symbols-outlined text-red-500">error</span><p class="text-red-700 font-bold mt-2">\u0644\u0645 \u064a\u062a\u0645 \u0627\u0644\u0639\u062b\u0648\u0631 \u0639\u0644\u0649 \u0628\u064a\u0627\u0646\u0627\u062a \u0637\u0644\u0627\u0628</p><p class="text-xs text-gray-500">\u062a\u0645 \u0641\u062d\u0635 ' + wb.SheetNames.length + ' \u0634\u064a\u062a</p>';
+                return;
+            }
+            
+            statusEl.innerHTML = '<span class="material-symbols-outlined animate-spin text-blue-500">sync</span><p class="text-blue-700 font-bold mt-2">\u062a\u0645 \u062a\u062d\u0644\u064a\u0644 ' + students.length + ' \u0637\u0627\u0644\u0628 \u0641\u064a ' + parseTime + ' \u062b\u0627\u0646\u064a\u0629</p><p class="text-xs text-gray-500">\u062c\u0627\u0631\u064a \u0627\u0644\u062d\u0641\u0638 \u0641\u064a \u0642\u0627\u0639\u062f\u0629 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a...</p>';
+            
+            // ═══ إرسال البيانات المحللة للسيرفر ═══
+            var jsonStr = JSON.stringify(students);
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    var totalTime = ((Date.now() - t0) / 1000).toFixed(1);
+                    if (result && result.success) {
+                        statusEl.className = 'mt-4 bg-green-50 border border-green-200 rounded-lg p-4 text-center';
+                        statusEl.innerHTML = '<span class="material-symbols-outlined text-green-500 text-3xl">check_circle</span>'
+                            + '<p class="text-green-700 font-bold mt-2">\u062a\u0645 \u0627\u0633\u062a\u064a\u0631\u0627\u062f ' + result.imported + ' \u0637\u0627\u0644\u0628 \u0641\u064a ' + totalTime + ' \u062b\u0627\u0646\u064a\u0629</p>'
+                            + '<p class="text-sm text-gray-500">(' + (detectedSemester||'\u063a\u064a\u0631 \u0645\u062d\u062f\u062f') + ' \u2014 ' + period + ')</p>'
+                            + (result.grades ? '<p class="text-xs text-teal-600 mt-1">\u0627\u0644\u0635\u0641\u0648\u0641: ' + result.grades.join('\u060c ') + '</p>' : '')
+                            + (errors.length>0 ? '<details class="mt-2 text-xs text-amber-600"><summary>\u062a\u0646\u0628\u064a\u0647\u0627\u062a ('+errors.length+')</summary>'+errors.join('<br>')+'</details>' : '');
+                        loadAcademicData();
+                    } else {
+                        statusEl.className = 'mt-4 bg-red-50 border border-red-200 rounded-lg p-4 text-center';
+                        statusEl.innerHTML = '<span class="material-symbols-outlined text-red-500">error</span><p class="text-red-700 font-bold mt-2">\u062e\u0637\u0623: '+(result?result.error:'\u063a\u064a\u0631 \u0645\u0639\u0631\u0648\u0641')+'</p>';
+                    }
+                })
+                .withFailureHandler(function(err) {
+                    statusEl.className = 'mt-4 bg-red-50 border border-red-200 rounded-lg p-4 text-center';
+                    statusEl.innerHTML = '<span class="material-symbols-outlined text-red-500">error</span><p class="text-red-700">\u062e\u0637\u0623: '+err.message+'</p>';
+                })
+                .saveAcademicParsedData(jsonStr, currentStage, period);
+                
+        } catch(parseErr) {
+            statusEl.className = 'mt-4 bg-red-50 border border-red-200 rounded-lg p-4 text-center';
+            statusEl.innerHTML = '<span class="material-symbols-outlined text-red-500">error</span><p class="text-red-700">\u062e\u0637\u0623 \u0641\u064a \u0627\u0644\u062a\u062d\u0644\u064a\u0644: '+parseErr.message+'</p>';
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+// ═══ تحويل شيت SheetJS إلى مصفوفة ثنائية مع معالجة الخلايا المدمجة ═══
+function sheetTo2DArray(ws) {
+    var ref = ws['!ref'];
+    if (!ref) return null;
+    var range = XLSX.utils.decode_range(ref);
+    var maxR = Math.min(range.e.r, 69); // أول 70 صف
+    var maxC = Math.min(range.e.c, 49); // أول 50 عمود
+    
+    // بناء خريطة الدمج
+    var mergeMap = {};
+    var merges = ws['!merges'] || [];
+    for (var m = 0; m < merges.length; m++) {
+        var mg = merges[m];
+        var tlAddr = XLSX.utils.encode_cell({r: mg.s.r, c: mg.s.c});
+        for (var mr = mg.s.r; mr <= mg.e.r; mr++) {
+            for (var mc = mg.s.c; mc <= mg.e.c; mc++) {
+                if (mr !== mg.s.r || mc !== mg.s.c) {
+                    mergeMap[mr + ',' + mc] = tlAddr;
+                }
+            }
+        }
+    }
+    
+    var rows = [];
+    for (var r = 0; r <= maxR; r++) {
+        var row = [];
+        for (var c = 0; c <= maxC; c++) {
+            var addr = XLSX.utils.encode_cell({r: r, c: c});
+            var lookupAddr = mergeMap[r + ',' + c] || addr;
+            var cell = ws[lookupAddr];
+            row.push(cell && cell.v !== undefined ? String(cell.v) : '');
+        }
+        rows.push(row);
+    }
+    return rows;
+}
+
+// ═══ استخراج بيانات طالب من مصفوفة ثنائية (0-based) ═══
+function parseStudentFromArray(d, fallbackSemester) {
+    // دالة قراءة خلية (1-based like server code)
+    function c(row, col) {
+        if (row < 1 || row > d.length || col < 1 || col > d[0].length) return '';
+        return String(d[row-1][col-1] || '');
+    }
+    function toN(v) { var n = parseFloat(String(v)); return isNaN(n) ? 0 : n; }
+    
+    // البيانات الأساسية
+    var name = c(28, 35); // AI28
+    if (name.indexOf('\u0627\u0633\u0645 \u0627\u0644\u0637\u0627\u0644\u0628:') >= 0) name = name.replace('\u0627\u0633\u0645 \u0627\u0644\u0637\u0627\u0644\u0628:', '').trim();
+    if (!name) return null;
+    
+    var classNum = c(28, 27); // AA28
+    var identity = c(30, 19); // S30
+    if (!identity || identity === '0' || identity === 'undefined') return null;
+    
+    // الصف
+    var gradeText = c(19, 10); // J19
+    var grade = '';
+    if (gradeText.indexOf('\u0627\u0644\u0623\u0648\u0644') >= 0) grade = '\u0627\u0644\u0623\u0648\u0644 \u0627\u0644\u0645\u062a\u0648\u0633\u0637';
+    else if (gradeText.indexOf('\u0627\u0644\u062b\u0627\u0646\u064a') >= 0) grade = '\u0627\u0644\u062b\u0627\u0646\u064a \u0627\u0644\u0645\u062a\u0648\u0633\u0637';
+    else if (gradeText.indexOf('\u0627\u0644\u062b\u0627\u0644\u062b') >= 0) grade = '\u0627\u0644\u062b\u0627\u0644\u062b \u0627\u0644\u0645\u062a\u0648\u0633\u0637';
+    else grade = gradeText;
+    
+    // الفصل الدراسي
+    var semester = fallbackSemester || '';
+    if (!semester) {
+        for (var r = 0; r < Math.min(d.length, 25); r++) {
+            for (var cc = 0; cc < d[r].length; cc++) {
+                var v = d[r][cc] || '';
+                if (v.indexOf('\u0627\u0644\u0641\u0635\u0644 \u0627\u0644\u062f\u0631\u0627\u0633\u064a \u0627\u0644\u0623\u0648\u0644') >= 0 || v.indexOf('\u0627\u0644\u0641\u0635\u0644 \u0627\u0644\u0623\u0648\u0644') >= 0) { semester = '\u0627\u0644\u0641\u0635\u0644 \u0627\u0644\u0623\u0648\u0644'; break; }
+                else if (v.indexOf('\u0627\u0644\u0641\u0635\u0644 \u0627\u0644\u062f\u0631\u0627\u0633\u064a \u0627\u0644\u062b\u0627\u0646\u064a') >= 0 || v.indexOf('\u0627\u0644\u0641\u0635\u0644 \u0627\u0644\u062b\u0627\u0646\u064a') >= 0) { semester = '\u0627\u0644\u0641\u0635\u0644 \u0627\u0644\u062b\u0627\u0646\u064a'; break; }
+                else if (v.indexOf('\u0627\u0644\u0641\u0635\u0644 \u0627\u0644\u062f\u0631\u0627\u0633\u064a \u0627\u0644\u062b\u0627\u0644\u062b') >= 0 || v.indexOf('\u0627\u0644\u0641\u0635\u0644 \u0627\u0644\u062b\u0627\u0644\u062b') >= 0) { semester = '\u0627\u0644\u0641\u0635\u0644 \u0627\u0644\u062b\u0627\u0644\u062b'; break; }
+            }
+            if (semester) break;
+        }
+    }
+    
+    // المواد
+    var subjects = [], average = 0, generalGrade = '';
+    var maxSubjRow = Math.min(d.length, 60);
+    for (var r = 35; r <= maxSubjRow; r++) {
+        var auVal = c(r, 47).trim(); // AU
+        if (!auVal || auVal === '\u0627\u0644\u0645\u0648\u0627\u062f \u0627\u0644\u062f\u0631\u0627\u0633\u064a\u0629' || auVal === '\u0645\u062c\u0645\u0648\u0639 \u0627\u0644\u062f\u0631\u062c\u0627\u062a \u0627\u0644\u0645\u0648\u0632\u0648\u0646\u0629') continue;
+        if (auVal === '\u0627\u0644\u0645\u0639\u062f\u0644') { average = parseFloat(c(r, 24).replace('%','').trim()) || 0; continue; }
+        if (auVal === '\u0627\u0644\u062a\u0642\u062f\u064a\u0631 \u0627\u0644\u0639\u0627\u0645') { generalGrade = c(r, 37) || c(r, 24); continue; }
+        subjects.push({
+            name: auVal,
+            total: toN(c(r, 34)),      // AH
+            finalExam: toN(c(r, 38)),   // AL
+            evalTools: toN(c(r, 40)),   // AN
+            shortTests: toN(c(r, 45)), // AS
+            grade: c(r, 24)            // X
+        });
+    }
+    
+    // الترتيب والغياب والسلوك
+    var rankGrade='', rankClass='', absence='0', tardiness='0', behExc='', behPos='';
+    var scanEnd = Math.min(d.length, 68);
+    for (var r = 50; r <= scanEnd; r++) {
+        for (var cc = 0; cc < (d[r-1]||[]).length; cc++) {
+            var cv = d[r-1][cc] || '';
+            if (!cv) continue;
+            if (cv.indexOf('\u0627\u0644\u062a\u0631\u062a\u064a\u0628 \u0639\u0644\u0649 \u0627\u0644\u0635\u0641') >= 0) rankGrade = c(r, 7);
+            if (cv.indexOf('\u0627\u0644\u062a\u0631\u062a\u064a\u0628 \u0639\u0644\u0649 \u0627\u0644\u0641\u0635\u0644') >= 0) rankClass = c(r, 7);
+            if (cv.indexOf('\u063a\u064a\u0627\u0628 \u0628\u062f\u0648\u0646 \u0639\u0630\u0631') >= 0) absence = c(r, 9) || '0';
+            if (cv.indexOf('\u062a\u0623\u062e\u0631 \u0628\u062f\u0648\u0646 \u0639\u0630\u0631') >= 0) tardiness = c(r, 9) || '0';
+            if (cv.indexOf('\u062f\u0631\u062c\u0629 \u0627\u0644\u0633\u0644\u0648\u0643 \u0627\u0644\u0645\u062a\u0645\u064a\u0632') >= 0) behExc = c(r, 44);
+            if (cv.indexOf('\u062f\u0631\u062c\u0629 \u0627\u0644\u0633\u0644\u0648\u0643 \u0627\u0644\u0625\u064a\u062c\u0627\u0628\u064a') >= 0) behPos = c(r, 44);
+        }
+    }
+    
+    return {
+        name:name, identity:identity, grade:grade, classNum:classNum,
+        semester:semester, average:average, generalGrade:generalGrade,
+        rankGrade:rankGrade, rankClass:rankClass,
+        absence:absence, tardiness:tardiness,
+        behaviorExcellent:behExc, behaviorPositive:behPos,
+        subjects:subjects
+    };
+}
+
+function deleteAcadPeriod(semester, period) {
+    if (!confirm('\u0647\u0644 \u062a\u0631\u064a\u062f \u062d\u0630\u0641 \u0628\u064a\u0627\u0646\u0627\u062a ' + period + ' \u2014 ' + semester + '\u061f')) return;
+    google.script.run.withSuccessHandler(function(res) {
+        if (res && res.success) { showEnhancedToast('success', res.message); loadAcademicData(); }
+        else showEnhancedToast('danger', res ? res.error : '\u062e\u0637\u0623');
+    }).deleteAcademicPeriod(currentStage, semester, period);
+}
+
+// =================================================================
+// 6. تقارير تفصيلية
+// =================================================================
+function renderReportsTab(container) {
+    if (academicData.summary.length === 0) {
+        container.innerHTML = '<div class="bg-white rounded-xl shadow-sm border p-12 text-center"><span class="material-symbols-outlined text-6xl text-gray-300">inbox</span><p class="text-gray-400 mt-3">\u0644\u0627 \u062a\u0648\u062c\u062f \u0628\u064a\u0627\u0646\u0627\u062a</p></div>';
+        return;
+    }
+
+    var gradeOpts = '<option value="">\u0643\u0644 \u0627\u0644\u0635\u0641\u0648\u0641</option>' + [...new Set(academicData.summary.map(r=>r['\u0627\u0644\u0635\u0641']))].map(g=>'<option value="'+g+'">'+g+'</option>').join('');
+    var classOpts = '<option value="">\u0643\u0644 \u0627\u0644\u0641\u0635\u0648\u0644</option>' + [...new Set(academicData.summary.map(r=>r['\u0627\u0644\u0641\u0635\u0644']))].map(c=>'<option value="'+c+'">\u0641\u0635\u0644 '+c+'</option>').join('');
+    var periodOpts = '<option value="">\u0643\u0644 \u0627\u0644\u0641\u062a\u0631\u0627\u062a</option>' + academicData.periods.map(p=>'<option value="'+p.semester+'|'+p.period+'">'+p.semester+' \u2014 '+p.period+'</option>').join('');
+
+    container.innerHTML = '<div class="bg-white rounded-xl shadow-sm border p-5 mb-5">'
+        + '<h4 class="font-bold text-gray-700 mb-4">\ud83d\udd0d \u0628\u062d\u062b \u0648\u0641\u0644\u062a\u0631\u0629</h4>'
+        + '<div class="grid grid-cols-2 md:grid-cols-6 gap-3">'
+        + '<input id="acad-filter-name" type="text" placeholder="\u0628\u062d\u062b \u0628\u0627\u0644\u0627\u0633\u0645..." class="border border-gray-300 rounded-lg px-3 py-2 text-sm" oninput="applyAcadFilters()">'
+        + '<select id="acad-filter-grade" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" onchange="applyAcadFilters()">'+gradeOpts+'</select>'
+        + '<select id="acad-filter-class" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" onchange="applyAcadFilters()">'+classOpts+'</select>'
+        + '<select id="acad-filter-period" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" onchange="applyAcadFilters()">'+periodOpts+'</select>'
+        + '<input id="acad-filter-avg-above" type="number" placeholder="\u0645\u0639\u062f\u0644 \u0623\u0643\u062b\u0631 \u0645\u0646" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" oninput="applyAcadFilters()">'
+        + '<input id="acad-filter-avg-below" type="number" placeholder="\u0645\u0639\u062f\u0644 \u0623\u0642\u0644 \u0645\u0646" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" oninput="applyAcadFilters()"></div>'
+        + '<div class="flex flex-wrap gap-3 mt-3">'
+        + '<select id="acad-sort" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" onchange="applyAcadFilters()"><option value="avg_desc">\u0627\u0644\u0623\u0639\u0644\u0649 \u0645\u0639\u062f\u0644\u0627\u064b</option><option value="avg_asc">\u0627\u0644\u0623\u0642\u0644 \u0645\u0639\u062f\u0644\u0627\u064b</option><option value="name">\u0623\u0628\u062c\u062f\u064a</option></select>'
+        + '<button onclick="showSubjectReport()" class="bg-purple-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-600 transition-all">\ud83d\udcca \u062a\u0642\u0631\u064a\u0631 \u0645\u0627\u062f\u0629</button>'
+        + '<button onclick="showClassComparisonReport()" class="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-600 transition-all">\ud83c\udfeb \u0645\u0642\u0627\u0631\u0646\u0629 \u0641\u0635\u0648\u0644</button></div></div>'
+        + '<div id="acad-filter-summary" class="mb-3"></div><div id="acad-students-list" class="space-y-2"></div>';
+    applyAcadFilters();
+}
+
+function applyAcadFilters() {
+    var name = (document.getElementById('acad-filter-name')||{}).value||'';
+    var grade = (document.getElementById('acad-filter-grade')||{}).value||'';
+    var cls = (document.getElementById('acad-filter-class')||{}).value||'';
+    var pv = (document.getElementById('acad-filter-period')||{}).value||'';
+    var aa = parseFloat((document.getElementById('acad-filter-avg-above')||{}).value)||0;
+    var ab = parseFloat((document.getElementById('acad-filter-avg-below')||{}).value)||999;
+    var sort = (document.getElementById('acad-sort')||{}).value||'avg_desc';
+    var sem='',per=''; if(pv){var p=pv.split('|');sem=p[0];per=p[1];}
+
+    var res = academicData.summary.filter(function(r) {
+        if (name && String(r['\u0627\u0633\u0645_\u0627\u0644\u0637\u0627\u0644\u0628']).indexOf(name)<0) return false;
+        if (grade && r['\u0627\u0644\u0635\u0641']!==grade) return false;
+        if (cls && String(r['\u0627\u0644\u0641\u0635\u0644'])!==cls) return false;
+        if (sem && r['\u0627\u0644\u0641\u0635\u0644_\u0627\u0644\u062f\u0631\u0627\u0633\u064a']!==sem) return false;
+        if (per && r['\u0627\u0644\u0641\u062a\u0631\u0629']!==per) return false;
+        var avg=parseFloat(r['\u0627\u0644\u0645\u0639\u062f\u0644'])||0;
+        return avg>=aa && avg<=ab;
+    });
+
+    if (sort==='avg_desc') res.sort(function(a,b){return (parseFloat(b['\u0627\u0644\u0645\u0639\u062f\u0644'])||0)-(parseFloat(a['\u0627\u0644\u0645\u0639\u062f\u0644'])||0);});
+    else if (sort==='avg_asc') res.sort(function(a,b){return (parseFloat(a['\u0627\u0644\u0645\u0639\u062f\u0644'])||0)-(parseFloat(b['\u0627\u0644\u0645\u0639\u062f\u0644'])||0);});
+    else res.sort(function(a,b){return String(a['\u0627\u0633\u0645_\u0627\u0644\u0637\u0627\u0644\u0628']).localeCompare(String(b['\u0627\u0633\u0645_\u0627\u0644\u0637\u0627\u0644\u0628']),'ar');});
+
+    document.getElementById('acad-filter-summary').innerHTML = '<div class="text-sm text-gray-500">\u0627\u0644\u0646\u062a\u0627\u0626\u062c: <span class="font-bold text-purple-600">'+res.length+'</span> \u0637\u0627\u0644\u0628</div>';
+
+    var listEl = document.getElementById('acad-students-list');
+    listEl.innerHTML = res.slice(0,100).map(function(s,i) {
+        var avg=parseFloat(s['\u0627\u0644\u0645\u0639\u062f\u0644'])||0;
+        var c = avg>=95?'emerald':avg>=80?'blue':avg>=65?'amber':avg>=50?'orange':'red';
+        var absence = parseInt(s['\u0627\u0644\u063a\u064a\u0627\u0628'])||0;
+        return '<div class="bg-white rounded-lg border p-3 flex items-center gap-3 hover:shadow-md cursor-pointer transition-all" onclick="showStudentReport(\''+s['\u0631\u0642\u0645_\u0627\u0644\u0647\u0648\u064a\u0629']+'\')">'
+        + '<span class="text-sm font-bold text-gray-400 w-8 text-center">'+(i+1)+'</span>'
+        + '<div class="flex-1 min-w-0"><span class="font-bold text-gray-800">'+s['\u0627\u0633\u0645_\u0627\u0644\u0637\u0627\u0644\u0628']+'</span> <span class="text-xs text-gray-400 mr-2">'+s['\u0627\u0644\u0635\u0641']+' / \u0641\u0635\u0644 '+s['\u0627\u0644\u0641\u0635\u0644']+'</span></div>'
+        + '<div class="flex gap-2 items-center flex-shrink-0"><span class="text-xs text-gray-400">'+s['\u0627\u0644\u062a\u0642\u062f\u064a\u0631_\u0627\u0644\u0639\u0627\u0645']+'</span>'
+        + '<div class="bg-'+c+'-100 text-'+c+'-700 font-bold px-3 py-1 rounded-lg text-sm">'+avg.toFixed(1)+'%</div>'
+        + (absence>0?'<span class="text-xs text-red-500 bg-red-50 px-2 py-0.5 rounded">\u063a\u064a\u0627\u0628 '+absence+'</span>':'')
+        + '</div></div>';
+    }).join('');
+    if (res.length>100) listEl.innerHTML += '<div class="text-center text-sm text-gray-400 mt-3">\u064a\u062a\u0645 \u0639\u0631\u0636 \u0623\u0648\u0644 100</div>';
+}
+
+function filterStudentsByCategory(cat) {
+    var r = {excellent:[95,100],good:[80,94.99],average:[65,79.99],weak:[50,64.99],danger:[0,49.99]}[cat];
+    if (!r) return;
+    switchAcadTab('reports');
+    setTimeout(function(){
+        var a=document.getElementById('acad-filter-avg-above'),b=document.getElementById('acad-filter-avg-below');
+        if(a)a.value=r[0]; if(b)b.value=r[1]+0.01; applyAcadFilters();
+    },200);
+}
+
+// =================================================================
+// 7. تقرير طالب فردي
+// =================================================================
+function showStudentReport(identityNo) {
+    var main = document.getElementById('main-content');
+    main.innerHTML = '<div class="text-center py-16"><span class="material-symbols-outlined animate-spin text-teal-500 text-4xl">sync</span><p class="text-gray-500 mt-2">\u062c\u0627\u0631\u064a \u062a\u062d\u0645\u064a\u0644 \u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u0637\u0627\u0644\u0628...</p></div>';
+    google.script.run.withSuccessHandler(function(result) {
+        if (!result||!result.success) { showEnhancedToast('danger',result?result.error:'\u062e\u0637\u0623'); renderAcademicPage(); return; }
+        var s=result.student, a=result.analysis, latest=result.summary[result.summary.length-1];
+        var avg=parseFloat(latest['\u0627\u0644\u0645\u0639\u062f\u0644'])||0;
+        var ac=avg>=90?'emerald':avg>=75?'blue':avg>=60?'amber':'red';
+
+        main.innerHTML = '<div class="max-w-full">'
+        + '<button onclick="renderAcademicPage()" class="mb-4 text-teal-600 hover:text-teal-800 flex items-center gap-1"><span class="material-symbols-outlined">arrow_forward</span> \u0631\u062c\u0648\u0639</button>'
+        // بطاقة الطالب
+        + '<div class="bg-gradient-to-l from-'+ac+'-50 to-white rounded-xl shadow-sm border p-6 mb-5"><div class="flex justify-between items-start"><div><h2 class="text-xl font-extrabold text-gray-900">'+s.name+'</h2><p class="text-sm text-gray-500 mt-1">'+s.grade+' \u2014 \u0641\u0635\u0644 '+s.classNum+' | \u0627\u0644\u0647\u0648\u064a\u0629: '+s.identity+'</p></div><div class="text-center"><div class="text-4xl font-bold text-'+ac+'-600">'+avg.toFixed(1)+'%</div><div class="text-sm text-gray-500">'+latest['\u0627\u0644\u062a\u0642\u062f\u064a\u0631_\u0627\u0644\u0639\u0627\u0645']+'</div></div></div>'
+        + '<div class="grid grid-cols-4 md:grid-cols-8 gap-2 mt-5">'
+        + miniBox(latest['\u062a\u0631\u062a\u064a\u0628_\u0627\u0644\u0635\u0641']||'-','\u062a\u0631\u062a\u064a\u0628 \u0627\u0644\u0635\u0641','')
+        + miniBox(latest['\u062a\u0631\u062a\u064a\u0628_\u0627\u0644\u0641\u0635\u0644']||'-','\u062a\u0631\u062a\u064a\u0628 \u0627\u0644\u0641\u0635\u0644','')
+        + miniBox(a.absence,'\u0627\u0644\u063a\u064a\u0627\u0628',a.absence>0?'text-red-600':'text-green-600')
+        + miniBox(a.tardiness,'\u0627\u0644\u062a\u0623\u062e\u0631','')
+        + miniBox(a.strengths.length,'\u0645\u0648\u0627\u062f \u0642\u0648\u0629','text-emerald-600')
+        + miniBox(a.weaknesses.length,'\u0645\u0648\u0627\u062f \u0636\u0639\u0641','text-red-600')
+        + miniBox(a.behaviorExcellent||'-','\u0633\u0644\u0648\u0643 \u0645\u062a\u0645\u064a\u0632','')
+        + miniBox(a.behaviorPositive||'-','\u0633\u0644\u0648\u0643 \u0625\u064a\u062c\u0627\u0628\u064a','')
+        + '</div></div>'
+        // القوة والضعف + رادار
+        + '<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-5">'
+        + '<div class="bg-white rounded-xl shadow-sm border p-5"><h4 class="font-bold text-gray-700 mb-3">\ud83d\udcaa \u0646\u0642\u0627\u0637 \u0627\u0644\u0642\u0648\u0629 (\u226590%)</h4>'
+        + (a.strengths.length>0 ? a.strengths.map(function(x){return '<div class="flex items-center gap-2 p-2 bg-emerald-50 rounded-lg mb-1"><span class="material-symbols-outlined text-emerald-500 text-sm">check_circle</span><span class="text-sm">'+x+'</span></div>';}).join('') : '<p class="text-gray-400 text-sm">\u0644\u0627 \u064a\u0648\u062c\u062f</p>')
+        + '<h4 class="font-bold text-gray-700 mb-3 mt-5">\u26a0\ufe0f \u0646\u0642\u0627\u0637 \u0627\u0644\u0636\u0639\u0641 (<65%)</h4>'
+        + (a.weaknesses.length>0 ? a.weaknesses.map(function(x){return '<div class="flex items-center gap-2 p-2 bg-red-50 rounded-lg mb-1"><span class="material-symbols-outlined text-red-500 text-sm">warning</span><span class="text-sm">'+x+'</span></div>';}).join('') : '<p class="text-gray-400 text-sm">\u0644\u0627 \u064a\u0648\u062c\u062f</p>')
+        + (a.weaknessPattern!=='\u0644\u0627 \u064a\u0648\u062c\u062f' ? '<div class="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm"><strong>\u0646\u0645\u0637 \u0627\u0644\u0636\u0639\u0641:</strong> '+a.weaknessPattern+'</div>' : '')
+        + '</div>'
+        + '<div class="bg-white rounded-xl shadow-sm border p-5"><h4 class="font-bold text-gray-700 mb-3">\ud83d\udcca \u062e\u0631\u064a\u0637\u0629 \u0627\u0644\u0645\u0648\u0627\u062f</h4><canvas id="student-radar-chart" height="280"></canvas></div></div>'
+        // جدول الدرجات
+        + '<div class="bg-white rounded-xl shadow-sm border p-5 mb-5"><h4 class="font-bold text-gray-700 mb-3">\ud83d\udccb \u0627\u0644\u062f\u0631\u062c\u0627\u062a \u0627\u0644\u062a\u0641\u0635\u064a\u0644\u064a\u0629</h4><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="bg-gray-50 text-gray-600"><th class="p-2.5 text-right font-bold">\u0627\u0644\u0645\u0627\u062f\u0629</th><th class="p-2.5 text-center font-bold">\u0627\u0644\u0645\u062c\u0645\u0648\u0639</th><th class="p-2.5 text-center font-bold">\u0627\u062e\u062a\u0628\u0627\u0631 \u0646\u0647\u0627\u0626\u064a</th><th class="p-2.5 text-center font-bold">\u0623\u062f\u0648\u0627\u062a \u062a\u0642\u064a\u064a\u0645</th><th class="p-2.5 text-center font-bold">\u0627\u062e\u062a\u0628\u0627\u0631\u0627\u062a \u0642\u0635\u064a\u0631\u0629</th><th class="p-2.5 text-center font-bold">\u0627\u0644\u062a\u0642\u062f\u064a\u0631</th></tr></thead><tbody id="student-grades-tbody"></tbody></table></div></div>'
+        // النهائي vs أعمال السنة
+        + (a.examVsWork&&a.examVsWork.length>0 ? '<div class="bg-white rounded-xl shadow-sm border p-5 mb-5"><h4 class="font-bold text-gray-700 mb-3">\ud83d\udcc8 \u0627\u0644\u0627\u062e\u062a\u0628\u0627\u0631 \u0627\u0644\u0646\u0647\u0627\u0626\u064a \u0645\u0642\u0627\u0628\u0644 \u0623\u0639\u0645\u0627\u0644 \u0627\u0644\u0633\u0646\u0629</h4><canvas id="student-exam-vs-work" height="220"></canvas></div>' : '')
+        + '</div>';
+
+        // ملء الجدول
+        var tbody = document.getElementById('student-grades-tbody');
+        if (tbody) {
+            a.academicGrades.forEach(function(g) {
+                var gc = g.total>=90?'emerald':g.total>=70?'blue':g.total>=50?'amber':'red';
+                var fg = result.grades.find(function(gr){return gr['\u0627\u0644\u0645\u0627\u062f\u0629']===g.name && gr['\u0627\u0644\u0641\u0635\u0644_\u0627\u0644\u062f\u0631\u0627\u0633\u064a']===latest['\u0627\u0644\u0641\u0635\u0644_\u0627\u0644\u062f\u0631\u0627\u0633\u064a'] && gr['\u0627\u0644\u0641\u062a\u0631\u0629']===latest['\u0627\u0644\u0641\u062a\u0631\u0629'];});
+                tbody.innerHTML += '<tr class="border-b hover:bg-gray-50"><td class="p-2.5 font-bold">'+g.name+'</td><td class="p-2.5 text-center font-bold text-'+gc+'-600">'+g.total+'</td><td class="p-2.5 text-center">'+(fg?fg['\u0627\u062e\u062a\u0628\u0627\u0631_\u0646\u0647\u0627\u0626\u064a']||0:'-')+'</td><td class="p-2.5 text-center">'+(fg?fg['\u0623\u062f\u0648\u0627\u062a_\u062a\u0642\u064a\u064a\u0645']||0:'-')+'</td><td class="p-2.5 text-center">'+(fg?fg['\u0627\u062e\u062a\u0628\u0627\u0631\u0627\u062a_\u0642\u0635\u064a\u0631\u0629']||0:'-')+'</td><td class="p-2.5 text-center">'+g.grade+'</td></tr>';
+            });
+        }
+        drawStudentRadar(a.academicGrades.map(function(g){return g.name;}), a.academicGrades.map(function(g){return g.total;}));
+        if (a.examVsWork&&a.examVsWork.length>0) drawExamVsWork(a.examVsWork);
+    }).getStudentAcademicReport(currentStage, identityNo);
+}
+
+function miniBox(val, label, extraClass) {
+    return '<div class="text-center p-2 bg-white/70 rounded-lg border"><div class="text-lg font-bold '+(extraClass||'')+'">'+val+'</div><div class="text-xs text-gray-400">'+label+'</div></div>';
+}
+
+function drawStudentRadar(labels, data) {
+    var ctx = document.getElementById('student-radar-chart'); if(!ctx)return;
+    if(chartInstances['student-radar']) chartInstances['student-radar'].destroy();
+    chartInstances['student-radar'] = new Chart(ctx, {
+        type:'radar', data:{labels:labels,datasets:[{label:'\u0627\u0644\u062f\u0631\u062c\u0629',data:data,backgroundColor:'rgba(13,148,136,0.15)',borderColor:'#0d9488',borderWidth:2,pointBackgroundColor:data.map(function(d){return d>=90?'#10b981':d>=70?'#3b82f6':d>=50?'#f59e0b':'#ef4444';}),pointRadius:4}]},
+        options:{responsive:true,scales:{r:{min:0,max:100,ticks:{stepSize:20,font:{size:9}},pointLabels:{font:{size:10}}}},plugins:{legend:{display:false}}}
+    });
+}
+function drawExamVsWork(evw) {
+    var ctx = document.getElementById('student-exam-vs-work'); if(!ctx)return;
+    if(chartInstances['exam-vs-work']) chartInstances['exam-vs-work'].destroy();
+    chartInstances['exam-vs-work'] = new Chart(ctx, {
+        type:'bar', data:{labels:evw.map(function(e){return e.name;}),datasets:[{label:'\u0627\u062e\u062a\u0628\u0627\u0631 \u0646\u0647\u0627\u0626\u064a',data:evw.map(function(e){return e.finalExam;}),backgroundColor:'#3b82f6'},{label:'\u0623\u0639\u0645\u0627\u0644 \u0627\u0644\u0633\u0646\u0629',data:evw.map(function(e){return e.classWork;}),backgroundColor:'#10b981'}]},
+        options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true}}}
+    });
+}
+
+// =================================================================
+// 8. تقرير مادة
+// =================================================================
+function showSubjectReport() {
+    var subs = [...new Set(academicData.grades.map(function(r){return r['\u0627\u0644\u0645\u0627\u062f\u0629'];}).filter(function(s){return !['\u0627\u0644\u0633\u0644\u0648\u0643','\u0627\u0644\u0645\u0648\u0627\u0638\u0628\u0629','\u0627\u0644\u0646\u0634\u0627\u0637'].includes(s);}))];
+    var modal = document.createElement('div');
+    modal.id='acad-subject-modal';
+    modal.className='fixed inset-0 bg-black/50 flex items-center justify-center z-50';
+    modal.onclick=function(e){if(e.target===modal)modal.remove();};
+    modal.innerHTML='<div class="bg-white rounded-xl shadow-xl p-6 w-96 max-w-[90vw]"><h3 class="font-bold text-lg mb-4">\ud83d\udcca \u0627\u062e\u062a\u0631 \u0627\u0644\u0645\u0627\u062f\u0629</h3><select id="acad-subject-select" class="w-full border rounded-lg px-3 py-2 mb-4">'+subs.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('')+'</select><div class="flex gap-3"><button onclick="loadSubjectReport()" class="flex-1 bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600">\u0639\u0631\u0636</button><button onclick="document.getElementById(\'acad-subject-modal\').remove()" class="px-4 py-2 border rounded-lg hover:bg-gray-50">\u0625\u0644\u063a\u0627\u0621</button></div></div>';
+    document.body.appendChild(modal);
+}
+function loadSubjectReport() {
+    var subj=document.getElementById('acad-subject-select').value;
+    document.getElementById('acad-subject-modal').remove();
+    var gr=academicData.grades.filter(function(r){return r['\u0627\u0644\u0645\u0627\u062f\u0629']===subj;});
+    var tots=gr.map(function(r){return parseFloat(r['\u0627\u0644\u0645\u062c\u0645\u0648\u0639'])||0;});
+    var avg=tots.length?(tots.reduce(function(a,b){return a+b;},0)/tots.length).toFixed(1):0;
+    gr.sort(function(a,b){return (parseFloat(b['\u0627\u0644\u0645\u062c\u0645\u0648\u0639'])||0)-(parseFloat(a['\u0627\u0644\u0645\u062c\u0645\u0648\u0639'])||0);});
+    var c=document.getElementById('acad-students-list');
+    c.innerHTML='<div class="bg-purple-50 rounded-xl border border-purple-200 p-5 mb-4"><h4 class="font-bold text-purple-700 text-lg mb-3">\ud83d\udcca \u062a\u0642\u0631\u064a\u0631: '+subj+'</h4><div class="grid grid-cols-4 gap-3"><div class="text-center bg-white rounded-lg p-2 border"><div class="text-xl font-bold text-purple-600">'+gr.length+'</div><div class="text-xs">\u0637\u0627\u0644\u0628</div></div><div class="text-center bg-white rounded-lg p-2 border"><div class="text-xl font-bold text-blue-600">'+avg+'%</div><div class="text-xs">\u0627\u0644\u0645\u062a\u0648\u0633\u0637</div></div><div class="text-center bg-white rounded-lg p-2 border"><div class="text-xl font-bold text-emerald-600">'+tots.filter(function(t){return t>=90;}).length+'</div><div class="text-xs">\u226590%</div></div><div class="text-center bg-white rounded-lg p-2 border"><div class="text-xl font-bold text-red-600">'+tots.filter(function(t){return t<60;}).length+'</div><div class="text-xs"><60%</div></div></div></div>'
+    + gr.slice(0,50).map(function(g,i){var t=parseFloat(g['\u0627\u0644\u0645\u062c\u0645\u0648\u0639'])||0;var co=t>=90?'emerald':t>=70?'blue':t>=50?'amber':'red';return '<div class="bg-white rounded-lg border p-3 flex items-center gap-3 hover:shadow cursor-pointer transition-all" onclick="showStudentReport(\''+g['\u0631\u0642\u0645_\u0627\u0644\u0647\u0648\u064a\u0629']+'\')"><span class="text-sm font-bold text-gray-400 w-8 text-center">'+(i+1)+'</span><span class="flex-1 font-bold text-sm">'+g['\u0627\u0633\u0645_\u0627\u0644\u0637\u0627\u0644\u0628']+'</span><span class="text-xs text-gray-400">'+g['\u0627\u0644\u0635\u0641']+' / '+g['\u0627\u0644\u0641\u0635\u0644']+'</span><div class="bg-'+co+'-100 text-'+co+'-700 font-bold px-3 py-1 rounded-lg text-sm">'+t+'</div></div>';}).join('');
+}
+
+// =================================================================
+// 9. مقارنة الفصول
+// =================================================================
+function showClassComparisonReport() {
+    var c=document.getElementById('acad-students-list');
+    c.innerHTML='<div class="text-center py-8"><span class="material-symbols-outlined animate-spin text-blue-500 text-3xl">sync</span></div>';
+    var lp=academicData.periods.length>0?academicData.periods[academicData.periods.length-1]:{semester:'',period:''};
+    google.script.run.withSuccessHandler(function(result){
+        if(!result||!result.success)return;
+        var h='<div class="bg-blue-50 rounded-xl border border-blue-200 p-5 mb-4"><h4 class="font-bold text-blue-700 text-lg">\ud83c\udfeb \u0645\u0642\u0627\u0631\u0646\u0629 \u0627\u0644\u0641\u0635\u0648\u0644 \u062d\u0633\u0628 \u0627\u0644\u0645\u0627\u062f\u0629</h4></div>';
+        result.comparison.forEach(function(item){
+            h+='<div class="bg-white rounded-lg border p-4 mb-3"><h5 class="font-bold text-gray-700 mb-3">'+item.subject+'</h5><div class="grid grid-cols-'+Math.min(item.classes.length,4)+' gap-3">';
+            item.classes.forEach(function(cl){var co=cl.avg>=85?'emerald':cl.avg>=75?'blue':'amber';h+='<div class="text-center p-3 bg-'+co+'-50 rounded-lg border border-'+co+'-100"><div class="font-bold text-sm">'+cl.classLabel+'</div><div class="text-2xl font-bold text-'+co+'-600 my-1">'+cl.avg+'%</div><div class="text-xs text-gray-500">'+cl.count+' \u0637\u0627\u0644\u0628</div><div class="flex justify-center gap-2 text-xs mt-1"><span class="text-emerald-600">\u226590: '+cl.above90+'</span><span class="text-red-600"><60: '+cl.below60+'</span></div></div>';});
+            h+='</div></div>';
+        });
+        c.innerHTML=h;
+    }).getClassComparison(currentStage, lp.semester, lp.period);
+}
+
+// =================================================================
+// 10. الرسوم البيانية
+// =================================================================
+function renderChartsTab(container) {
+    if (!academicStats) {
+        container.innerHTML='<div class="bg-white rounded-xl shadow-sm border p-8 text-center"><span class="material-symbols-outlined text-5xl text-gray-300">bar_chart</span><p class="text-gray-400 mt-3">\u064a\u062a\u0645 \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a...</p></div>';
+        return;
+    }
+    container.innerHTML='<div class="grid grid-cols-1 md:grid-cols-2 gap-6">'
+    + '<div class="bg-white rounded-xl shadow-sm border p-5"><h4 class="font-bold text-gray-700 mb-3">\ud83c\udf69 \u062a\u0648\u0632\u064a\u0639 \u0627\u0644\u062a\u0642\u062f\u064a\u0631\u0627\u062a</h4><canvas id="chart-grade-dist" height="280"></canvas></div>'
+    + '<div class="bg-white rounded-xl shadow-sm border p-5"><h4 class="font-bold text-gray-700 mb-3">\ud83d\udcca \u062a\u0635\u0646\u064a\u0641 \u0627\u0644\u0637\u0644\u0627\u0628</h4><canvas id="chart-categories" height="280"></canvas></div>'
+    + '<div class="bg-white rounded-xl shadow-sm border p-5"><h4 class="font-bold text-gray-700 mb-3">\ud83d\udcda \u0645\u062a\u0648\u0633\u0637 \u0627\u0644\u0645\u0648\u0627\u062f</h4><canvas id="chart-subjects-avg" height="350"></canvas></div>'
+    + '<div class="bg-white rounded-xl shadow-sm border p-5"><h4 class="font-bold text-gray-700 mb-3">\ud83c\udfeb \u0645\u0642\u0627\u0631\u0646\u0629 \u0627\u0644\u0641\u0635\u0648\u0644</h4><canvas id="chart-class-compare" height="350"></canvas></div></div>';
+    setTimeout(function(){drawAllCharts(academicStats);},150);
+}
+
+function drawAllCharts(st) {
+    var c1=document.getElementById('chart-grade-dist');
+    if(c1){if(chartInstances['grade-dist'])chartInstances['grade-dist'].destroy();chartInstances['grade-dist']=new Chart(c1,{type:'doughnut',data:{labels:Object.keys(st.gradeDist),datasets:[{data:Object.values(st.gradeDist),backgroundColor:['#10b981','#3b82f6','#f59e0b','#ef4444','#6b7280']}]},options:{responsive:true,plugins:{legend:{position:'bottom'}}}});}
+    var c2=document.getElementById('chart-categories');
+    if(c2){var cat=st.categories;if(chartInstances['categories'])chartInstances['categories'].destroy();chartInstances['categories']=new Chart(c2,{type:'bar',data:{labels:['\u0645\u062a\u0641\u0648\u0642 \u226595','\u062c\u064a\u062f 80-94','\u0645\u062a\u0648\u0633\u0637 65-79','\u0636\u0639\u064a\u0641 50-64','\u062e\u0637\u0631 <50'],datasets:[{label:'\u0639\u062f\u062f',data:[cat.excellent,cat.good,cat.average,cat.weak,cat.danger],backgroundColor:['#10b981','#3b82f6','#f59e0b','#f97316','#ef4444'],borderRadius:6}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});}
+    var c3=document.getElementById('chart-subjects-avg');
+    if(c3){var cols=st.subjects.map(function(s){return s.avg>=90?'#10b981':s.avg>=80?'#3b82f6':s.avg>=70?'#f59e0b':'#ef4444';});if(chartInstances['subjects-avg'])chartInstances['subjects-avg'].destroy();chartInstances['subjects-avg']=new Chart(c3,{type:'bar',data:{labels:st.subjects.map(function(s){return s.name;}),datasets:[{label:'\u0627\u0644\u0645\u062a\u0648\u0633\u0637',data:st.subjects.map(function(s){return s.avg;}),backgroundColor:cols,borderRadius:4}]},options:{responsive:true,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{min:0,max:100}}}});}
+    var c4=document.getElementById('chart-class-compare');
+    if(c4&&st.classSummary){if(chartInstances['class-compare'])chartInstances['class-compare'].destroy();chartInstances['class-compare']=new Chart(c4,{type:'bar',data:{labels:st.classSummary.map(function(c){return c.label;}),datasets:[{label:'\u0627\u0644\u0645\u0639\u062f\u0644',data:st.classSummary.map(function(c){return c.avg;}),backgroundColor:'#3b82f6',borderRadius:4},{label:'\u0623\u0639\u0644\u0649',data:st.classSummary.map(function(c){return c.max;}),backgroundColor:'#10b981',borderRadius:4},{label:'\u0623\u0642\u0644',data:st.classSummary.map(function(c){return c.min;}),backgroundColor:'#ef4444',borderRadius:4}]},options:{responsive:true,scales:{y:{beginAtZero:true,max:100}}}});}
+}
+</script>

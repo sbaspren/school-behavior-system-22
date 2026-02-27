@@ -1,0 +1,1577 @@
+<script>
+// =================================================================
+// نظام الملاحظات التربوية - الإصدار الموحد (نمط التبويبات)
+// =================================================================
+
+let eduNotesRecords = [];
+let eduNotesAllRecords = [];
+let eduNotesTodayRecords = [];
+let eduNotesTypes = [];
+let eduNotesCurrentTab = 'today';
+let eduNotesViewMode = 'cards';
+let eduNotesCurrentTypeFilter = 'all';
+let selected_edu = new Set();
+
+// =================================================================
+// 1. الصفحة الرئيسية
+// =================================================================
+function renderEducationalNotesPage() {
+    const main = document.getElementById('main-content');
+    var _hd = new Date();
+    var _hjri = _hd.toLocaleDateString('ar-SA-u-ca-islamic', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    main.innerHTML = `
+        <div class="sec-notes">
+            <div class="page-hero">
+                <div class="hero-content">
+                    <div class="hero-info">
+                        <h1>الملاحظات التربوية — ${escapeHtml(getStageName_(currentStage))}</h1>
+                        <p>${_hjri}</p>
+                    </div>
+                    <div class="hero-stats">
+                        <div class="hero-stat"><div class="hero-stat-icon">📝</div><div class="hero-stat-num" id="edu-today-count">٠</div><div class="hero-stat-label">ملاحظات اليوم</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon">📊</div><div class="hero-stat-num" id="edu-total-count">٠</div><div class="hero-stat-label">إجمالي الملاحظات</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon">📤</div><div class="hero-stat-num" id="edu-unsent-count">٠</div><div class="hero-stat-label">لم تُرسل</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tabs-bar">
+                <div class="tab-item active" onclick="switchEduTab('today')" id="edu-tab-today"><span class="material-symbols-outlined">today</span> اليومي</div>
+                <div class="tab-item" onclick="switchEduTab('approved')" id="edu-tab-approved"><span class="material-symbols-outlined">verified</span> المعتمد</div>
+                <div class="tab-item" onclick="switchEduTab('reports')" id="edu-tab-reports"><span class="material-symbols-outlined">bar_chart</span> التقارير</div>
+            </div>
+
+            <div id="edu-tab-content"></div>
+        </div>
+        ${getAddEduNoteModalHTML()}
+        ${getEduNotesSettingsModalHTML()}
+        ${getEduSendWhatsAppModalHTML()}
+    `;
+
+    loadEduNotesTypes();
+    switchEduTab('today');
+}
+
+// =================================================================
+// 2. تبديل التبويبات
+// =================================================================
+function switchEduTab(tab) {
+    eduNotesCurrentTab = tab;
+    document.querySelectorAll('.sec-notes .tab-item').forEach(function(t) { t.classList.remove('active'); });
+    var btn = document.getElementById('edu-tab-' + tab);
+    if (btn) btn.classList.add('active');
+
+    if (tab === 'today') renderEduTodayTab();
+    else if (tab === 'approved') renderEduApprovedTab();
+    else if (tab === 'reports') renderEduReportsTab();
+}
+
+// =================================================================
+// 3. تبويب اليومي
+// =================================================================
+function renderEduTodayTab() {
+    const today = new Date();
+    const hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    const miladiDate = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
+    const dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
+    
+    const content = document.getElementById('edu-tab-content');
+    content.innerHTML = `
+        <div class="action-bar">
+            <div class="action-group">
+                <button onclick="openAddEduNoteModal()" class="btn-hero btn-hero-primary">
+                    <span class="material-symbols-outlined" style="font-size:18px">add_circle</span> تسجيل ملاحظة
+                </button>
+                <button onclick="loadEduTodayRecords()" class="btn-hero btn-hero-outline">
+                    <span class="material-symbols-outlined" style="font-size:18px">refresh</span> تحديث
+                </button>
+                <button onclick="openEduNotesSettingsModal()" class="btn-hero btn-hero-outline" style="color:#92400e;border-color:#fbbf24">
+                    <span class="material-symbols-outlined" style="font-size:18px">edit_note</span> أنواع الملاحظات
+                </button>
+            </div>
+            <div class="action-group">
+                <button onclick="sendSelectedTodayEdu()" id="btn-send-all-edu" class="btn-hero btn-hero-success" disabled>
+                    <span class="material-symbols-outlined" style="font-size:18px">send</span> إرسال للمحددين
+                </button>
+                <button onclick="printTodayEduNotes()" class="btn-hero btn-hero-outline">
+                    <span class="material-symbols-outlined" style="font-size:18px">print</span> طباعة
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div id="edu-today-table">
+                <div class="text-center py-16">
+                    <div class="loading-bar mx-auto"><div class="loading-bar-progress"></div></div>
+                    <p class="text-gray-500 mt-4">جاري تحميل البيانات...</p>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    loadEduTodayRecords();
+}
+
+// =================================================================
+// 4. تحميل البيانات
+// =================================================================
+function loadEduNotesTypes() {
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(types => {
+            eduNotesTypes = types || [];
+        }).getEducationalNotesTypes(currentStage);
+    }
+}
+
+function loadEduTodayRecords() {
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        showEnhancedToast('info', 'جاري تحديث البيانات...');
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                    eduNotesTodayRecords = result.records || [];
+                } else {
+                    eduNotesTodayRecords = [];
+                }
+                displayEduTodayTable();
+                updateEduCounts();
+                showEnhancedToast('success', 'تم التحديث ✓ (' + eduNotesTodayRecords.length + ' ملاحظة اليوم)');
+            })
+            .withFailureHandler(function(err) {
+                console.error('خطأ:', err);
+                eduNotesTodayRecords = [];
+                displayEduTodayTable();
+                showEnhancedToast('error', 'خطأ في التحديث: ' + err.message);
+            })
+            .getTodayEducationalNotesRecords(currentStage);
+    } else {
+        eduNotesTodayRecords = [];
+        displayEduTodayTable();
+    }
+}
+
+// دالة مساعدة: جلب حقل بأسماء متعددة (مسافة/شرطة_سفلية)
+function _gE(rec, name) {
+    if (!rec) return '';
+    var v = rec[name];
+    if (v !== undefined && v !== null && v !== '') return v;
+    var a = name.replace(/ /g, '_');
+    if (a !== name) { v = rec[a]; if (v !== undefined && v !== null && v !== '') return v; }
+    var b = name.replace(/_/g, ' ');
+    if (b !== name) { v = rec[b]; if (v !== undefined && v !== null && v !== '') return v; }
+    return '';
+}
+
+// ★ دوال مساعدة للجدول
+function classKey_edu_(rec) {
+    return (_gE(rec,'الصف')||'') + '/' + (_gE(rec,'الفصل')||'');
+}
+function sheetGroupInfo_edu_(sorted) {
+    var info = [], i = 0;
+    while (i < sorted.length) {
+        var key = classKey_edu_(sorted[i]), cnt = 1;
+        while (i + cnt < sorted.length && classKey_edu_(sorted[i + cnt]) === key) cnt++;
+        for (var j = 0; j < cnt; j++) info.push({ first: j === 0, span: cnt, border: i > 0 && j === 0 });
+        i += cnt;
+    }
+    return info;
+}
+function sortRecordsByClass_edu_(records) {
+    var go = {'الأول':1,'الثاني':2,'الثالث':3,'الرابع':4,'الخامس':5,'السادس':6};
+    return records.slice().sort(function(a, b) {
+        var gA = _gE(a,'الصف'), gB = _gE(b,'الصف'), oA = 99, oB = 99;
+        for (var k in go) { if (gA.indexOf(k) >= 0) { oA = go[k]; break; } }
+        for (var k in go) { if (gB.indexOf(k) >= 0) { oB = go[k]; break; } }
+        if (oA !== oB) return oA - oB;
+        var cA = parseInt(_gE(a,'الفصل')) || 0, cB = parseInt(_gE(b,'الفصل')) || 0;
+        if (cA !== cB) return cA - cB;
+        return (_gE(a,'اسم_الطالب')||'').localeCompare(_gE(b,'اسم_الطالب')||'','ar');
+    });
+}
+function countBadge_edu_(isSent, sendFn) {
+    if (isSent) return '<span class="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold"><span class="material-symbols-outlined text-[14px]">check_circle</span> تم</span>';
+    return '<button onclick="' + sendFn + '" class="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded-full text-xs font-bold hover:bg-green-100 border border-green-200"><span class="material-symbols-outlined text-[14px]">send</span> إرسال</button>';
+}
+// ★ طباعة توثيق تواصل فردي من الجدول
+function printEduTodayDoc(formId, idx) {
+    var rec = eduNotesTodayRecords[idx];
+    if (!rec) return;
+    var today = new Date();
+    var printData = {
+        studentName: _gE(rec, 'اسم الطالب') || '',
+        grade: (_gE(rec, 'الصف') || '') + ' / ' + (_gE(rec, 'الفصل') || ''),
+        violationDate: today.toLocaleDateString('ar-SA-u-ca-islamic'),
+        violationDay: today.toLocaleDateString('ar-SA', {weekday: 'long'}),
+        contactType: 'ملاحظة تربوية',
+        contactReason: (_gE(rec, 'نوع الملاحظة') || '') + ' - ' + (_gE(rec, 'التفاصيل') || ''),
+        contactResult: (_gE(rec, 'تم الإرسال') === 'نعم') ? 'تم التواصل عبر الواتساب' : 'لم يتم الإرسال بعد',
+        notes: 'المسجّل: ' + (_gE(rec, 'المعلم/المسجل') || '-')
+    };
+    if (typeof APP_DATA !== 'undefined' && APP_DATA.settings && APP_DATA.settings.manager) printData.managerName = APP_DATA.settings.manager;
+    printFormDirectly(formId, encodeURIComponent(JSON.stringify(printData)));
+}
+
+function displayEduTodayTable() {
+    const container = document.getElementById('edu-today-table');
+    
+    if (!eduNotesTodayRecords || eduNotesTodayRecords.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-16">
+                <span class="material-symbols-outlined text-gray-300 text-7xl">menu_book</span>
+                <p class="text-gray-500 mt-4 text-lg">لا توجد ملاحظات مسجلة اليوم</p>
+                <p class="text-gray-400 text-sm mt-2">اضغط "تسجيل ملاحظة" لإضافة ملاحظة جديدة</p>
+                <button onclick="openAddEduNoteModal()" class="mt-6 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-bold">
+                    <span class="material-symbols-outlined align-middle ml-1">add_circle</span> تسجيل ملاحظة
+                </button>
+            </div>
+        `;
+        const sendBtn = document.getElementById('btn-send-all-edu');
+        if (sendBtn) sendBtn.disabled = true;
+        return;
+    }
+    
+    const sendBtn = document.getElementById('btn-send-all-edu');
+    if (sendBtn) sendBtn.disabled = false;
+    
+    var sorted = sortRecordsByClass_edu_(eduNotesTodayRecords);
+    var groups = sheetGroupInfo_edu_(sorted);
+    var cntPos = 0, cntNeg = 0, cntGen = 0, cntSent = 0, cntUnsent = 0;
+    selected_edu.clear();
+    
+    var html = '<table class="sht"><thead><tr style="background:#059669">';
+    html += '<th style="width:36px"><input type="checkbox" id="sel-all-edu" onchange="toggleSelectAll_edu(this)" class="w-4 h-4 rounded accent-emerald-600 cursor-pointer"></th>';
+    html += '<th style="width:36px">#</th>';
+    html += '<th style="min-width:130px">اسم الطالب</th>';
+    html += '<th>نوع الملاحظة</th>';
+    html += '<th style="min-width:150px">التفاصيل</th>';
+    html += '<th>المسجّل</th>';
+    html += '<th style="width:80px">التواصل</th>';
+    html += '<th style="width:60px">نماذج</th>';
+    html += '</tr></thead><tbody>';
+
+    sorted.forEach(function(rec, idx) {
+        var g = groups[idx];
+        var origIdx = eduNotesTodayRecords.indexOf(rec);
+        var isSent = _gE(rec, 'تم الإرسال') === 'نعم' || _gE(rec, 'تم الإرسال') === true;
+        var noteType = _gE(rec, 'نوع الملاحظة') || '';
+        var cls = (idx % 2 === 0) ? 'rw' : 'rg';
+
+        if (g.first) {
+            var classLabel = escapeHtml((_gE(rec, 'الصف') || '') + ' / ' + (_gE(rec, 'الفصل') || ''));
+            if (idx > 0) html += '<tr class="sht-sep"><td colspan="8"></td></tr>';
+            html += '<tr class="sht-gh"><td colspan="8"><span class="sht-gl">' + classLabel + '</span> <span class="sht-gc">(' + g.span + ')</span></td></tr>';
+        }
+
+        if (isSent) cntSent++; else cntUnsent++;
+        var typeBadge = '';
+        if (noteType.indexOf('إيجابي') >= 0) { typeBadge = '<span class="text-green-700 font-bold text-xs">إيجابية</span>'; cntPos++; }
+        else if (noteType.indexOf('سلبي') >= 0) { typeBadge = '<span class="text-red-600 font-bold text-xs">سلبية</span>'; cntNeg++; }
+        else { typeBadge = '<span class="text-indigo-600 font-bold text-xs">' + escapeHtml(noteType || 'عامة') + '</span>'; cntGen++; }
+
+        html += '<tr class="' + cls + '">';
+        html += '<td class="px-2 py-2"><input type="checkbox" class="sel-edu w-4 h-4 rounded accent-emerald-600 cursor-pointer" data-idx="' + origIdx + '" onchange="toggleSelect_edu(' + origIdx + ')"></td>';
+        html += '<td>' + (idx + 1) + '</td>';
+        html += '<td class="nm">' + escapeHtml(_gE(rec, 'اسم الطالب') || '-') + '</td>';
+        html += '<td>' + typeBadge + '</td>';
+        html += '<td style="text-align:right;max-width:200px"><p class="truncate" title="' + escapeHtml(_gE(rec, 'التفاصيل') || '') + '">' + escapeHtml(_gE(rec, 'التفاصيل') || '-') + '</p></td>';
+        html += '<td class="text-xs text-gray-500">' + escapeHtml(_gE(rec, 'المعلم/المسجل') || '-') + '</td>';
+        html += '<td>' + countBadge_edu_(isSent, 'sendEduTodayWhatsApp(' + origIdx + ')') + '</td>';
+        html += '<td><div class="flex gap-0.5 justify-center"><button onclick="printEduTodayDoc(\'tawtheeq_tawasol\',' + origIdx + ')" class="p-1 text-green-500 hover:bg-green-50 rounded" title="توثيق تواصل"><span class="material-symbols-outlined text-[15px]">contact_phone</span></button></div></td>';
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table>';
+    html += '<div class="tbl-footer">';
+    html += '<div class="s"><div class="d" style="background:#dcfce7;border-color:#86efac"></div> إيجابية: ' + cntPos + '</div>';
+    html += '<div class="s"><div class="d" style="background:#fee2e2;border-color:#fca5a5"></div> سلبية: ' + cntNeg + '</div>';
+    html += '<div class="s"><div class="d" style="background:#e0e7ff;border-color:#a5b4fc"></div> عامة: ' + cntGen + '</div>';
+    html += '<div class="s" style="margin-right:auto"><div class="d" style="background:#d1fae5"></div> تم: ' + cntSent + '</div>';
+    html += '<div class="s"><div class="d" style="background:#fef3c7"></div> لم يُرسل: ' + cntUnsent + '</div>';
+    html += '</div>';
+    
+    container.innerHTML = html;
+}
+
+function updateEduCounts() {
+    const todayCount = eduNotesTodayRecords.length;
+    const totalCount = eduNotesAllRecords.length;
+    const unsentCount = eduNotesAllRecords.filter(r => _gE(r, 'تم الإرسال') !== 'نعم' && _gE(r, 'تم الإرسال') !== true).length;
+    
+    const el1 = document.getElementById('edu-today-total');
+    if (el1) el1.textContent = todayCount;
+    const el2 = document.getElementById('edu-today-count');
+    if (el2) el2.textContent = todayCount;
+    const el3 = document.getElementById('edu-total-count');
+    if (el3) el3.textContent = totalCount;
+    const el4 = document.getElementById('edu-unsent-count');
+    if (el4) el4.textContent = unsentCount;
+}
+
+// =================================================================
+// 5. إرسال واتساب من اليومي (مع محرر الرسالة)
+// =================================================================
+function sendEduTodayWhatsApp(idx) {
+    const rec = eduNotesTodayRecords[idx];
+    if (!rec) return;
+    
+    const phone = getStudentPhone(rec);
+    if (!phone) { showEnhancedToast('warning', 'لا يوجد رقم جوال لولي أمر الطالب'); return; }
+    
+    const today = new Date();
+    const dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
+    const hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    
+    const studentName = _gE(rec, 'اسم الطالب');
+    const grade = _gE(rec, 'الصف');
+    const cls = _gE(rec, 'الفصل');
+    const noteType = _gE(rec, 'نوع الملاحظة') || '';
+    const details = _gE(rec, 'التفاصيل') || '';
+    
+    var message = '📝 *إشعار ملاحظة تربوية*\n\nالسلام عليكم ورحمة الله وبركاته\nولي أمر الطالب: *' + studentName + '*\nالصف: ' + grade + ' - الفصل: ' + cls + '\n\nنود إبلاغكم بتسجيل ملاحظة تربوية على ابنكم:\n📌 *نوع الملاحظة:* ' + noteType + (details ? '\n📋 *التفاصيل:* ' + details : '') + '\n\n📅 اليوم: ' + dayName + ' - ' + hijriDate + '\n\nنأمل متابعة الطالب والتواصل مع المدرسة.\n\nمع تحيات إدارة مدرسة ' + (APP_DATA.settings.school_name || 'المدرسة') + '';
+
+    showMessageEditor_({
+        phone: phone,
+        studentName: studentName,
+        type: 'ملاحظة تربوية',
+        defaultMessage: message,
+        data: { اسم_الطالب: studentName, الصف: grade, الفصل: cls, نوع_الملاحظة: noteType, التفاصيل: details },
+        onSend: function(editedMsg) {
+            showEnhancedToast('info', 'جاري إرسال الإشعار...');
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    if (result && result.success) {
+                        showEnhancedToast('success', 'تم إرسال الإشعار لولي أمر ' + studentName);
+                        // ★ تحديث حالة الإرسال في الشيت
+                        google.script.run.updateEduNoteSentStatus(currentStage, [rec.rowIndex]);
+                        loadEduTodayRecords();
+                    } else {
+                        showEnhancedToast('danger', result.error || 'فشل الإرسال');
+                    }
+                })
+                .withFailureHandler(function(err) {
+                    showEnhancedToast('danger', 'خطأ: ' + err.message);
+                })
+                .sendWhatsAppWithLog({
+                    phone: phone,
+                    message: editedMsg,
+                    studentName: studentName,
+                    type: 'ملاحظة تربوية'
+                }, currentStage);
+        }
+    });
+}
+
+// =================================================================
+// ★ دوال التحديد (Checkboxes)
+// =================================================================
+function toggleSelect_edu(idx) {
+    if (selected_edu.has(idx)) selected_edu.delete(idx);
+    else selected_edu.add(idx);
+    updateSelBar_edu();
+    var allChks = document.querySelectorAll('.sel-edu');
+    var sa = document.getElementById('sel-all-edu');
+    if (sa) sa.checked = selected_edu.size === allChks.length && allChks.length > 0;
+}
+
+function toggleSelectAll_edu(cb) {
+    document.querySelectorAll('.sel-edu').forEach(function(c) {
+        c.checked = cb.checked;
+        var idx = parseInt(c.dataset.idx);
+        if (cb.checked) selected_edu.add(idx);
+        else selected_edu.delete(idx);
+    });
+    updateSelBar_edu();
+}
+
+function updateSelBar_edu() {
+    if (!document.getElementById('sel-bar-edu')) {
+        var bar = document.createElement('div');
+        bar.id = 'sel-bar-edu';
+        bar.className = 'hidden fixed bottom-4 left-1/2 -translate-x-1/2 bg-emerald-800/95 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-4 z-50 backdrop-blur-sm';
+        bar.innerHTML = '<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[18px]">check_circle</span> <span id="sel-cnt-edu" class="font-bold">٠</span> محدد</span>'
+            + '<span class="w-px h-6 bg-white/30"></span>'
+            + '<button onclick="printSelectedTodayEdu()" class="flex items-center gap-1.5 text-sm hover:text-purple-300 transition"><span class="material-symbols-outlined text-[16px]">print</span> طباعة</button>'
+            + '<button onclick="sendSelectedTodayEdu()" class="flex items-center gap-1.5 text-sm hover:text-green-300 transition"><span class="material-symbols-outlined text-[16px]">send</span> إرسال</button>'
+            + '<button onclick="clearSel_edu()" class="text-white/60 hover:text-white mr-2 transition"><span class="material-symbols-outlined text-[16px]">close</span></button>';
+        document.body.appendChild(bar);
+    }
+    var bar = document.getElementById('sel-bar-edu');
+    if (selected_edu.size > 0) {
+        bar.classList.remove('hidden');
+        document.getElementById('sel-cnt-edu').textContent = selected_edu.size;
+    } else bar.classList.add('hidden');
+    
+    var sendBtn = document.getElementById('btn-send-all-edu');
+    if (sendBtn) sendBtn.disabled = selected_edu.size === 0;
+}
+
+function clearSel_edu() {
+    selected_edu.clear();
+    document.querySelectorAll('.sel-edu').forEach(function(c){ c.checked = false; });
+    var sa = document.getElementById('sel-all-edu'); if(sa) sa.checked = false;
+    updateSelBar_edu();
+}
+
+function getSelectedRecords_edu() {
+    if (selected_edu.size === 0) return [];
+    return Array.from(selected_edu).sort().map(function(i){ return eduNotesTodayRecords[i]; }).filter(Boolean);
+}
+
+// =================================================================
+// ★ إرسال المحددين مع منبثقة مصممة
+// =================================================================
+function sendSelectedTodayEdu() {
+    var indices = Array.from(selected_edu).sort();
+    if (indices.length === 0) { showEnhancedToast('warning', 'حدد طلاب أولاً'); return; }
+    var unsent = indices.filter(function(i) {
+        var r = eduNotesTodayRecords[i];
+        return r && _gE(r, 'تم الإرسال') !== 'نعم' && _gE(r, 'تم الإرسال') !== true;
+    });
+    if (unsent.length === 0) { showEnhancedToast('info', 'جميع المحددين تم إرسالهم سابقاً'); clearSel_edu(); return; }
+    
+    showStyledConfirm_edu(
+        'إرسال إشعارات',
+        'سيتم إرسال إشعارات لـ ' + unsent.length + ' ولي أمر. ⏱️ ~' + Math.ceil(unsent.length * 35 / 60) + ' دقائق. متابعة؟',
+        'send',
+        function() {
+            showEnhancedToast('info', 'جاري إرسال ' + unsent.length + ' إشعار... (تقريباً ' + Math.ceil(unsent.length * 35 / 60) + ' دقائق)');
+            var successCount = 0, failCount = 0, total = unsent.length;
+            var sentRowIndices = [];
+            unsent.forEach(function(i, index) {
+                var rec = eduNotesTodayRecords[i];
+                if (!rec) { failCount++; checkDone(); return; }
+                var phone = getStudentPhone(rec);
+                if (!phone) { failCount++; checkDone(); return; }
+                
+                var today = new Date();
+                var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
+                var hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+                var studentName = _gE(rec, 'اسم الطالب');
+                var noteType = _gE(rec, 'نوع الملاحظة') || '';
+                var details = _gE(rec, 'التفاصيل') || '';
+                
+                var message = '📝 *إشعار ملاحظة تربوية*\n\nالسلام عليكم ورحمة الله وبركاته\nولي أمر الطالب: *' + studentName + '*\nالصف: ' + _gE(rec,'الصف') + ' - الفصل: ' + _gE(rec,'الفصل') + '\n\nنود إبلاغكم بتسجيل ملاحظة تربوية على ابنكم:\n📌 *نوع الملاحظة:* ' + noteType + (details ? '\n📋 *التفاصيل:* ' + details : '') + '\n\n📅 اليوم: ' + dayName + ' - ' + hijriDate + '\n\nنأمل متابعة الطالب والتواصل مع المدرسة.\n\nمع تحيات إدارة مدرسة ' + (APP_DATA.settings.school_name || 'المدرسة') + '';
+                
+                var sendDelay = index * 30000 + Math.floor(Math.random() * 10000);
+                setTimeout(function() {
+                    google.script.run
+                        .withSuccessHandler(function(res) {
+                            if (res && res.success) { successCount++; sentRowIndices.push(rec.rowIndex); }
+                            else failCount++;
+                            checkDone();
+                        })
+                        .withFailureHandler(function() { failCount++; checkDone(); })
+                        .sendWhatsAppWithLog({
+                            phone: phone, message: message,
+                            studentName: studentName, type: 'ملاحظة تربوية'
+                        }, currentStage);
+                }, sendDelay);
+            });
+            
+            function checkDone() {
+                if (successCount + failCount >= total) {
+                    showEnhancedToast('success', 'تم الإرسال: ' + successCount + ' ناجح' + (failCount ? '، ' + failCount + ' فاشل' : ''));
+                    // ★ تحديث حالة الإرسال في الشيت
+                    if (sentRowIndices.length > 0) {
+                        google.script.run.updateEduNoteSentStatus(currentStage, sentRowIndices);
+                    }
+                    clearSel_edu();
+                    loadEduTodayRecords();
+                }
+            }
+        }
+    );
+}
+
+function printSelectedTodayEdu() {
+    var recs = getSelectedRecords_edu();
+    if (recs.length === 0) { showEnhancedToast('warning', 'حدد طلاب أولاً'); return; }
+    var bak = eduNotesTodayRecords;
+    eduNotesTodayRecords = recs;
+    printTodayEduNotes();
+    eduNotesTodayRecords = bak;
+    clearSel_edu();
+}
+
+// =================================================================
+// ★ منبثقة تأكيد مصممة (بدل confirm القبيح)
+// =================================================================
+function showStyledConfirm_edu(title, message, icon, onConfirm) {
+    showStyledConfirm_({ title: title, message: message, icon: icon, color: 'emerald', onConfirm: onConfirm });
+}
+
+function sendAllTodayEduNotes() {
+    var allChks = document.querySelectorAll('.sel-edu');
+    allChks.forEach(function(c) {
+        var idx = parseInt(c.dataset.idx);
+        var rec = eduNotesTodayRecords[idx];
+        if (rec && _gE(rec, 'تم الإرسال') !== 'نعم' && _gE(rec, 'تم الإرسال') !== true) {
+            c.checked = true;
+            selected_edu.add(idx);
+        }
+    });
+    updateSelBar_edu();
+    sendSelectedTodayEdu();
+}
+
+
+// =================================================================
+// 6. طباعة اليومي
+// =================================================================
+function printTodayEduNotes() {
+    if (eduNotesTodayRecords.length === 0) {
+        showEnhancedToast('warning', 'لا يوجد بيانات للطباعة');
+        return;
+    }
+    var today = new Date();
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var miladi = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
+    var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
+    var stageName = getStageName_(currentStage);
+    
+    var sorted = sortRecordsByClass_edu_(eduNotesTodayRecords);
+    var rows = '', lastKey = '';
+    sorted.forEach(function(rec, i) {
+        var grade = _gE(rec, 'الصف'), cls = _gE(rec, 'الفصل');
+        var key = grade + cls;
+        if (key !== lastKey && i > 0) rows += '<tr class="sep-row"><td colspan="7"></td></tr>';
+        lastKey = key;
+        var isSent = _gE(rec, 'تم الإرسال') === 'نعم' || _gE(rec, 'تم الإرسال') === true;
+        rows += '<tr>'
+            + '<td class="data-cell">' + toArShared_(i+1) + '</td>'
+            + '<td class="name-cell">' + escapeHtml(_gE(rec, 'اسم الطالب') || '-') + '</td>'
+            + '<td class="data-cell">' + formatClassShared_(grade, cls) + '</td>'
+            + '<td class="data-cell">' + escapeHtml(_gE(rec, 'نوع الملاحظة') || '-') + '</td>'
+            + '<td class="detail-cell">' + escapeHtml(_gE(rec, 'التفاصيل') || '-') + '</td>'
+            + '<td class="data-cell">' + escapeHtml(_gE(rec, 'المعلم/المسجل') || '-') + '</td>'
+            + '<td class="data-cell" style="color:' + (isSent ? 'green' : '#999') + ';font-weight:bold">' + (isSent ? 'تم' : '-') + '</td>'
+            + '</tr>';
+    });
+    
+    var win = window.open('', '_blank');
+    win.document.write(buildSharedPrintPage_({
+        title: 'سجل الملاحظات التربوية ليوم ' + dayName,
+        subtitle: stageName,
+        dateText: hijri + ' \u00A0الموافق\u00A0 ' + miladi + ' م',
+        colCount: 7,
+        headers: '<th class="col-header" style="width:5%">م</th><th class="col-header" style="width:25%">اسم الطالب</th><th class="col-header" style="width:10%">الصف</th><th class="col-header" style="width:12%">نوع الملاحظة</th><th class="col-header" style="width:25%">التفاصيل</th><th class="col-header" style="width:13%">المسجّل</th><th class="col-header" style="width:7%">التواصل</th>',
+        rows: rows,
+        total: toArShared_(eduNotesTodayRecords.length) + ' ملاحظة'
+    }));
+    win.document.close();
+    setTimeout(function(){ win.print(); }, 300);
+}
+
+// =================================================================
+// 7. تبويب المعتمد (السجل التراكمي)
+// =================================================================
+var eduStudentGroups = []; // مصفوفة عامة لحفظ المجموعات
+var eduCurrentTypeFilter = 'all';
+
+function renderEduApprovedTab() {
+    const content = document.getElementById('edu-tab-content');
+    content.innerHTML = `
+        <!-- أزرار الأدوات -->
+        <div class="flex items-center gap-2 mb-4">
+            <button onclick="loadEduApprovedRecords()" class="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-xs font-bold">
+                <span class="material-symbols-outlined text-[16px]">refresh</span> تحديث
+            </button>
+            <button onclick="printEduApprovedList()" class="flex items-center gap-1.5 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-xs font-bold shadow-sm">
+                <span class="material-symbols-outlined text-[16px]">print</span> طباعة القائمة
+            </button>
+            <button onclick="sendApprovedEduNotes()" class="flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-bold shadow-sm">
+                <span class="material-symbols-outlined text-[16px]">send</span> إرسال
+            </button>
+            <button onclick="printEduContactReport()" class="flex items-center gap-1.5 px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-xs font-bold shadow-sm">
+                <span class="material-symbols-outlined text-[16px]">contact_phone</span> تقرير التواصل
+            </button>
+        </div>
+
+        <!-- الفلاتر - سطر واحد مدمج -->
+        <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-200 mb-4 sticky top-0 z-20">
+            <div class="flex flex-wrap items-center gap-2">
+                <div class="relative flex-shrink-0">
+                    <span class="material-symbols-outlined text-[18px] absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">search</span>
+                    <input type="text" id="edu-search" onkeyup="filterEduApproved()" placeholder="ابحث بالاسم..."
+                        class="w-48 pr-9 pl-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400">
+                </div>
+                <select id="edu-grade-filter" onchange="eduGradeChanged(); filterEduApproved()" class="px-2 py-1.5 rounded-lg border border-gray-300 text-xs bg-gray-50 flex-shrink-0"><option value="">كل الصفوف</option></select>
+                <select id="edu-class-filter" onchange="filterEduApproved()" class="px-2 py-1.5 rounded-lg border border-gray-300 text-xs bg-gray-50 flex-shrink-0"><option value="">كل الفصول</option></select>
+                <div class="flex bg-gray-100 rounded-lg p-0.5 flex-shrink-0">
+                    <button onclick="toggleEduView('cards')" id="edu-view-cards" class="p-1 rounded text-emerald-600 bg-white"><span class="material-symbols-outlined text-[18px]">grid_view</span></button>
+                    <button onclick="toggleEduView('table')" id="edu-view-table" class="p-1 rounded text-gray-400"><span class="material-symbols-outlined text-[18px]">table_rows</span></button>
+                </div>
+            </div>
+            
+            <!-- فلاتر النوع السريعة -->
+            <div class="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-gray-100">
+                <button onclick="setEduFilter('all')" id="edu-btn-all" class="edu-filter-btn active px-3 py-1 rounded-lg text-[11px] font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 border border-gray-200">الكل</button>
+                <span id="edu-type-buttons-container"></span>
+                <span class="w-px h-5 bg-gray-300 mx-1"></span>
+                <span class="text-[10px] text-gray-500" id="edu-results-count"></span>
+            </div>
+        </div>
+
+        <div id="edu-approved-container" class="min-h-[400px]">
+            <div class="text-center py-16"><div class="loading-bar mx-auto"><div class="loading-bar-progress"></div></div><p class="text-gray-500 mt-4">جاري تحميل البيانات...</p></div>
+        </div>
+
+        <!-- Modal تفاصيل الطالب -->
+        <div id="edu-detail-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" onclick="if(event.target===this)closeEduDetailModal()">
+            <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+            <div class="relative bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col animate-modal-in">
+                <div id="edu-modal-header" class="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gradient-to-l from-emerald-50 to-white flex-shrink-0">
+                    <div>
+                        <h3 id="edu-modal-name" class="text-lg font-bold text-gray-800"></h3>
+                        <p id="edu-modal-grade" class="text-sm text-gray-500"></p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span id="edu-modal-count" class="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-sm font-bold"></span>
+                        <button onclick="closeEduDetailModal()" class="p-1.5 hover:bg-gray-100 rounded-lg"><span class="material-symbols-outlined text-gray-500">close</span></button>
+                    </div>
+                </div>
+                <div id="edu-modal-body" class="p-6 overflow-y-auto flex-1"></div>
+            </div>
+        </div>
+
+        <!-- شريط الإجراءات الجماعية -->
+        <div id="edu-bulk-bar" class="hidden fixed bottom-0 left-0 right-0 bg-gray-900 text-white py-3 px-6 z-40 shadow-2xl">
+            <div class="max-w-full flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <span id="edu-selected-count" class="text-lg font-bold text-emerald-400">0</span>
+                    <span class="text-sm text-gray-300">طالب محدد</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="eduBulkPrint('tawtheeq_tawasol')" class="flex items-center gap-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded-lg text-xs font-bold">
+                        <span class="material-symbols-outlined text-[14px]">contact_phone</span> توثيق تواصل
+                    </button>
+                    <button onclick="eduBulkSendWhatsApp()" class="flex items-center gap-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded-lg text-xs font-bold">
+                        <span class="material-symbols-outlined text-[14px]">send</span> واتساب
+                    </button>
+                    <button onclick="clearEduApprovedSelection()" class="px-2 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs">
+                        <span class="material-symbols-outlined text-[14px]">close</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    populateEduApprovedFilters();
+    loadEduApprovedRecords();
+}
+
+function populateEduApprovedFilters() {
+    const grades = [...new Set(APP_DATA.students.filter(s => s['المرحلة'] === currentStage).map(s => s['الصف']))];
+    const gradeOrder = ["أول", "ثاني", "ثالث", "رابع", "خامس", "سادس"];
+    grades.sort((a, b) => {
+        const iA = gradeOrder.findIndex(k => a.includes(k));
+        const iB = gradeOrder.findIndex(k => b.includes(k));
+        return (iA === -1 ? 99 : iA) - (iB === -1 ? 99 : iB);
+    });
+    const sel = document.getElementById('edu-grade-filter');
+    sel.innerHTML = '<option value="">كل الصفوف</option>';
+    grades.forEach(g => sel.add(new Option(g, g)));
+    
+    // تعبئة أزرار الأنواع السريعة
+    var btnContainer = document.getElementById('edu-type-buttons-container');
+    if (btnContainer && eduNotesTypes.length > 0) {
+        var typeColors = ['emerald', 'blue', 'purple', 'amber', 'rose', 'cyan', 'indigo', 'teal'];
+        btnContainer.innerHTML = eduNotesTypes.map(function(t, i) {
+            var c = typeColors[i % typeColors.length];
+            return '<button onclick="setEduFilter(\'' + t.replace(/'/g, "\\'") + '\')" id="edu-btn-' + i + '" class="edu-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold text-' + c + '-800 bg-' + c + '-50 border border-' + c + '-200 hover:bg-' + c + '-100">' + t + '</button>';
+        }).join('');
+    }
+}
+
+function eduGradeChanged() {
+    const grade = document.getElementById('edu-grade-filter').value;
+    const classSel = document.getElementById('edu-class-filter');
+    classSel.innerHTML = '<option value="">كل الفصول</option>';
+    if (grade) {
+        const classes = [...new Set(APP_DATA.students.filter(s => s['المرحلة'] === currentStage && s['الصف'] === grade).map(s => s['الفصل']))];
+        classes.sort((a, b) => String(a).localeCompare(String(b), 'ar', {numeric: true}));
+        classes.forEach(c => classSel.add(new Option(c, c)));
+    }
+}
+
+function loadEduApprovedRecords() {
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                    eduNotesAllRecords = result.records || [];
+                } else if (Array.isArray(result)) {
+                    eduNotesAllRecords = result;
+                } else {
+                    eduNotesAllRecords = [];
+                }
+                filterEduApproved();
+            })
+            .withFailureHandler(function(err) {
+                console.error('خطأ:', err);
+                eduNotesAllRecords = [];
+                filterEduApproved();
+            })
+            .getEducationalNotesRecords(currentStage);
+    }
+}
+
+function setEduFilter(type) {
+    eduCurrentTypeFilter = type;
+    document.querySelectorAll('.edu-filter-btn').forEach(function(btn) {
+        btn.classList.remove('active');
+        btn.style.opacity = '0.6';
+    });
+    if (type === 'all') {
+        document.getElementById('edu-btn-all').classList.add('active');
+        document.getElementById('edu-btn-all').style.opacity = '1';
+    } else {
+        document.getElementById('edu-btn-all').style.opacity = '0.6';
+        var btns = document.querySelectorAll('.edu-filter-btn');
+        btns.forEach(function(b) { if (b.textContent.trim() === type) { b.classList.add('active'); b.style.opacity = '1'; } });
+    }
+    filterEduApproved();
+}
+
+function filterEduApproved() {
+    const search = (document.getElementById('edu-search')?.value || '').trim();
+    const grade = document.getElementById('edu-grade-filter')?.value || '';
+    const cls = document.getElementById('edu-class-filter')?.value || '';
+    
+    let filtered = eduNotesAllRecords.filter(r => {
+        if (search && !(_gE(r, 'اسم الطالب') || '').includes(search)) return false;
+        if (grade && _gE(r, 'الصف') !== grade) return false;
+        if (cls && _gE(r, 'الفصل') != cls) return false;
+        if (eduCurrentTypeFilter !== 'all' && _gE(r, 'نوع الملاحظة') !== eduCurrentTypeFilter) return false;
+        return true;
+    });
+    
+    filtered.sort((a, b) => {
+        const gradeOrder = ["أول", "ثاني", "ثالث"];
+        const gA = gradeOrder.findIndex(k => (_gE(a, 'الصف') || '').includes(k));
+        const gB = gradeOrder.findIndex(k => (_gE(b, 'الصف') || '').includes(k));
+        if (gA !== gB) return (gA === -1 ? 99 : gA) - (gB === -1 ? 99 : gB);
+        if (_gE(a, 'الفصل') !== _gE(b, 'الفصل')) return String(_gE(a, 'الفصل')).localeCompare(String(_gE(b, 'الفصل')), 'ar');
+        return (_gE(a, 'اسم الطالب') || '').localeCompare(_gE(b, 'اسم الطالب') || '', 'ar');
+    });
+    
+    // عدد النتائج
+    var countEl = document.getElementById('edu-results-count');
+    if (countEl) countEl.textContent = filtered.length + ' ملاحظة';
+    
+    displayEduApproved(filtered);
+}
+
+function displayEduApproved(records) {
+    const container = document.getElementById('edu-approved-container');
+    if (!records || records.length === 0) {
+        container.innerHTML = '<div class="text-center py-16 bg-white rounded-xl border border-gray-200"><span class="material-symbols-outlined text-gray-300 text-6xl">search_off</span><p class="text-gray-500 mt-2">لا توجد ملاحظات مطابقة</p></div>';
+        return;
+    }
+    if (eduNotesViewMode === 'table') {
+        container.innerHTML = createEduApprovedTable(records);
+    } else {
+        container.innerHTML = createEduApprovedCards(records);
+    }
+}
+
+function createEduApprovedCards(records) {
+    // تجميع حسب الطالب
+    const groups = {};
+    records.forEach(rec => {
+        const key = String(_gE(rec, 'رقم الطالب') || _gE(rec, 'اسم الطالب'));
+        if (!groups[key]) groups[key] = { info: rec, notes: [] };
+        groups[key].notes.push(rec);
+    });
+    
+    const orderedIds = [...new Set(records.map(r => String(_gE(r, 'رقم الطالب') || _gE(r, 'اسم الطالب'))))];
+    eduStudentGroups = orderedIds.map(id => groups[id]);
+    
+    let html = '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">';
+    
+    eduStudentGroups.forEach((g, gIdx) => {
+        const notes = g.notes;
+        const name = _gE(g.info, 'اسم الطالب');
+        const grade = _gE(g.info, 'الصف');
+        const cls = _gE(g.info, 'الفصل');
+        const total = notes.length;
+        
+        // إحصائيات حسب النوع
+        const typeCounts = {};
+        notes.forEach(n => {
+            var t = _gE(n, 'نوع الملاحظة') || 'أخرى';
+            typeCounts[t] = (typeCounts[t] || 0) + 1;
+        });
+        
+        // عدد المرسلة وغير المرسلة
+        const sentCount = notes.filter(n => _gE(n, 'تم الإرسال') === 'نعم').length;
+        const notSentCount = total - sentCount;
+        
+        // لون الحدود
+        let border = 'border-gray-200';
+        if (notSentCount > 0) border = 'border-orange-300';
+        if (total >= 5) border = 'border-emerald-400';
+        if (total >= 10) border = 'border-emerald-600';
+        
+        // أزرار الأنواع
+        var typeColors = ['emerald', 'blue', 'purple', 'amber', 'rose', 'cyan', 'indigo', 'teal'];
+        var typeBadges = Object.keys(typeCounts).map(function(t, i) {
+            var c = typeColors[eduNotesTypes.indexOf(t) % typeColors.length] || 'gray';
+            return '<div class="flex-1 text-center rounded-lg py-1.5 bg-' + c + '-50 border border-' + c + '-200"><p class="text-base font-black text-' + c + '-700">' + typeCounts[t] + '</p><p class="text-[8px] text-' + c + '-600 truncate px-0.5">' + escapeHtml(t) + '</p></div>';
+        }).join('');
+        
+        html += `
+            <div class="bg-white rounded-xl border-2 ${border} p-4 hover:shadow-lg transition-all cursor-pointer group" onclick="openEduDetailModal(${gIdx})">
+                <div class="flex justify-between items-start mb-3">
+                    <div class="flex items-center gap-1">
+                        <span class="text-[22px] font-black text-emerald-600">${total}</span>
+                        <span class="text-[10px] text-gray-400">ملاحظة</span>
+                    </div>
+                    ${notSentCount > 0 ? '<span class="text-[10px] font-bold text-orange-800 bg-orange-100 px-2 py-0.5 rounded-full border border-orange-300">' + notSentCount + ' لم يُرسل</span>' : '<span class="text-[10px] font-bold text-green-800 bg-green-100 px-2 py-0.5 rounded-full border border-green-300">تم الإرسال ✓</span>'}
+                </div>
+                
+                <h3 class="font-bold text-gray-800 text-sm leading-tight">${escapeHtml(name)}</h3>
+                <p class="text-xs text-gray-500 mt-0.5 mb-3">${escapeHtml(grade)}/${escapeHtml(cls)}</p>
+                
+                <div class="flex gap-1.5 justify-center mb-3">
+                    ${typeBadges || '<div class="flex-1 text-center rounded-lg py-1.5 bg-gray-50"><p class="text-base font-black text-gray-400">0</p><p class="text-[8px] text-gray-400">ملاحظات</p></div>'}
+                </div>
+                
+                <div class="text-center text-[11px] text-emerald-600 font-bold group-hover:text-emerald-800 flex items-center justify-center gap-1">
+                    <span class="material-symbols-outlined text-[14px]">open_in_new</span>
+                    عرض ${total} ملاحظات
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+// =================================================================
+// Modal تفاصيل ملاحظات الطالب
+// =================================================================
+function openEduDetailModal(groupIndex) {
+    const group = eduStudentGroups[groupIndex];
+    if (!group) return;
+    
+    const notes = group.notes;
+    const info = group.info;
+    document.getElementById('edu-modal-name').textContent = _gE(info, 'اسم الطالب');
+    document.getElementById('edu-modal-grade').textContent = _gE(info, 'الصف') + ' / ' + _gE(info, 'الفصل');
+    document.getElementById('edu-modal-count').textContent = notes.length + ' ملاحظة';
+    
+    var typeColors = ['emerald', 'blue', 'purple', 'amber', 'rose', 'cyan', 'indigo', 'teal'];
+    let html = '<div class="space-y-3">';
+    
+    notes.forEach((n, i) => {
+        var noteType = _gE(n, 'نوع الملاحظة') || 'أخرى';
+        var colorIdx = eduNotesTypes.indexOf(noteType);
+        var color = typeColors[colorIdx >= 0 ? colorIdx % typeColors.length : 0];
+        var sentBadge = _gE(n, 'تم الإرسال') === 'نعم'
+            ? '<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">تم ✓</span>'
+            : '<span class="px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full text-[10px] font-bold">لم يُرسل</span>';
+        
+        html += `
+            <div class="border border-gray-200 rounded-xl p-4 hover:bg-gray-50 transition-colors border-r-4 border-r-${color}-500">
+                <div class="flex justify-between items-start mb-2">
+                    <p class="font-bold text-sm text-gray-800 flex-1">${escapeHtml(_gE(n, 'التفاصيل') || '-')}</p>
+                    <div class="flex items-center gap-2 flex-shrink-0 mr-3">
+                        <span class="text-[10px] text-gray-400">${toIndic(_gE(n, 'التاريخ') || '')}</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="px-2 py-0.5 bg-${color}-100 text-${color}-700 rounded text-[10px] font-bold">${escapeHtml(noteType)}</span>
+                    ${sentBadge}
+                    <span class="text-[10px] text-gray-400">${escapeHtml(_gE(n, 'المعلم/المسجل') || _gE(n, 'المسجل') || '')}</span>
+                </div>
+                <div class="flex gap-1.5 flex-wrap mt-2">
+                    <button onclick="printFormDirectly('tawtheeq_tawasol','${escapeHtml(encodeURIComponent(JSON.stringify({studentName:_gE(n,'اسم الطالب')||'', grade:_gE(n,'الصف')||'', class:_gE(n,'الفصل')||'', noteType:noteType, details:_gE(n,'التفاصيل')||''})))}')" class="flex items-center gap-1 px-2.5 py-1.5 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 text-[11px] font-bold border border-green-200"><span class="material-symbols-outlined text-[13px]">contact_phone</span> توثيق تواصل</button>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    document.getElementById('edu-modal-body').innerHTML = html;
+    document.getElementById('edu-detail-modal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeEduDetailModal() {
+    document.getElementById('edu-detail-modal').classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+// دوال الإجراءات الجماعية (placeholder)
+function sendApprovedEduNotes() { showEnhancedToast('info', 'جاري الإرسال...'); }
+function printEduContactReport() { showEnhancedToast('info', 'جاري إعداد التقرير...'); }
+function eduBulkPrint(formId) { showEnhancedToast('info', 'جاري الطباعة...'); }
+function eduBulkSendWhatsApp() { showEnhancedToast('info', 'جاري الإرسال...'); }
+function clearEduApprovedSelection() { document.getElementById('edu-bulk-bar')?.classList.add('hidden'); }
+
+function createEduApprovedTable(records) {
+    let html = `<div class="overflow-x-auto"><table class="min-w-full divide-y divide-gray-200 bg-white rounded-lg border border-gray-200">
+        <thead class="bg-gray-50"><tr>
+            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500">الطالب</th>
+            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500">الصف</th>
+            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">نوع الملاحظة</th>
+            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500">التفاصيل</th>
+            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">التاريخ</th>
+            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">الإرسال</th>
+        </tr></thead><tbody class="divide-y divide-gray-200">`;
+    
+    records.forEach(rec => {
+        const sentBadge = _gE(rec, 'تم الإرسال') === 'نعم'
+            ? '<span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">تم ✓</span>'
+            : '<span class="px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-bold">لم يُرسل</span>';
+        
+        html += `<tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 text-sm font-bold text-gray-900">${escapeHtml(_gE(rec, 'اسم الطالب'))}</td>
+            <td class="px-4 py-3 text-sm text-gray-500">${escapeHtml(_gE(rec, 'الصف'))} / ${escapeHtml(_gE(rec, 'الفصل'))}</td>
+            <td class="px-4 py-3 text-center"><span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-bold">${escapeHtml(_gE(rec, 'نوع الملاحظة') || '')}</span></td>
+            <td class="px-4 py-3 text-sm text-gray-700 max-w-xs truncate" title="${escapeHtml(_gE(rec, 'التفاصيل') || '')}">${escapeHtml(_gE(rec, 'التفاصيل') || '-')}</td>
+            <td class="px-4 py-3 text-center text-sm text-gray-500">${toIndic(_gE(rec, 'التاريخ') || '')}</td>
+            <td class="px-4 py-3 text-center">${sentBadge}</td>
+        </tr>`;
+    });
+    html += '</tbody></table></div>';
+    return html;
+}
+
+function toggleEduView(view) {
+    eduNotesViewMode = view;
+    document.getElementById('edu-view-cards').classList.toggle('text-emerald-600', view === 'cards');
+    document.getElementById('edu-view-cards').classList.toggle('bg-white', view === 'cards');
+    document.getElementById('edu-view-cards').classList.toggle('text-gray-400', view !== 'cards');
+    document.getElementById('edu-view-table').classList.toggle('text-emerald-600', view === 'table');
+    document.getElementById('edu-view-table').classList.toggle('bg-white', view === 'table');
+    document.getElementById('edu-view-table').classList.toggle('text-gray-400', view !== 'table');
+    filterEduApproved();
+}
+
+function printEduApprovedList() {
+    var grade = document.getElementById('edu-grade-filter') ? document.getElementById('edu-grade-filter').value : '';
+    var cls = document.getElementById('edu-class-filter') ? document.getElementById('edu-class-filter').value : '';
+    
+    var filtered = eduNotesAllRecords.filter(function(r) {
+        return (!grade || r['الصف'] === grade) && (!cls || r['الفصل'] == cls);
+    });
+
+    if (filtered.length === 0) {
+        showEnhancedToast('warning', 'لا توجد بيانات للطباعة');
+        return;
+    }
+    
+    var today = new Date();
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var miladi = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
+    var stageName = getStageName_(currentStage);
+    var titleText = 'سجل الملاحظات التربوية' + (grade ? ' - ' + grade : '') + (cls ? ' / ' + cls : '');
+    
+    var sorted = sortRecordsByClass_edu_(filtered);
+    var rows = '', lastKey = '';
+    sorted.forEach(function(rec, i) {
+        var g = _gE(rec, 'الصف'), c = _gE(rec, 'الفصل');
+        var key = g + c;
+        if (key !== lastKey && i > 0) rows += '<tr class="sep-row"><td colspan="7"></td></tr>';
+        lastKey = key;
+        rows += '<tr>'
+            + '<td class="data-cell">' + toArShared_(i+1) + '</td>'
+            + '<td class="name-cell">' + escapeHtml(_gE(rec, 'اسم الطالب') || '-') + '</td>'
+            + '<td class="data-cell">' + formatClassShared_(g, c) + '</td>'
+            + '<td class="data-cell">' + escapeHtml(_gE(rec, 'نوع الملاحظة') || '-') + '</td>'
+            + '<td class="detail-cell">' + escapeHtml(_gE(rec, 'التفاصيل') || '-') + '</td>'
+            + '<td class="data-cell">' + escapeHtml(_gE(rec, 'المعلم/المسجل') || '-') + '</td>'
+            + '<td class="data-cell">' + toArShared_(_gE(rec, 'التاريخ') || '-') + '</td>'
+            + '</tr>';
+    });
+    
+    var win = window.open('', '_blank');
+    win.document.write(buildSharedPrintPage_({
+        title: titleText,
+        subtitle: stageName,
+        dateText: hijri + ' \u00A0الموافق\u00A0 ' + miladi + ' م',
+        colCount: 7,
+        headers: '<th class="col-header" style="width:5%">م</th><th class="col-header" style="width:22%">اسم الطالب</th><th class="col-header" style="width:10%">الصف</th><th class="col-header" style="width:12%">النوع</th><th class="col-header" style="width:25%">التفاصيل</th><th class="col-header" style="width:13%">المسجّل</th><th class="col-header" style="width:10%">التاريخ</th>',
+        rows: rows,
+        total: toArShared_(filtered.length) + ' ملاحظة'
+    }));
+    win.document.close();
+    setTimeout(function(){ win.focus(); win.print(); }, 300);
+}
+
+// =================================================================
+// 8. تبويب التقارير
+// =================================================================
+function renderEduReportsTab() {
+    const content = document.getElementById('edu-tab-content');
+    content.innerHTML = `
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-5">
+            <div class="flex flex-wrap gap-4 items-end">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">الصف</label>
+                    <select id="erep-grade" onchange="erepPopulateClasses()" class="w-40 border-gray-300 rounded-lg text-sm h-10">
+                        <option value="">كل الصفوف</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">الفصل</label>
+                    <select id="erep-class" class="w-32 border-gray-300 rounded-lg text-sm h-10 disabled:bg-gray-50" disabled>
+                        <option value="">كل الفصول</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">من تاريخ</label>
+                    <input type="date" id="erep-from" class="border-gray-300 rounded-lg text-sm h-10">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">إلى تاريخ</label>
+                    <input type="date" id="erep-to" class="border-gray-300 rounded-lg text-sm h-10">
+                </div>
+                <button onclick="generateEduCharts()" class="mb-0.5 bg-indigo-600 text-white px-6 h-10 rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[18px]">refresh</span> تحديث
+                </button>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-r-4 border-r-emerald-500">
+                <div class="text-3xl font-bold text-emerald-600 mb-1" id="erep-total">٠</div>
+                <div class="text-sm text-gray-500">إجمالي الملاحظات</div>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-r-4 border-r-blue-500">
+                <div class="text-3xl font-bold text-blue-600 mb-1" id="erep-students">٠</div>
+                <div class="text-sm text-gray-500">عدد الطلاب</div>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-r-4 border-r-green-500">
+                <div class="text-3xl font-bold text-green-600 mb-1" id="erep-sent">٠</div>
+                <div class="text-sm text-gray-500">تم إرسالها</div>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-r-4 border-r-orange-500">
+                <div class="text-3xl font-bold text-orange-600 mb-1" id="erep-unsent">٠</div>
+                <div class="text-sm text-gray-500">لم تُرسل</div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="px-5 py-4 border-b border-gray-100 bg-red-50">
+                    <h3 class="font-bold text-gray-800 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-red-600">trending_up</span>
+                        أكثر الطلاب ملاحظات
+                    </h3>
+                </div>
+                <div id="erep-top-students" class="p-4">
+                    <p class="text-gray-400 text-center py-8">اضغط "تحديث" لعرض البيانات</p>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="px-5 py-4 border-b border-gray-100 bg-emerald-50">
+                    <h3 class="font-bold text-gray-800 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-emerald-600">school</span>
+                        الملاحظات حسب الفصل
+                    </h3>
+                </div>
+                <div id="erep-by-class" class="p-4">
+                    <p class="text-gray-400 text-center py-8">اضغط "تحديث" لعرض البيانات</p>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden md:col-span-2">
+                <div class="px-5 py-4 border-b border-gray-100 bg-purple-50">
+                    <h3 class="font-bold text-gray-800 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-purple-600">pie_chart</span>
+                        الملاحظات حسب النوع
+                    </h3>
+                </div>
+                <div id="erep-by-type" class="p-4">
+                    <p class="text-gray-400 text-center py-8">اضغط "تحديث" لعرض البيانات</p>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    populateEduReportsFilters();
+}
+
+function populateEduReportsFilters() {
+    const grades = [...new Set(APP_DATA.students.filter(s => s['المرحلة'] === currentStage).map(s => s['الصف']))];
+    const sel = document.getElementById('erep-grade');
+    sel.innerHTML = '<option value="">كل الصفوف</option>';
+    grades.forEach(g => sel.add(new Option(g, g)));
+}
+
+function erepPopulateClasses() {
+    const grade = document.getElementById('erep-grade').value;
+    const sel = document.getElementById('erep-class');
+    sel.innerHTML = '<option value="">كل الفصول</option>';
+    sel.disabled = !grade;
+    if (grade) {
+        const classes = [...new Set(APP_DATA.students.filter(s => s['المرحلة'] === currentStage && s['الصف'] === grade).map(s => s['الفصل']))];
+        classes.forEach(c => sel.add(new Option(c, c)));
+    }
+}
+
+function generateEduCharts() {
+    const grade = document.getElementById('erep-grade').value;
+    const cls = document.getElementById('erep-class').value;
+    const dateFrom = document.getElementById('erep-from').value;
+    const dateTo = document.getElementById('erep-to').value;
+    
+    let filtered = eduNotesAllRecords.filter(r => {
+        if (grade && r['الصف'] !== grade) return false;
+        if (cls && r['الفصل'] != cls) return false;
+        if (dateFrom && r['التاريخ الميلادي'] && new Date(r['التاريخ الميلادي']) < new Date(dateFrom)) return false;
+        if (dateTo && r['التاريخ الميلادي'] && new Date(r['التاريخ الميلادي']) > new Date(dateTo + 'T23:59:59')) return false;
+        return true;
+    });
+    
+    const total = filtered.length;
+    const uniqueStudents = new Set(filtered.map(r => r['رقم الطالب'])).size;
+    const sentCount = filtered.filter(r => _gE(r, 'تم الإرسال') === 'نعم').length;
+    const unsentCount = total - sentCount;
+    
+    document.getElementById('erep-total').textContent = total;
+    document.getElementById('erep-students').textContent = uniqueStudents;
+    document.getElementById('erep-sent').textContent = sentCount;
+    document.getElementById('erep-unsent').textContent = unsentCount;
+    
+    // أكثر الطلاب
+    const studentCounts = {};
+    filtered.forEach(r => {
+        const key = r['رقم الطالب'];
+        if (!studentCounts[key]) studentCounts[key] = { name: r['اسم الطالب'], cls: r['الصف'] + ' ' + r['الفصل'], count: 0 };
+        studentCounts[key].count++;
+    });
+    const topStudents = Object.values(studentCounts).sort((a, b) => b.count - a.count).slice(0, 10);
+    
+    let topHtml = '<div class="space-y-2">';
+    topStudents.forEach((s, i) => {
+        topHtml += `<div class="flex items-center justify-between p-2 rounded-lg ${i < 3 ? 'bg-red-50' : 'bg-gray-50'}">
+            <div class="flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full ${i < 3 ? 'bg-red-500 text-white' : 'bg-gray-300 text-gray-600'} flex items-center justify-center text-xs font-bold">${i + 1}</span>
+                <div><span class="text-sm font-medium">${escapeHtml(s.name)}</span><span class="text-xs text-gray-400 mr-2">${escapeHtml(s.cls)}</span></div>
+            </div>
+            <span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">${s.count} ملاحظة</span>
+        </div>`;
+    });
+    topHtml += '</div>';
+    document.getElementById('erep-top-students').innerHTML = topStudents.length ? topHtml : '<p class="text-gray-400 text-center py-8">لا توجد بيانات</p>';
+    
+    // حسب الفصل
+    const classCounts = {};
+    filtered.forEach(r => {
+        const key = (r['الصف'] || '') + ' ' + (r['الفصل'] || '');
+        classCounts[key] = (classCounts[key] || 0) + 1;
+    });
+    let classHtml = '<div class="space-y-2">';
+    Object.entries(classCounts).sort((a, b) => b[1] - a[1]).forEach(([cls, count]) => {
+        const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+        classHtml += `<div class="flex items-center gap-3">
+            <span class="text-sm font-medium w-32 truncate">${escapeHtml(cls)}</span>
+            <div class="flex-1 bg-gray-200 rounded-full h-4"><div class="bg-emerald-500 h-4 rounded-full" style="width:${pct}%"></div></div>
+            <span class="text-sm font-bold text-gray-600 w-12 text-left">${count}</span>
+        </div>`;
+    });
+    classHtml += '</div>';
+    document.getElementById('erep-by-class').innerHTML = Object.keys(classCounts).length ? classHtml : '<p class="text-gray-400 text-center py-8">لا توجد بيانات</p>';
+    
+    // حسب النوع
+    const typeCounts = {};
+    filtered.forEach(r => {
+        const t = r['نوع الملاحظة'] || 'غير محدد';
+        typeCounts[t] = (typeCounts[t] || 0) + 1;
+    });
+    const typeColors = ['emerald', 'blue', 'purple', 'amber', 'rose', 'teal', 'indigo', 'orange'];
+    let typeHtml = '<div class="flex justify-center gap-4 flex-wrap">';
+    Object.entries(typeCounts).sort((a, b) => b[1] - a[1]).forEach(([type, count], i) => {
+        const color = typeColors[i % typeColors.length];
+        const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+        typeHtml += `<div class="text-center p-4 bg-gray-50 rounded-xl min-w-[100px]">
+            <div class="text-2xl font-bold text-${color}-600 mb-1">${count}</div>
+            <div class="text-xs text-gray-600 font-medium">${escapeHtml(type)}</div>
+            <div class="text-[10px] text-gray-400 mt-1">${pct}%</div>
+        </div>`;
+    });
+    typeHtml += '</div>';
+    document.getElementById('erep-by-type').innerHTML = Object.keys(typeCounts).length ? typeHtml : '<p class="text-gray-400 text-center py-8">لا توجد بيانات</p>';
+}
+
+// =================================================================
+// 9. نوافذ منبثقة
+// =================================================================
+
+// نافذة تسجيل ملاحظة
+function getAddEduNoteModalHTML() {
+    return `
+        <div id="edu-add-modal" class="fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-2xl overflow-hidden">
+                <div class="bg-gradient-to-r from-emerald-500 to-emerald-600 p-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <span class="material-symbols-outlined">add_circle</span>
+                        تسجيل ملاحظة تربوية
+                    </h3>
+                    <button onclick="closeAddEduNoteModal()" class="text-white/80 hover:text-white">
+                        <span class="material-symbols-outlined text-2xl">close</span>
+                    </button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">الصف</label>
+                            <select id="edu-add-grade" onchange="handleEduAddGradeChange()" class="w-full border-gray-300 rounded-lg text-sm h-10">
+                                <option value="">اختر الصف</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">الفصل</label>
+                            <select id="edu-add-class" onchange="handleEduAddClassChange()" class="w-full border-gray-300 rounded-lg text-sm h-10" disabled>
+                                <option value="">اختر الفصل</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">الطالب</label>
+                            <select id="edu-add-student" class="w-full border-gray-300 rounded-lg text-sm h-10" disabled>
+                                <option value="">اختر الطالب</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">نوع الملاحظة</label>
+                        <select id="edu-note-type" class="w-full border-gray-300 rounded-lg text-sm h-10">
+                            <option value="">اختر نوع الملاحظة</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">التفاصيل (اختياري)</label>
+                        <textarea id="edu-note-details" rows="3" class="w-full border-gray-300 rounded-lg text-sm resize-none" placeholder="أضف تفاصيل إضافية..."></textarea>
+                    </div>
+                </div>
+                <div class="bg-gray-50 p-4 border-t border-gray-200 flex gap-3 justify-end">
+                    <button onclick="closeAddEduNoteModal()" class="px-5 py-2 text-gray-600 font-bold hover:bg-gray-200 rounded-lg">إلغاء</button>
+                    <button onclick="saveEduNote()" class="px-6 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 flex items-center gap-2">
+                        <span class="material-symbols-outlined">save</span> حفظ
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// نافذة إعدادات الأنواع
+function getEduNotesSettingsModalHTML() {
+    return `
+        <div id="edu-settings-modal" class="fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col">
+                <div class="bg-gradient-to-r from-amber-500 to-amber-600 p-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <span class="material-symbols-outlined">edit_note</span>
+                        إعدادات أنواع الملاحظات التربوية
+                    </h3>
+                    <button onclick="closeEduNotesSettingsModal()" class="text-white/80 hover:text-white">
+                        <span class="material-symbols-outlined text-2xl">close</span>
+                    </button>
+                </div>
+                <div class="p-6 flex-1 overflow-y-auto">
+                    <div class="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4 mb-5">
+                        <h4 class="font-bold text-emerald-800 mb-3 flex items-center gap-2">
+                            <span class="material-symbols-outlined">add_circle</span>
+                            إضافة نوع ملاحظة جديد
+                        </h4>
+                        <div class="flex gap-2">
+                            <div class="flex-1">
+                                <input type="text" id="edu-new-type" placeholder="اكتب اسم النوع هنا..." 
+                                    class="w-full px-4 py-3 border-2 border-emerald-300 rounded-xl text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                                    onkeypress="if(event.key === 'Enter') addEduNoteType()">
+                            </div>
+                            <button onclick="addEduNoteType()" class="px-5 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 flex items-center gap-2 shadow-lg shadow-emerald-200 h-fit">
+                                <span class="material-symbols-outlined">add</span> إضافة
+                            </button>
+                        </div>
+                        <div id="edu-type-message" class="hidden mt-3 p-3 rounded-lg text-sm font-bold"></div>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-gray-700 mb-3 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-gray-500">list</span>
+                            الأنواع الموجودة حالياً
+                        </h4>
+                        <div id="edu-types-list" class="space-y-2 max-h-60 overflow-y-auto">
+                            <p class="text-gray-400 text-center py-6">جاري التحميل...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 p-4 border-t border-gray-200 flex justify-end">
+                    <button onclick="closeEduNotesSettingsModal()" class="px-6 py-2 bg-gray-600 text-white font-bold rounded-lg hover:bg-gray-700">إغلاق</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// نافذة إرسال واتساب
+function getEduSendWhatsAppModalHTML() {
+    return `
+        <div id="edu-send-modal" class="fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-2xl overflow-hidden">
+                <div class="bg-gradient-to-r from-green-500 to-green-600 p-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <span class="material-symbols-outlined">send</span> إرسال إشعار واتساب
+                    </h3>
+                    <button onclick="closeEduSendModal()" class="text-white/80 hover:text-white">
+                        <span class="material-symbols-outlined text-2xl">close</span>
+                    </button>
+                </div>
+                <div class="p-6">
+                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+                        <div class="flex items-center gap-2 text-blue-700 font-bold mb-2">
+                            <span class="material-symbols-outlined">group</span>
+                            <span>المستلمين: <span id="edu-wa-recipients-count">0</span> ولي أمر</span>
+                        </div>
+                        <div id="edu-wa-recipients-info" class="flex flex-wrap gap-2"></div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">نص الرسالة</label>
+                        <textarea id="edu-wa-message" rows="8" class="w-full p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 resize-none text-sm leading-relaxed"></textarea>
+                    </div>
+                </div>
+                <div class="bg-gray-50 p-4 border-t border-gray-200 flex gap-3 justify-end">
+                    <button onclick="closeEduSendModal()" class="px-5 py-2 text-gray-600 font-bold hover:bg-gray-200 rounded-lg">إلغاء</button>
+                    <button onclick="sendEduWhatsAppMessages()" class="px-6 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white font-bold rounded-lg hover:from-green-600 hover:to-green-700 flex items-center gap-2">
+                        <span class="material-symbols-outlined">send</span> إرسال الآن
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// =================================================================
+// 10. دوال النوافذ والإدخال
+// =================================================================
+function openAddEduNoteModal() {
+    document.getElementById('edu-add-modal').classList.remove('hidden');
+    populateEduAddGrades();
+    populateEduTypesInModal();
+}
+
+function closeAddEduNoteModal() {
+    document.getElementById('edu-add-modal').classList.add('hidden');
+}
+
+function openEduNotesSettingsModal() {
+    document.getElementById('edu-settings-modal').classList.remove('hidden');
+    populateEduTypesInModal();
+}
+
+function closeEduNotesSettingsModal() {
+    document.getElementById('edu-settings-modal').classList.add('hidden');
+}
+
+function closeEduSendModal() {
+    document.getElementById('edu-send-modal').classList.add('hidden');
+}
+
+function populateEduTypesInModal() {
+    const select = document.getElementById('edu-note-type');
+    if (select) {
+        select.innerHTML = '<option value="">اختر نوع الملاحظة</option>';
+        eduNotesTypes.forEach(t => select.add(new Option(t, t)));
+    }
+    
+    const typesList = document.getElementById('edu-types-list');
+    if (typesList) {
+        if (eduNotesTypes.length === 0) {
+            typesList.innerHTML = `<div class="text-center py-8 text-gray-400">
+                <span class="material-symbols-outlined text-4xl mb-2 block">inbox</span>
+                <p>لا توجد أنواع مضافة</p></div>`;
+        } else {
+            typesList.innerHTML = eduNotesTypes.map((t, i) => `
+                <div class="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 transition-all group">
+                    <div class="flex items-center gap-3">
+                        <span class="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-lg flex items-center justify-center text-sm font-bold">${i + 1}</span>
+                        <span class="font-medium text-gray-700">${t}</span>
+                    </div>
+                    <button onclick="deleteEduNoteType(${i})" class="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all" title="حذف">
+                        <span class="material-symbols-outlined">delete</span>
+                    </button>
+                </div>
+            `).join('');
+        }
+    }
+}
+
+function populateEduAddGrades() {
+    const grades = [...new Set(APP_DATA.students.filter(s => s['المرحلة'] === currentStage).map(s => s['الصف']))];
+    const gradeOrder = ["أول", "ثاني", "ثالث", "رابع", "خامس", "سادس"];
+    grades.sort((a, b) => {
+        const iA = gradeOrder.findIndex(k => a.includes(k));
+        const iB = gradeOrder.findIndex(k => b.includes(k));
+        return (iA === -1 ? 99 : iA) - (iB === -1 ? 99 : iB);
+    });
+    const select = document.getElementById('edu-add-grade');
+    select.innerHTML = '<option value="">اختر الصف</option>';
+    grades.forEach(g => select.add(new Option(g, g)));
+}
+
+function handleEduAddGradeChange() {
+    const grade = document.getElementById('edu-add-grade').value;
+    const classSelect = document.getElementById('edu-add-class');
+    const studentSelect = document.getElementById('edu-add-student');
+    classSelect.innerHTML = '<option value="">اختر الفصل</option>';
+    studentSelect.innerHTML = '<option value="">اختر الطالب</option>';
+    classSelect.disabled = !grade;
+    studentSelect.disabled = true;
+    if (grade) {
+        const classes = [...new Set(APP_DATA.students.filter(s => s['المرحلة'] === currentStage && s['الصف'] === grade).map(s => s['الفصل']))];
+        classes.sort((a, b) => String(a).localeCompare(String(b), 'ar', {numeric: true}));
+        classes.forEach(c => classSelect.add(new Option(c, c)));
+    }
+}
+
+function handleEduAddClassChange() {
+    const grade = document.getElementById('edu-add-grade').value;
+    const cls = document.getElementById('edu-add-class').value;
+    const studentSelect = document.getElementById('edu-add-student');
+    studentSelect.innerHTML = '<option value="">اختر الطالب</option>';
+    studentSelect.disabled = !cls;
+    if (grade && cls) {
+        const students = APP_DATA.students.filter(s => s['المرحلة'] === currentStage && s['الصف'] === grade && s['الفصل'] == cls);
+        students.sort((a, b) => a['اسم الطالب'].localeCompare(b['اسم الطالب'], 'ar'));
+        students.forEach(s => studentSelect.add(new Option(s['اسم الطالب'], s['رقم الطالب'] || s['رقم_الطالب'])));
+    }
+}
+
+function saveEduNote() {
+    const studentId = document.getElementById('edu-add-student').value;
+    const noteType = document.getElementById('edu-note-type').value;
+    const details = document.getElementById('edu-note-details').value;
+
+    if (!studentId) { showEnhancedToast('warning', 'يرجى اختيار الطالب'); return; }
+    if (!noteType) { showEnhancedToast('warning', 'يرجى اختيار نوع الملاحظة'); return; }
+
+    const student = APP_DATA.students.find(s => String(s['رقم الطالب'] || s['رقم_الطالب']) === String(studentId));
+    if (!student) { showEnhancedToast('danger', 'لم يتم العثور على الطالب'); return; }
+
+    const noteData = {
+        studentId, studentName: student['اسم الطالب'],
+        grade: student['الصف'], class: student['الفصل'],
+        phone: getStudentPhone(student),
+        noteType, details, stage: currentStage
+    };
+
+    showEnhancedToast('info', 'جاري الحفظ...');
+
+    google.script.run.withSuccessHandler(res => {
+        if (res.success) {
+            showEnhancedToast('success', 'تم حفظ الملاحظة بنجاح');
+            closeAddEduNoteModal();
+            if (eduNotesCurrentTab === 'today') loadEduTodayRecords();
+            else if (eduNotesCurrentTab === 'approved') loadEduApprovedRecords();
+        } else {
+            showEnhancedToast('danger', 'خطأ: ' + res.error);
+        }
+    }).withFailureHandler(err => {
+        showEnhancedToast('danger', 'خطأ: ' + err);
+    }).saveEducationalNote(noteData);
+}
+
+// =================================================================
+// 11. إدارة أنواع الملاحظات
+// =================================================================
+function addEduNoteType() {
+    const input = document.getElementById('edu-new-type');
+    const messageDiv = document.getElementById('edu-type-message');
+    const newType = input.value.trim();
+    
+    function showMessage(type, text) {
+        if (messageDiv) {
+            messageDiv.className = 'mt-3 p-3 rounded-lg text-sm font-bold flex items-center gap-2';
+            if (type === 'success') messageDiv.className += ' bg-green-100 text-green-700 border border-green-300';
+            else if (type === 'warning') messageDiv.className += ' bg-orange-100 text-orange-700 border border-orange-300';
+            else if (type === 'error') messageDiv.className += ' bg-red-100 text-red-700 border border-red-300';
+            messageDiv.innerHTML = '<span class="material-symbols-outlined">' + (type === 'success' ? 'check_circle' : type === 'warning' ? 'warning' : 'error') + '</span>' + text;
+            messageDiv.classList.remove('hidden');
+            setTimeout(() => messageDiv.classList.add('hidden'), 3000);
+        }
+    }
+    
+    if (!newType) { showMessage('warning', 'يرجى كتابة اسم النوع أولاً'); input.focus(); return; }
+    if (eduNotesTypes.includes(newType)) { showMessage('warning', 'هذا النوع موجود مسبقاً'); input.select(); return; }
+
+    eduNotesTypes.push(newType);
+    input.value = '';
+    
+    google.script.run.withSuccessHandler(() => {
+        showMessage('success', 'تم إضافة "' + newType + '" بنجاح ✓');
+        populateEduTypesInModal();
+    }).withFailureHandler(err => {
+        eduNotesTypes.pop();
+        showMessage('error', 'خطأ في الحفظ: ' + err);
+    }).saveEducationalNotesTypes(currentStage, eduNotesTypes);
+}
+
+function deleteEduNoteType(index) {
+    const typeName = eduNotesTypes[index];
+    showStyledConfirm_edu('حذف نوع ملاحظة', 'هل تريد حذف النوع: "' + typeName + '"؟', 'delete', function() {
+        eduNotesTypes.splice(index, 1);
+    
+        google.script.run.withSuccessHandler(() => {
+            populateEduTypesInModal();
+            const messageDiv = document.getElementById('edu-type-message');
+            if (messageDiv) {
+                messageDiv.className = 'mt-3 p-3 rounded-lg text-sm font-bold flex items-center gap-2 bg-green-100 text-green-700 border border-green-300';
+            messageDiv.innerHTML = '<span class="material-symbols-outlined">check_circle</span>تم حذف "' + typeName + '"';
+            messageDiv.classList.remove('hidden');
+            setTimeout(() => messageDiv.classList.add('hidden'), 3000);
+        }
+    }).withFailureHandler(err => {
+        eduNotesTypes.splice(index, 0, typeName);
+        alert('خطأ في الحذف: ' + err);
+    }).saveEducationalNotesTypes(currentStage, eduNotesTypes);
+    });
+}
+
+// =================================================================
+// 12. إرسال واتساب جماعي (للتوافق)
+// =================================================================
+function sendEduWhatsAppMessages() {
+    const modal = document.getElementById('edu-send-modal');
+    const recipients = JSON.parse(modal.dataset.recipients || '[]');
+    const messageTemplate = document.getElementById('edu-wa-message').value;
+
+    if (recipients.length === 0) { showEnhancedToast('warning', 'لا يوجد مستلمين'); return; }
+
+    showEnhancedToast('info', `جاري إرسال ${recipients.length} رسالة... (تقريباً ${Math.ceil(recipients.length * 35 / 60)} دقائق)`);
+    closeEduSendModal();
+
+    let successCount = 0, failCount = 0;
+
+    recipients.forEach((recipient, index) => {
+        const message = messageTemplate.replace('{اسم_الطالب}', recipient.name);
+        const studentData = eduNotesAllRecords.find(r => r['رقم الطالب'] == recipient.studentId) || {};
+        var msgDelay = index * 30000 + Math.floor(Math.random() * 10000);
+        setTimeout(() => {
+            google.script.run.withSuccessHandler(res => {
+                if (res.success) successCount++; else failCount++;
+                if (successCount + failCount === recipients.length) {
+                    showEnhancedToast('success', `تم الإرسال: ${successCount} ناجح، ${failCount} فاشل`);
+                    if (eduNotesCurrentTab === 'today') loadEduTodayRecords();
+                    else loadEduApprovedRecords();
+                }
+            }).withFailureHandler(() => {
+                failCount++;
+                if (successCount + failCount === recipients.length) {
+                    showEnhancedToast('success', `تم الإرسال: ${successCount} ناجح، ${failCount} فاشل`);
+                }
+            }).sendWhatsAppWithLog({
+                studentId: recipient.studentId, studentName: recipient.name,
+                grade: studentData['الصف'] || '', class: studentData['الفصل'] || '',
+                phone: recipient.phone, messageType: 'ملاحظة',
+                messageTitle: recipient.noteType || studentData['نوع الملاحظة'] || 'ملاحظة تربوية',
+                message: message
+            }, currentStage);
+        }, msgDelay);
+    });
+}
+</script>

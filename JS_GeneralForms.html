@@ -1,0 +1,1337 @@
+<script>
+    // =================================================================
+    // نظام النماذج العامة - الإصدار المطور
+    // =================================================================
+    
+    let gf_studentViolations = []; // لتخزين مخالفات الطالب المختار
+    
+    // =================================================================
+    // 1. رسم الصفحة الرئيسية (Rendering)
+    // =================================================================
+    function renderGeneralFormsPage() {
+        const main = document.getElementById('main-content');
+        main.innerHTML = `
+            <div class="max-w-full">
+                <div class="flex items-center gap-3 mb-5">
+                    <div class="p-3 bg-orange-100 rounded-2xl">
+                        <span class="material-symbols-outlined text-orange-600 text-3xl">folder_open</span>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-extrabold text-gray-900">النماذج العامة والإدارية</h2>
+                        <p class="text-sm text-gray-500">اختر النموذج المطلوب للطباعة</p>
+                    </div>
+                </div>
+                
+                <!-- 1. المواظبة والغياب -->
+                <div class="mb-8">
+                    <h3 class="font-bold text-gray-700 mb-3 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-red-500">event_busy</span>
+                        المواظبة والغياب
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        ${createFormCard('ghiab_bidon_ozr', 'متابعة غياب (بدون عذر)', 'سجل تدرج الإجراءات للملف', 'text-red-600', 'event_busy', true)}
+                        ${createFormCard('ghiab_ozr', 'إجراءات غياب (بعذر)', 'توثيق الأعذار المقبولة', 'text-green-600', 'event_available', true)}
+                        ${createFormCard('tahood_hodoor', 'تعهد التزام بالحضور', 'عند تجاوز الغياب للحد المسموح', 'text-orange-600', 'edit_document', false)}
+                    </div>
+                </div>
+
+                <!-- 2. الإجراءات السلوكية -->
+                <div class="mb-8">
+                    <h3 class="font-bold text-gray-700 mb-3 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-indigo-500">gavel</span>
+                        نماذج الإجراءات السلوكية
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        ${createIltizamCard()}
+                        ${createFormCard('tawid_darajat', 'فرص تعويض الدرجات', 'لتحسين الدرجات المحسومة', 'text-purple-600', 'trending_up', true, true)}
+                        ${createFormCard('rasd_tamayuz', 'رصد سلوك متميز', 'سجل الطالب للإنجازات', 'text-emerald-600', 'star', true)}
+                        ${createFormCard('dawat_wali_amr', 'دعوة ولي أمر', 'طلب حضور للمدرسة', 'text-gray-700', 'mail', false)}
+                        ${createFormCard('rasd_slooki', 'سجل مخالفات (للملف)', 'يوضع في ملف الطالب', 'text-gray-700', 'folder_shared', true)}
+                        ${createFormCard('khota_tadeel', 'خطة تعديل سلوك', 'للموجه الطلابي', 'text-teal-600', 'psychology', false)}
+                        ${createFormCard('mahdar_dab_wakea', 'محضر ضبط واقعة', 'لتوثيق المخالفة', 'text-amber-700', 'edit_note', false)}
+                        ${createFormCard('tawtheeq_tawasol', 'توثيق تواصل ولي أمر', 'تسجيل التواصل مع ولي الأمر', 'text-cyan-600', 'contact_phone', false)}
+                    </div>
+                </div>
+
+                <!-- 3. المحاضر واللجان -->
+                <div class="mb-8">
+                    <h3 class="font-bold text-gray-700 mb-3 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-amber-500">assignment</span>
+                        المحاضر واللجان
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        ${createFormCard('mahdar_lajnah', 'محضر لجنة توجيه (مخالفة)', 'لدراسة مخالفة سلوكية', 'text-amber-600', 'groups', false)}
+                        ${createFormCard('mahdar_lajnah_absence', 'محضر لجنة توجيه (غياب)', 'لدراسة حالة غياب', 'text-amber-600', 'groups', false)}
+                    </div>
+                </div>
+
+                <!-- 5. النماذج الفارغة -->
+                <div class="mb-8">
+                    <h3 class="font-bold text-gray-700 mb-3 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-purple-500">content_paste</span>
+                        نماذج فارغة للتوزيع
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        ${createFormCard('rasd_moalem', 'سجل متابعة معلم', 'طباعة فارغ أو مملوء من بيانات المعلم', 'text-purple-600', 'person_book', false)}
+                    </div>
+                </div>
+
+                <!-- 6. النماذج السرية -->
+                <div class="mb-8">
+                    <h3 class="font-bold text-gray-700 mb-3 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-red-600">warning</span>
+                        النماذج السرية والطارئة
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        ${createFormCard('mashajara', 'محضر إثبات واقعة (مشاجرة)', 'واقعة سلوك غير تربوي', 'text-red-600', 'local_police', false)}
+                        ${createFormCard('eblagh_etha', 'إبلاغ عن إيذاء', 'خاص بمركز البلاغات 1919', 'text-red-600', 'report', false)}
+                        ${createFormCard('high_risk', 'حالة عالية الخطورة', 'للحالات الطارئة جداً', 'text-red-700', 'emergency', false)}
+                    </div>
+                </div>
+            </div>
+
+            <!-- ======================================== -->
+            <!-- نافذة اختيار الطالب (Popup) -->
+            <!-- ======================================== -->
+            <div id="gf-student-modal" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+                <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-lg overflow-hidden transform transition-all scale-100">
+                    
+                    <!-- رأس النافذة -->
+                    <div class="px-6 py-4 bg-gradient-to-l from-indigo-50 to-purple-50 border-b border-gray-100">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2.5 bg-indigo-50 rounded-lg border border-indigo-200">
+                                    <span class="material-symbols-outlined text-indigo-600" id="gf-modal-icon">description</span>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-bold text-gray-800" id="gf-modal-title">اختيار الطالب</h3>
+                                    <p class="text-xs text-gray-500" id="gf-modal-subtitle">حدد بيانات الطالب للطباعة</p>
+                                </div>
+                            </div>
+                            <button onclick="closeGfModal()" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                                <span class="material-symbols-outlined text-gray-400">close</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- محتوى النافذة -->
+                    <div class="p-6 space-y-4">
+                        
+                        <!-- الصف -->
+                        <div>
+                            <label class="block text-sm font-bold text-gray-600 mb-2">الصف الدراسي</label>
+                            <select id="gf-modal-grade" onchange="gfModalPopulateClasses()" 
+                                class="w-full h-12 px-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
+                                <option value="">اختر الصف</option>
+                            </select>
+                        </div>
+                        
+                        <!-- الفصل -->
+                        <div>
+                            <label class="block text-sm font-bold text-gray-600 mb-2">الفصل</label>
+                            <select id="gf-modal-class" onchange="gfModalPopulateStudents()" disabled
+                                class="w-full h-12 px-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 transition-all">
+                                <option value="">اختر الفصل</option>
+                            </select>
+                        </div>
+                        
+                        <!-- الطالب -->
+                        <div>
+                            <label class="block text-sm font-bold text-gray-600 mb-2">اسم الطالب</label>
+                            <select id="gf-modal-student" onchange="gfModalOnStudentSelected()" disabled
+                                class="w-full h-12 px-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 transition-all font-bold">
+                                <option value="">اختر الطالب</option>
+                            </select>
+                        </div>
+                        
+                        <!-- قسم اختيار المخالفة (يظهر فقط للنماذج التي تحتاج مخالفة) -->
+                        <div id="gf-violation-section" class="hidden border-t border-gray-100 pt-4 mt-4">
+                            <label class="block text-sm font-bold text-gray-600 mb-2">
+                                <span class="material-symbols-outlined text-orange-500 text-sm align-middle">warning</span>
+                                اختر المخالفة المراد التعويض عنها
+                            </label>
+                            <select id="gf-modal-violation" 
+                                class="w-full h-12 px-4 bg-orange-50 border border-orange-200 rounded-xl focus:ring-2 focus:ring-orange-500 transition-all">
+                                <option value="">-- اختر المخالفة --</option>
+                            </select>
+                            <p class="text-xs text-gray-400 mt-3 font-medium" id="gf-violation-hint">سيتم تعبئة بيانات المخالفة تلقائياً في النموذج</p>
+                        </div>
+                        
+                    </div>
+                    
+                    <!-- أزرار النافذة -->
+                    <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
+                        <button onclick="closeGfModal()" class="px-5 py-2.5 text-gray-600 hover:bg-gray-200 rounded-xl font-bold transition-all">
+                            إلغاء
+                        </button>
+                        <button onclick="gfModalSubmit()" id="gf-modal-submit-btn"
+                            class="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                            <span class="material-symbols-outlined">print</span>
+                            طباعة النموذج
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // =================================================================
+    // 2. إنشاء بطاقة النموذج
+    // =================================================================
+    function createFormCard(formId, title, desc, colorClass, icon, requiresStudent, requiresViolation = false) {
+        const studentAttr = requiresStudent ? 'true' : 'false';
+        const violationAttr = requiresViolation ? 'true' : 'false';
+        
+        return `
+            <div class="form-card bg-white p-5 rounded-xl cursor-pointer border border-gray-200 hover:border-indigo-300 hover:shadow-lg transition-all group"
+                 onclick="openGfModal('${formId}', '${title}', ${studentAttr}, ${violationAttr})"
+                 data-form-id="${formId}">
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="p-2 bg-gray-50 rounded-xl group-hover:bg-indigo-50 transition-colors">
+                        <span class="material-symbols-outlined ${colorClass}">${icon}</span>
+                    </div>
+                    <h3 class="font-bold ${colorClass}">${title}</h3>
+                </div>
+                <p class="text-sm text-gray-500">${desc}</p>
+            </div>
+        `;
+    }
+
+    // =================================================================
+    // 3. فتح نافذة اختيار الطالب
+    // =================================================================
+    let gf_currentFormId = '';
+    let gf_currentFormTitle = '';
+    let gf_requiresViolation = false;
+
+    function openGfModal(formId, title, requiresStudent, requiresViolation) {
+        gf_currentFormId = formId;
+        gf_currentFormTitle = title;
+        gf_requiresViolation = requiresViolation;
+        
+        // إذا النموذج لا يحتاج طالب (فارغ)، اطبع مباشرة
+        if (!requiresStudent) {
+            printGeneralFormDirect(formId, {});
+            return;
+        }
+        
+        // تحديث عنوان النافذة
+        document.getElementById('gf-modal-title').innerText = title;
+        document.getElementById('gf-modal-subtitle').innerText = 'حدد بيانات الطالب للطباعة';
+        
+        // تعبئة قائمة الصفوف
+        const gradeSelect = document.getElementById('gf-modal-grade');
+        gradeSelect.innerHTML = '<option value="">اختر الصف</option>';
+        
+        const grades = [...new Set(APP_DATA.students.filter(s => s['المرحلة'] === currentStage).map(s => s['الصف']))];
+        const gradeOrder = ["أول", "ثاني", "ثالث"];
+        grades.sort((a, b) => {
+            const idxA = gradeOrder.findIndex(k => a.includes(k));
+            const idxB = gradeOrder.findIndex(k => b.includes(k));
+            if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+            return a.localeCompare(b, 'ar');
+        });
+        grades.forEach(g => gradeSelect.add(new Option(g, g)));
+        
+        // إعادة تعيين الحقول
+        document.getElementById('gf-modal-class').innerHTML = '<option value="">اختر الفصل</option>';
+        document.getElementById('gf-modal-class').disabled = true;
+        document.getElementById('gf-modal-student').innerHTML = '<option value="">اختر الطالب</option>';
+        document.getElementById('gf-modal-student').disabled = true;
+        document.getElementById('gf-modal-submit-btn').disabled = true;
+        
+        // إخفاء/إظهار قسم المخالفات
+        const violationSection = document.getElementById('gf-violation-section');
+        if (requiresViolation) {
+            violationSection.classList.remove('hidden');
+            document.getElementById('gf-modal-violation').innerHTML = '<option value="">-- اختر الطالب أولاً --</option>';
+        } else {
+            violationSection.classList.add('hidden');
+        }
+        
+        // إظهار النافذة
+        document.getElementById('gf-student-modal').classList.remove('hidden');
+    }
+
+    function closeGfModal() {
+        document.getElementById('gf-student-modal').classList.add('hidden');
+        gf_studentViolations = [];
+    }
+
+    // =================================================================
+    // 4. تعبئة القوائم المتتالية
+    // =================================================================
+    function gfModalPopulateClasses() {
+        const grade = document.getElementById('gf-modal-grade').value;
+        const classSelect = document.getElementById('gf-modal-class');
+        const studentSelect = document.getElementById('gf-modal-student');
+        
+        classSelect.innerHTML = '<option value="">اختر الفصل</option>';
+        studentSelect.innerHTML = '<option value="">اختر الطالب</option>';
+        classSelect.disabled = !grade;
+        studentSelect.disabled = true;
+        document.getElementById('gf-modal-submit-btn').disabled = true;
+        
+        if (grade) {
+            const classes = [...new Set(APP_DATA.students
+                .filter(s => s['المرحلة'] === currentStage && s['الصف'] === grade)
+                .map(s => s['الفصل']))];
+            classes.sort((a, b) => a.toString().localeCompare(b.toString(), 'ar'));
+            classes.forEach(c => classSelect.add(new Option(c, c)));
+        }
+    }
+
+    function gfModalPopulateStudents() {
+        const grade = document.getElementById('gf-modal-grade').value;
+        const cls = document.getElementById('gf-modal-class').value;
+        const studentSelect = document.getElementById('gf-modal-student');
+        
+        studentSelect.innerHTML = '<option value="">اختر الطالب</option>';
+        studentSelect.disabled = !cls;
+        document.getElementById('gf-modal-submit-btn').disabled = true;
+        
+        if (grade && cls) {
+            const students = APP_DATA.students.filter(s => 
+                s['المرحلة'] === currentStage && 
+                s['الصف'] === grade && 
+                s['الفصل'] == cls
+            );
+            students.sort((a, b) => a['اسم الطالب'].localeCompare(b['اسم الطالب'], 'ar'));
+            students.forEach(s => {
+                const opt = new Option(s['اسم الطالب'], s['رقم الطالب']);
+                opt.dataset.name = s['اسم الطالب'];
+                studentSelect.add(opt);
+            });
+        }
+    }
+
+    function gfModalOnStudentSelected() {
+        const studentSelect = document.getElementById('gf-modal-student');
+        const studentId = studentSelect.value;
+        const submitBtn = document.getElementById('gf-modal-submit-btn');
+        
+        if (!studentId) {
+            submitBtn.disabled = true;
+            return;
+        }
+        
+        // إذا النموذج يحتاج مخالفة، جلب مخالفات الطالب
+        if (gf_requiresViolation) {
+            submitBtn.disabled = true;
+            loadStudentViolationsForModal(studentId);
+        } else {
+            submitBtn.disabled = false;
+        }
+    }
+
+    // =================================================================
+    // 5. جلب مخالفات الطالب (للنماذج التي تحتاج مخالفة)
+    // =================================================================
+    function loadStudentViolationsForModal(studentId) {
+        const violationSelect = document.getElementById('gf-modal-violation');
+        violationSelect.innerHTML = '<option value="">جاري التحميل...</option>';
+        
+        google.script.run.withSuccessHandler(function(records) {
+            // فلترة مخالفات هذا الطالب
+            gf_studentViolations = records.filter(r => String(r['رقم الطالب']) === String(studentId));
+            
+            violationSelect.innerHTML = '<option value="">-- اختر المخالفة --</option>';
+            
+            if (gf_studentViolations.length === 0) {
+                violationSelect.innerHTML = '<option value="">لا توجد مخالفات مسجلة لهذا الطالب</option>';
+                document.getElementById('gf-violation-hint').innerText = '⚠️ لا يمكن طباعة النموذج بدون مخالفة';
+                return;
+            }
+            
+            // ترتيب المخالفات من الأحدث للأقدم
+            gf_studentViolations.sort((a, b) => new Date(b['وقت الإدخال']) - new Date(a['وقت الإدخال']));
+            
+            gf_studentViolations.forEach((v, idx) => {
+                const dateStr = v['التاريخ الهجري'] || '';
+                const degree = v['الدرجة'] || '';
+                const text = v['نص المخالفة'] || '';
+                const shortText = text.length > 30 ? text.substring(0, 30) + '...' : text;
+                
+                const opt = new Option(`${dateStr} - د${degree} - ${shortText}`, idx);
+                violationSelect.add(opt);
+            });
+            
+            document.getElementById('gf-violation-hint').innerText = 'اختر المخالفة ثم اضغط طباعة';
+            
+            // تفعيل زر الإرسال عند اختيار مخالفة
+            violationSelect.onchange = function() {
+                document.getElementById('gf-modal-submit-btn').disabled = !this.value;
+            };
+            
+        }).withFailureHandler(function(err) {
+            violationSelect.innerHTML = '<option value="">خطأ في جلب البيانات</option>';
+            showEnhancedToast('danger', 'فشل جلب مخالفات الطالب');
+        }).getCachedViolationRecords(currentStage);
+    }
+
+    // =================================================================
+    // 6. تنفيذ الطباعة
+    // =================================================================
+    function gfModalSubmit() {
+        const grade = document.getElementById('gf-modal-grade').value;
+        const cls = document.getElementById('gf-modal-class').value;
+        const studentSelect = document.getElementById('gf-modal-student');
+        const studentName = studentSelect.options[studentSelect.selectedIndex].dataset.name || studentSelect.options[studentSelect.selectedIndex].text;
+        
+        // تجهيز البيانات الأساسية
+        let printData = {
+            studentName: studentName,
+            grade: grade,
+            class: cls,
+            violationDate: new Date().toLocaleDateString('ar-SA-u-ca-islamic'),
+            violationDay: new Date().toLocaleDateString('ar-SA', { weekday: 'long' })
+        };
+        
+        // إضافة بيانات الإعدادات
+        if (APP_DATA.settings) {
+            if (APP_DATA.settings.manager) printData.managerName = APP_DATA.settings.manager;
+            if (APP_DATA.settings.deputies && APP_DATA.settings.deputies.length > 0) {
+                printData.deputyName = APP_DATA.settings.deputies[0].name;
+            }
+            if (APP_DATA.settings.committee) printData.committeeMembers = APP_DATA.settings.committee;
+        }
+        
+        // إذا النموذج يحتاج مخالفة
+        if (gf_requiresViolation) {
+            const violationIdx = document.getElementById('gf-modal-violation').value;
+            if (violationIdx !== '' && gf_studentViolations[violationIdx]) {
+                const v = gf_studentViolations[violationIdx];
+                printData.violationInfo = {
+                    name: v['نص المخالفة'],
+                    degree: v['الدرجة'],
+                    date: v['التاريخ الهجري'],
+                    points: extractPoints(v['الإجراءات'] || '')
+                };
+                printData.violationText = v['نص المخالفة'];
+                printData.violationDegree = v['الدرجة'];
+                printData.violationDate = v['التاريخ الهجري'];
+            }
+        }
+        
+        // معالجة خاصة لسجل المخالفات
+        if (gf_currentFormId === 'rasd_slooki') {
+            printData.violationsList = gf_studentViolations;
+        }
+        
+        // إغلاق النافذة والطباعة
+        closeGfModal();
+        printGeneralFormDirect(gf_currentFormId, printData);
+    }
+
+    // =================================================================
+    // 7. دالة الطباعة المباشرة
+    // =================================================================
+    function printGeneralFormDirect(formId, data) {
+        // ★ النماذج التي تحتاج منبثقة إضافية
+        var modalForms = {
+            'dawat_wali_amr': showDawatModalGeneral_,
+            'tawtheeq_tawasol': showTawtheeqModal_,
+            'mahdar_dab_wakea': showMahdarModal_,
+            'mahdar_lajnah': showLajnahModal_,
+            'mahdar_lajnah_absence': showLajnahAbsModal_,
+            'tahood_hodoor': showTahoodHodoorModal_,
+            'high_risk': showHighRiskModal_,
+            'eblagh_etha': showEblaghModal_,
+            'khota_tadeel': showKhotaModal_,
+            'mashajara': showMashajaraModal_,
+            'rasd_moalem': showRasdMoalemModal_
+        };
+        if (modalForms[formId]) {
+            modalForms[formId](data);
+            return;
+        }
+        showEnhancedToast('info', 'جاري تحضير النموذج...');
+        printFormDirectly(formId, encodeURIComponent(JSON.stringify(data)));
+    }
+
+    // ★ منبثقة دعوة ولي أمر من النماذج العامة
+    function showDawatModalGeneral_(baseData) {
+        var tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        while (tomorrow.getDay() === 5 || tomorrow.getDay() === 6) { tomorrow.setDate(tomorrow.getDate() + 1); }
+        var tomorrowStr = tomorrow.toISOString().split('T')[0];
+        var dayNames = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+        var defaultDay = dayNames[tomorrow.getDay()];
+        var defaultHijri = '';
+        try { defaultHijri = tomorrow.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }) + ' هـ'; } catch(e) { defaultHijri = ''; }
+
+        var old = document.getElementById('dawat-modal-overlay');
+        if (old) old.remove();
+
+        var overlay = document.createElement('div');
+        overlay.id = 'dawat-modal-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)';
+        overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+
+        overlay.innerHTML = ''
+        + '<div style="background:white;border-radius:var(--r-lg,16px);width:440px;max-width:95vw;box-shadow:0 25px 50px rgba(0,0,0,.25);overflow:hidden;direction:rtl;font-family:inherit" onclick="event.stopPropagation()">'
+        + '<div style="background:linear-gradient(135deg,#f59e0b,#d97706);padding:16px 20px;display:flex;align-items:center;gap:10px">'
+        + '<span class="material-symbols-outlined" style="color:white;font-size:24px">mail</span>'
+        + '<div><div style="color:white;font-size:16px;font-weight:800">دعوة ولي أمر طالب</div>'
+        + '<div style="color:rgba(255,255,255,.85);font-size:12px"></div></div>'
+        + '<button onclick="this.closest(\'#dawat-modal-overlay\').remove()" style="margin-right:auto;background:none;border:none;color:white;cursor:pointer;font-size:20px">✕</button>'
+        + '</div>'
+        + '<div style="padding:20px;display:flex;flex-direction:column;gap:14px">'
+        + _studentPickerHtml()
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+        + '<div><label style="font-size:12px;font-weight:700;color:var(--c-text,#1a1d2e);margin-bottom:4px;display:block">اليوم</label>'
+        + '<select id="dawat-day" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:var(--r-md,12px);font-size:14px;font-family:inherit;background:var(--c-bg,#f4f5f9);outline:none">'
+        + '<option ' + (defaultDay==='الأحد'?'selected':'') + '>الأحد</option><option ' + (defaultDay==='الإثنين'?'selected':'') + '>الإثنين</option><option ' + (defaultDay==='الثلاثاء'?'selected':'') + '>الثلاثاء</option><option ' + (defaultDay==='الأربعاء'?'selected':'') + '>الأربعاء</option><option ' + (defaultDay==='الخميس'?'selected':'') + '>الخميس</option>'
+        + '</select></div>'
+        + '<div><label style="font-size:12px;font-weight:700;color:var(--c-text,#1a1d2e);margin-bottom:4px;display:block">التاريخ</label>'
+        + '<input type="date" id="dawat-date" value="' + tomorrowStr + '" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:var(--r-md,12px);font-size:14px;font-family:inherit;background:var(--c-bg,#f4f5f9);outline:none">'
+        + '<div id="dawat-hijri-preview" style="font-size:13px;color:#059669;font-weight:700;margin-top:4px;text-align:center">' + defaultHijri + '</div></div></div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+        + '<div><label style="font-size:12px;font-weight:700;color:var(--c-text,#1a1d2e);margin-bottom:4px;display:block">الساعة</label>'
+        + '<select id="dawat-time" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:var(--r-md,12px);font-size:14px;font-family:inherit;background:var(--c-bg,#f4f5f9);outline:none">'
+        + '<option value="٧:٣٠">٧:٣٠ صباحاً</option><option value="٨:٠٠">٨:٠٠ صباحاً</option><option value="٨:٣٠">٨:٣٠ صباحاً</option><option value="٩:٠٠" selected>٩:٠٠ صباحاً</option><option value="٩:٣٠">٩:٣٠ صباحاً</option><option value="١٠:٠٠">١٠:٠٠ صباحاً</option><option value="١٠:٣٠">١٠:٣٠ صباحاً</option><option value="١١:٠٠">١١:٠٠ صباحاً</option><option value="١١:٣٠">١١:٣٠ صباحاً</option><option value="١٢:٠٠">١٢:٠٠ ظهراً</option>'
+        + '</select></div>'
+        + '<div><label style="font-size:12px;font-weight:700;color:var(--c-text,#1a1d2e);margin-bottom:4px;display:block">وذلك لمقابلة</label>'
+        + '<select id="dawat-meeting" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:var(--r-md,12px);font-size:14px;font-family:inherit;background:var(--c-bg,#f4f5f9);outline:none">'
+        + '<option value="إدارة المدرسة">إدارة المدرسة</option><option value="وكيل المدرسة" selected>وكيل المدرسة</option><option value="الموجه الطلابي">الموجه الطلابي</option>'
+        + '</select></div></div>'
+        + '<div><label style="font-size:12px;font-weight:700;color:var(--c-text,#1a1d2e);margin-bottom:4px;display:block">الهدف من الزيارة</label>'
+        + '<input type="text" id="dawat-reason" value="لمناقشة المستوى السلوكي للطالب" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:var(--r-md,12px);font-size:14px;font-family:inherit;background:var(--c-bg,#f4f5f9);outline:none;box-sizing:border-box"></div>'
+        + '<button id="dawat-submit-btn" style="width:100%;padding:12px;background:linear-gradient(135deg,#f59e0b,#d97706);color:white;border:none;border-radius:var(--r-md,12px);font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:4px"><span class="material-symbols-outlined" style="font-size:18px">print</span> طباعة الدعوة</button>'
+        + '</div></div>';
+
+        document.body.appendChild(overlay);
+        _initStudentPicker();
+        document.getElementById('dawat-date').addEventListener('change', function() {
+            var d = new Date(this.value);
+            if (!isNaN(d)) {
+                document.getElementById('dawat-day').value = dayNames[d.getDay()];
+                try { document.getElementById('dawat-hijri-preview').textContent = d.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }) + ' هـ'; } catch(e) {}
+            }
+        });
+        document.getElementById('dawat-submit-btn').addEventListener('click', function() {
+            var student = _getPickedStudent(); if (!student) return;
+            var hijriDate = '';
+            try { var d = new Date(document.getElementById('dawat-date').value); hijriDate = d.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }); } catch(e) { hijriDate = document.getElementById('dawat-date').value; }
+            var finalData = Object.assign({}, student, {
+                visitDay: document.getElementById('dawat-day').value,
+                visitDate: hijriDate,
+                visitTime: document.getElementById('dawat-time').value,
+                visitMeeting: document.getElementById('dawat-meeting').value,
+                visitReason: document.getElementById('dawat-reason').value || 'لمناقشة المستوى السلوكي للطالب'
+            });
+            if (APP_DATA.settings && APP_DATA.settings.manager) finalData.managerName = APP_DATA.settings.manager;
+            overlay.remove();
+            printFormDirectly('dawat_wali_amr', encodeURIComponent(JSON.stringify(finalData)));
+        });
+    }
+
+    // =================================================================
+    // 8. استخراج النقاط من نص الإجراءات
+    // =================================================================
+    function extractPoints(proceduresText) {
+        if (!proceduresText) return '0';
+        
+        // البحث عن أرقام في النص
+        const numberMatch = proceduresText.match(/حسم\s*(\d+)/);
+        if (numberMatch) return numberMatch[1];
+        
+        if (proceduresText.includes('درجة واحدة')) return '1';
+        if (proceduresText.includes('درجتين') || proceduresText.includes('درجتان')) return '2';
+        if (proceduresText.includes('ثلاث درجات') || proceduresText.includes('3 درجات')) return '3';
+        if (proceduresText.includes('عشر درجات') || proceduresText.includes('10 درجات')) return '10';
+        if (proceduresText.includes('خمس عشرة') || proceduresText.includes('15 درجة')) return '15';
+        
+        return '0';
+    }
+
+    // =================================================================
+// 4. كارت عقد الالتزام المدرسي مع خيار الطباعة الفارغة
+// =================================================================
+// =================================================================
+// كارت عقد الالتزام المدرسي مع خيار الطباعة الفارغة
+// =================================================================
+function createIltizamCard() {
+    return `
+        <div class="form-card bg-white p-5 rounded-xl cursor-pointer border border-gray-200 hover:border-indigo-300 hover:shadow-lg transition-all group"
+             onclick="showIltizamOptions()">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="p-2 bg-gray-50 rounded-xl group-hover:bg-indigo-50 transition-colors">
+                    <span class="material-symbols-outlined text-indigo-600">handshake</span>
+                </div>
+                <h3 class="font-bold text-indigo-600">عقد التزام مدرسي</h3>
+            </div>
+            <p class="text-sm text-gray-500">يوقع بداية العام أو عند العودة</p>
+        </div>`;
+}
+
+function showIltizamOptions() {
+    const modal = document.createElement('div');
+    modal.id = 'iltizam-modal';
+    modal.className = 'fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+    modal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 p-6 w-96 max-w-[90vw]">
+            <div class="text-center mb-4">
+                <div class="w-14 h-14 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <span class="material-symbols-outlined text-indigo-600 text-3xl">handshake</span>
+                </div>
+                <h3 class="text-lg font-bold text-gray-800">عقد الالتزام المدرسي</h3>
+                <p class="text-sm text-gray-500 mt-1">اختر طريقة الطباعة</p>
+            </div>
+            
+            <div class="space-y-3">
+                <button onclick="openIltizamWithStudent()" class="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 transition-all group">
+                    <span class="material-symbols-outlined text-indigo-500 group-hover:text-indigo-600">person</span>
+                    <div class="text-right flex-1">
+                        <div class="font-bold text-gray-800">طباعة ببيانات الطالب</div>
+                        <div class="text-xs text-gray-500">اختر الطالب من القائمة</div>
+                    </div>
+                </button>
+                
+                <button onclick="printIltizamBlank()" class="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-gray-200 hover:border-green-400 hover:bg-green-50 transition-all group">
+                    <span class="material-symbols-outlined text-green-500 group-hover:text-green-600">content_copy</span>
+                    <div class="text-right flex-1">
+                        <div class="font-bold text-gray-800">طباعة نموذج فارغ</div>
+                        <div class="text-xs text-gray-500">للتصوير وتوزيعه على عدة طلاب</div>
+                    </div>
+                </button>
+            </div>
+            
+            <button onclick="closeIltizamModal()" class="w-full mt-4 py-2 text-gray-500 hover:text-gray-700 text-sm">
+                إلغاء
+            </button>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeIltizamModal();
+    });
+}
+
+function closeIltizamModal() {
+    const modal = document.getElementById('iltizam-modal');
+    if (modal) modal.remove();
+}
+
+function openIltizamWithStudent() {
+    closeIltizamModal();
+    // فتح نافذة اختيار الطالب العادية
+    openGfModal('iltizam_madrasi', 'عقد التزام مدرسي', true, false);
+}
+
+function printIltizamBlank() {
+    closeIltizamModal();
+    
+    // التعديل هنا: إرسال التاريخ كسلسلة نصية فارغة "" بدلاً من التاريخ الحالي
+    let printData = {
+        studentName: '',
+        grade: '',
+        violationDay: '',
+        violationDate: '' // تم جعلها فارغة لتظهر الخانة بيضاء عند الطباعة
+    };
+    
+    // لا حاجة لاسم الوكيل في النسخة الفارغة (اختياري، ويمكن تركه فارغاً أيضاً)
+    printData.deputyName = ''; 
+    
+    printFormDirectly('iltizam_madrasi', encodeURIComponent(JSON.stringify(printData)));
+}
+
+// =================================================================
+// ★★★ منبثقات النماذج الجديدة ★★★
+// =================================================================
+
+// ─── أداة مساعدة لإنشاء منبثقة ───
+function _createOverlay(id) {
+    var old = document.getElementById(id);
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = id;
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)';
+    ov.onclick = function(e){ if(e.target===ov) ov.remove(); };
+    return ov;
+}
+function _modalHeader(title, subtitle, icon, color, closeId) {
+    return '<div style="background:linear-gradient(135deg,'+color+');padding:16px 20px;display:flex;align-items:center;gap:10px">'
+    +'<span class="material-symbols-outlined" style="color:white;font-size:24px">'+icon+'</span>'
+    +'<div><div style="color:white;font-size:16px;font-weight:800">'+title+'</div>'
+    +'<div style="color:rgba(255,255,255,.85);font-size:12px">'+escapeHtml(subtitle)+'</div></div>'
+    +'<button onclick="document.getElementById(\''+closeId+'\').remove()" style="margin-right:auto;background:none;border:none;color:white;cursor:pointer;font-size:20px">✕</button>'
+    +'</div>';
+}
+function _field(label, id, type, opts) {
+    type = type || 'text'; opts = opts || {};
+    var s = '<div'+(opts.hidden?' style="display:none" id="'+id+'_wrap"':'')+'><label style="font-size:12px;font-weight:700;color:#1a1d2e;margin-bottom:4px;display:block">'+label+'</label>';
+    if (type === 'select') {
+        s += '<select id="'+id+'" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:12px;font-size:14px;font-family:inherit;background:#f4f5f9;outline:none">';
+        (opts.options||[]).forEach(function(o){ s += '<option value="'+(o.v||o)+'">'+o+'</option>'; });
+        s += '</select>';
+    } else if (type === 'textarea') {
+        s += '<textarea id="'+id+'" rows="'+(opts.rows||3)+'" placeholder="'+(opts.ph||'')+'" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:12px;font-size:14px;font-family:inherit;background:#f4f5f9;outline:none;resize:vertical;box-sizing:border-box"></textarea>';
+    } else if (type === 'date') {
+        s += '<input type="date" id="'+id+'" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:12px;font-size:14px;font-family:inherit;background:#f4f5f9;outline:none">';
+        s += '<div id="'+id+'_hijri" style="font-size:13px;color:#059669;font-weight:700;margin-top:4px;text-align:center"></div>';
+    } else {
+        s += '<input type="text" id="'+id+'" value="'+(opts.val||'')+'" placeholder="'+(opts.ph||'')+'" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:12px;font-size:14px;font-family:inherit;background:#f4f5f9;outline:none;box-sizing:border-box">';
+    }
+    s += '</div>';
+    return s;
+}
+function _btnPrint(label, onclick) {
+    return '<button onclick="'+onclick+'" style="width:100%;padding:12px;background:linear-gradient(135deg,#4f46e5,#6366f1);color:white;border:none;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:4px"><span class="material-symbols-outlined" style="font-size:18px">print</span> '+label+'</button>';
+}
+function _hijriFromInput(inputId) {
+    try {
+        var d=new Date(document.getElementById(inputId).value);
+        var y=d.toLocaleDateString('ar-SA-u-ca-islamic',{year:'numeric'}).replace(/[^\u0660-\u0669\d]/g,'');
+        var m=d.toLocaleDateString('ar-SA-u-ca-islamic',{month:'numeric'}).replace(/[^\u0660-\u0669\d]/g,'');
+        var day=d.toLocaleDateString('ar-SA-u-ca-islamic',{day:'numeric'}).replace(/[^\u0660-\u0669\d]/g,'');
+        return y+'/'+m+'/'+day;
+    } catch(e){ return ''; }
+}
+function _hijriDate() {
+    try { return new Date().toLocaleDateString('ar-SA-u-ca-islamic'); } catch(e){ return ''; }
+}
+function _dayName(d) { var n=['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت']; return n[(d||new Date()).getDay()]; }
+function _todayStr() { return new Date().toISOString().split('T')[0]; }
+function _printAndClose(formId, data, overlayId) {
+    var ov = document.getElementById(overlayId);
+    if (ov) ov.remove();
+    printFormDirectly(formId, encodeURIComponent(JSON.stringify(data)));
+}
+
+// =================================================================
+// ★ دوال مشتركة لاختيار الطالب داخل المنبثقات
+// =================================================================
+var _spSelectStyle = 'padding:8px;border:1.5px solid #d1d5db;border-radius:10px;font-size:12px;font-family:inherit;background:white;width:100%;overflow:hidden;text-overflow:ellipsis';
+function _studentPickerHtml() {
+    return '<div style="border:1.5px solid #e5e7eb;border-radius:12px;padding:12px;background:#f9fafb;margin-bottom:12px">'
+    +'<label style="font-size:12px;font-weight:700;color:#1a1d2e;margin-bottom:8px;display:block">اختيار الطالب</label>'
+    +'<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:8px">'
+    +'<select id="sp_grade" onchange="spPopClasses()" style="'+_spSelectStyle+'"><option value="">الصف</option></select>'
+    +'<select id="sp_class" onchange="spPopStudents()" disabled style="'+_spSelectStyle+'"><option value="">الفصل</option></select>'
+    +'<select id="sp_student" disabled style="'+_spSelectStyle+'"><option value="">الطالب</option></select>'
+    +'</div></div>';
+}
+function _initStudentPicker() {
+    var gradeEl = document.getElementById('sp_grade');
+    if (!gradeEl) return;
+    var grades = [...new Set(APP_DATA.students.filter(function(s){return s['المرحلة']===currentStage;}).map(function(s){return s['الصف'];}))];
+    grades.sort(function(a,b){return a.localeCompare(b,'ar');});
+    grades.forEach(function(g){ gradeEl.add(new Option(g,g)); });
+}
+function spPopClasses() {
+    var g=document.getElementById('sp_grade').value, cs=document.getElementById('sp_class'), ss=document.getElementById('sp_student');
+    cs.innerHTML='<option value="">الفصل</option>'; ss.innerHTML='<option value="">الطالب</option>'; cs.disabled=!g; ss.disabled=true;
+    if(g){var classes=[...new Set(APP_DATA.students.filter(function(s){return s['المرحلة']===currentStage&&s['الصف']===g;}).map(function(s){return s['الفصل'];}))];classes.sort();classes.forEach(function(c){cs.add(new Option(c,c));});}
+}
+function spPopStudents() {
+    var g=document.getElementById('sp_grade').value,c=document.getElementById('sp_class').value,ss=document.getElementById('sp_student');
+    ss.innerHTML='<option value="">الطالب</option>'; ss.disabled=!c;
+    if(g&&c){var studs=APP_DATA.students.filter(function(s){return s['المرحلة']===currentStage&&s['الصف']===g&&s['الفصل']==c;});studs.sort(function(a,b){return a['اسم الطالب'].localeCompare(b['اسم الطالب'],'ar');});studs.forEach(function(s){var o=new Option(s['اسم الطالب'],s['رقم الطالب']);o.dataset.name=s['اسم الطالب'];o.dataset.grade=s['الصف'];o.dataset.cls=s['الفصل'];ss.add(o);});}
+}
+function _getPickedStudent() {
+    var ss=document.getElementById('sp_student');
+    if(!ss||!ss.value){ showEnhancedToast('warning','اختر طالباً أولاً'); return null; }
+    var opt=ss.options[ss.selectedIndex];
+    var today=new Date(), dayNames=['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+    var hijri=''; try{hijri=today.toLocaleDateString('ar-SA-u-ca-islamic',{day:'numeric',month:'long',year:'numeric'})+' هـ';}catch(e){}
+    return {
+        studentName: opt.dataset.name||opt.text,
+        grade: opt.dataset.grade||'',
+        'class': opt.dataset.cls||'',
+        violationDate: hijri,
+        violationDay: dayNames[today.getDay()]
+    };
+}
+
+// =================================================================
+// ★ منبثقة ٢٢: توثيق التواصل مع ولي الأمر
+// =================================================================
+function showTawtheeqModal_(baseData) {
+    var ov = _createOverlay('tawtheeq-overlay');
+    ov.innerHTML = '<div style="background:white;border-radius:16px;width:460px;max-width:95vw;box-shadow:0 25px 50px rgba(0,0,0,.25);overflow:hidden;direction:rtl;font-family:inherit;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">'
+    + _modalHeader('توثيق التواصل مع ولي الأمر', '', 'contact_phone', '#0891b2,#06b6d4', 'tawtheeq-overlay')
+    + '<div style="padding:20px;display:flex;flex-direction:column;gap:12px">'
+    + _studentPickerHtml()
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    + _field('اليوم','tw_day','select',{options:['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس']})
+    + _field('التاريخ','tw_date','date')
+    + '</div>'
+    + _field('طريقة التواصل','tw_type','select',{options:['اتصال هاتفي','حضوري','رسالة نصية']})
+    + _field('سبب التواصل','tw_reason','text',{ph:'مثال: لمناقشة المستوى السلوكي'})
+    + _field('نتيجة التواصل','tw_result','text',{val:'تم التواصل بنجاح'})
+    + _field('ملاحظات','tw_notes','text',{ph:'اختياري'})
+    + _btnPrint('طباعة التوثيق','submitTawtheeq_()')
+    + '</div></div>';
+    document.body.appendChild(ov);
+    _initStudentPicker();
+    document.getElementById('tw_day').value = _dayName();
+    document.getElementById('tw_date').value = _todayStr();
+    document.getElementById('tw_date').addEventListener('change',function(){ document.getElementById('tw_date_hijri').textContent=_hijriFromInput('tw_date')+' هـ'; document.getElementById('tw_day').value=_dayName(new Date(this.value)); });
+    document.getElementById('tw_date_hijri').textContent = _hijriDate()+' هـ';
+}
+function submitTawtheeq_() {
+    var student = _getPickedStudent(); if (!student) return;
+    var d = Object.assign({}, student, {
+        contactDay: document.getElementById('tw_day').value,
+        contactDate: _hijriFromInput('tw_date'),
+        contactType: document.getElementById('tw_type').value,
+        contactReason: document.getElementById('tw_reason').value,
+        contactResult: document.getElementById('tw_result').value,
+        contactNotes: document.getElementById('tw_notes').value
+    });
+    _printAndClose('tawtheeq_tawasol', d, 'tawtheeq-overlay');
+}
+
+// =================================================================
+// ★ منبثقة ٤: محضر ضبط واقعة / مخالفة
+// =================================================================
+function showMahdarModal_(baseData) {
+    _mhWitnessCount = 0; // إعادة تعيين العداد عند كل فتح
+    var ov = _createOverlay('mahdar-overlay');
+    // بناء قائمة شهود ديناميكية
+    ov.innerHTML = '<div style="background:white;border-radius:16px;width:500px;max-width:95vw;box-shadow:0 25px 50px rgba(0,0,0,.25);overflow:hidden;direction:rtl;font-family:inherit;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">'
+    + _modalHeader('محضر ضبط واقعة / مخالفة', '', 'edit_note', '#d97706,#f59e0b', 'mahdar-overlay')
+    + '<div style="padding:20px;display:flex;flex-direction:column;gap:12px">'
+    + _studentPickerHtml()
+    + _field('وصف المشكلة / المخالفة','mh_problem','textarea',{rows:2,ph:'بسبب قيامه بـ...'})
+    + _field('مكان الضبط','mh_location','text',{ph:'الفناء، الفصل، الممر...'})
+    + '<div><label style="font-size:12px;font-weight:700;color:#1a1d2e;margin-bottom:6px;display:block">نوع المشاهدات / المضبوطات</label>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:8px" id="mh_obs_checks">'
+    + ['إفادة شاهد','صور / فيديو','أدوات مضبوطة','تقرير طبي','أخرى'].map(function(t,i){
+        return '<label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer"><input type="checkbox" id="mh_obs_'+i+'" value="'+t+'"> '+t+'</label>';
+    }).join('')
+    + '</div>'
+    + _field('أخرى (حدد)','mh_obs_other','text',{ph:'نوع آخر...',hidden:true})
+    + '</div>'
+    + '<div><label style="font-size:12px;font-weight:700;color:#1a1d2e;margin-bottom:6px;display:block">شهود الواقعة</label>'
+    + '<div id="mh_witnesses"></div>'
+    + '<button onclick="addMahdarWitness_()" style="margin-top:6px;padding:6px 14px;border:1.5px dashed #6366f1;border-radius:10px;background:white;color:#4f46e5;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">+ إضافة شاهد</button>'
+    + '</div>'
+    + _btnPrint('طباعة المحضر','submitMahdar_()')
+    + '</div></div>';
+    document.body.appendChild(ov);
+    _initStudentPicker();
+    // إظهار حقل أخرى عند التحديد
+    document.getElementById('mh_obs_4').addEventListener('change',function(){ document.getElementById('mh_obs_other_wrap').style.display=this.checked?'block':'none'; });
+    // إضافة شاهد أول تلقائياً
+    addMahdarWitness_();
+}
+var _mhWitnessCount = 0;
+function addMahdarWitness_() {
+    _mhWitnessCount++;
+    var c = document.getElementById('mh_witnesses');
+    var div = document.createElement('div');
+    div.style.cssText = 'display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-bottom:6px;align-items:center';
+    div.innerHTML = '<select id="mh_wt_'+_mhWitnessCount+'" style="padding:8px;border:1.5px solid #d1d5db;border-radius:10px;font-size:13px;font-family:inherit;background:#f4f5f9"><option value="إداري">إداري</option><option value="معلم">معلم</option><option value="طالب">طالب</option></select>'
+    + '<input type="text" id="mh_wn_'+_mhWitnessCount+'" placeholder="اسم الشاهد" style="padding:8px;border:1.5px solid #d1d5db;border-radius:10px;font-size:13px;font-family:inherit;background:#f4f5f9">';
+    c.appendChild(div);
+}
+function submitMahdar_() {
+    var student = _getPickedStudent(); if (!student) return;
+    var obs = [];
+    for(var i=0;i<5;i++){ var cb=document.getElementById('mh_obs_'+i); if(cb&&cb.checked) obs.push(cb.value==='أخرى'?document.getElementById('mh_obs_other').value:cb.value); }
+    var witnesses = [];
+    for(var j=1;j<=_mhWitnessCount;j++){
+        var n=document.getElementById('mh_wn_'+j), t=document.getElementById('mh_wt_'+j);
+        if(n&&n.value.trim()) witnesses.push({name:n.value.trim(),role:t.value});
+    }
+    var d = Object.assign({}, student, {
+        violationText: document.getElementById('mh_problem').value,
+        mahdarLocation: document.getElementById('mh_location').value,
+        mahdarObservations: obs,
+        mahdarWitnesses: witnesses
+    });
+    _mhWitnessCount = 0;
+    _printAndClose('mahdar_dab_wakea', d, 'mahdar-overlay');
+}
+
+// =================================================================
+// ★ منبثقة ٥: محضر لجنة توجيه (مخالفة)
+// =================================================================
+function showLajnahModal_(baseData) {
+    var ov = _createOverlay('lajnah-overlay');
+    ov.innerHTML = '<div style="background:white;border-radius:16px;width:480px;max-width:95vw;box-shadow:0 25px 50px rgba(0,0,0,.25);overflow:hidden;direction:rtl;font-family:inherit;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">'
+    + _modalHeader('محضر لجنة التوجيه (مخالفة)', '', 'groups', '#d97706,#f59e0b', 'lajnah-overlay')
+    + '<div style="padding:20px;display:flex;flex-direction:column;gap:12px">'
+    + _studentPickerHtml()
+    + '<div style="display:grid;grid-template-columns:2fr 1fr;gap:12px">'
+    + _field('وصف المخالفة','lj_desc','text',{ph:'نص المخالفة'})
+    + _field('الدرجة','lj_degree','select',{options:['١','٢','٣','٤','٥']})
+    + '</div>'
+    + _field('الإجراءات التربوية المتخذة سابقاً','lj_prev','textarea',{rows:3,ph:'١. .........\n٢. .........'})
+    + _field('توصيات وقرارات اللجنة','lj_rec','textarea',{rows:3,ph:'١. .........\n٢. .........'})
+    + _btnPrint('طباعة المحضر','submitLajnah_()')
+    + '</div></div>';
+    document.body.appendChild(ov);
+    _initStudentPicker();
+}
+function submitLajnah_() {
+    var student = _getPickedStudent(); if (!student) return;
+    var d = Object.assign({}, student, {
+        lajnahPrevProcedures: document.getElementById('lj_prev').value,
+        lajnahRecommendations: document.getElementById('lj_rec').value,
+        violationText: document.getElementById('lj_desc') ? document.getElementById('lj_desc').value : '',
+        violationDegree: document.getElementById('lj_degree') ? document.getElementById('lj_degree').value : ''
+    });
+    _printAndClose('mahdar_lajnah', d, 'lajnah-overlay');
+}
+
+// =================================================================
+// ★ منبثقة ٦: محضر لجنة توجيه (غياب)
+// =================================================================
+function showLajnahAbsModal_(baseData) {
+    var ov = _createOverlay('lajnah-abs-overlay');
+    ov.innerHTML = '<div style="background:white;border-radius:16px;width:460px;max-width:95vw;box-shadow:0 25px 50px rgba(0,0,0,.25);overflow:hidden;direction:rtl;font-family:inherit;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">'
+    + _modalHeader('محضر لجنة التوجيه (غياب)', '', 'groups', '#d97706,#f59e0b', 'lajnah-abs-overlay')
+    + '<div style="padding:20px;display:flex;flex-direction:column;gap:12px">'
+    + _studentPickerHtml()
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    + _field('أيام بدون عذر','lja_unexcused','text',{ph:'0'})
+    + _field('أيام بعذر','lja_excused','text',{ph:'0'})
+    + '</div>'
+    + _field('الإجراءات التربوية المتخذة سابقاً','lja_prev','textarea',{rows:3,ph:'١. .........\n٢. .........'})
+    + _field('توصيات وقرارات اللجنة','lja_rec','textarea',{rows:3,ph:'١. .........\n٢. .........'})
+    + _btnPrint('طباعة المحضر','submitLajnahAbs_()')
+    + '</div></div>';
+    document.body.appendChild(ov);
+    _initStudentPicker();
+}
+function submitLajnahAbs_() {
+    var student = _getPickedStudent(); if (!student) return;
+    var d = Object.assign({}, student, {
+        lajnahPrevProcedures: document.getElementById('lja_prev').value,
+        lajnahRecommendations: document.getElementById('lja_rec').value,
+        unexcusedDays: document.getElementById('lja_unexcused') ? document.getElementById('lja_unexcused').value : '0',
+        excusedDays: document.getElementById('lja_excused') ? document.getElementById('lja_excused').value : '0'
+    });
+    _printAndClose('mahdar_lajnah_absence', d, 'lajnah-abs-overlay');
+}
+
+// =================================================================
+// ★ منبثقة ١٨: حالة عالية الخطورة
+// =================================================================
+function showHighRiskModal_(baseData) {
+    var ov = _createOverlay('risk-overlay');
+    var riskTypes = ['حيازة سلاح','مخدرات','تهديد بالعنف','مضاربة جماعية','تحرش'];
+    ov.innerHTML = '<div style="background:white;border-radius:16px;width:480px;max-width:95vw;box-shadow:0 25px 50px rgba(0,0,0,.25);overflow:hidden;direction:rtl;font-family:inherit;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">'
+    + _modalHeader('إبلاغ عن حالة عالية الخطورة', '', 'emergency', '#dc2626,#ef4444', 'risk-overlay')
+    + '<div style="padding:20px;display:flex;flex-direction:column;gap:12px">'
+    + _studentPickerHtml()
+    + '<div><label style="font-size:12px;font-weight:700;color:#1a1d2e;margin-bottom:6px;display:block">نوع الخطر</label>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:8px">'
+    + riskTypes.map(function(t,i){ return '<label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer"><input type="checkbox" id="rk_type_'+i+'" value="'+t+'"> '+t+'</label>'; }).join('')
+    + '<label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer"><input type="checkbox" id="rk_type_other" onchange="document.getElementById(\'rk_other_wrap\').style.display=this.checked?\'block\':\'none\'"> أخرى</label>'
+    + '</div></div>'
+    + _field('حدد نوع الخطر','rk_other','text',{hidden:true,ph:'نوع آخر...'})
+    + _field('وصف الحالة','rk_desc','textarea',{rows:3,ph:'وصف تفصيلي للحالة...'})
+    + _field('اسم راصد الحالة','rk_observer','text',{ph:'اسم الشخص الذي رصد الحالة'})
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    + _field('تاريخ الرصد','rk_date','date')
+    + _field('وقت الرصد','rk_time','select',{options:['٧:٠٠','٧:٣٠','٨:٠٠','٨:٣٠','٩:٠٠','٩:٣٠','١٠:٠٠','١٠:٣٠','١١:٠٠','١١:٣٠','١٢:٠٠','١٢:٣٠','١:٠٠']})
+    + '</div>'
+    + _btnPrint('طباعة النموذج','submitHighRisk_()')
+    + '</div></div>';
+    document.body.appendChild(ov);
+    _initStudentPicker();
+    document.getElementById('rk_date').value = _todayStr();
+    document.getElementById('rk_date').addEventListener('change',function(){ document.getElementById('rk_date_hijri').textContent=_hijriFromInput('rk_date')+' هـ'; });
+    document.getElementById('rk_date_hijri').textContent = _hijriDate()+' هـ';
+}
+function submitHighRisk_() {
+    var student = _getPickedStudent(); if (!student) return;
+    var types = [];
+    for(var i=0;i<5;i++){ var cb=document.getElementById('rk_type_'+i); if(cb&&cb.checked) types.push(cb.value); }
+    if(document.getElementById('rk_type_other').checked) types.push(document.getElementById('rk_other').value);
+    var d = Object.assign({}, student, {
+        riskTypes: types,
+        riskDesc: document.getElementById('rk_desc').value,
+        riskObserver: document.getElementById('rk_observer').value,
+        riskDate: _hijriFromInput('rk_date'),
+        riskTime: document.getElementById('rk_time').value
+    });
+    _printAndClose('high_risk', d, 'risk-overlay');
+}
+
+// =================================================================
+// ★ منبثقة ١٩: إبلاغ عن إيذاء
+// =================================================================
+function showEblaghModal_(baseData) {
+    var ov = _createOverlay('eblagh-overlay');
+    ov.innerHTML = '<div style="background:white;border-radius:16px;width:460px;max-width:95vw;box-shadow:0 25px 50px rgba(0,0,0,.25);overflow:hidden;direction:rtl;font-family:inherit;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">'
+    + _modalHeader('رصد وإبلاغ عن حالة إيذاء', '', 'report', '#dc2626,#ef4444', 'eblagh-overlay')
+    + '<div style="padding:20px;display:flex;flex-direction:column;gap:12px">'
+    + _studentPickerHtml()
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    + _field('اسم المُبَلِّغ','eb_reporter','text',{ph:'اسم الراصد'})
+    + _field('صفته','eb_role','text',{ph:'معلم، وكيل...'})
+    + '</div>'
+    + _field('ملخص الحالة','eb_summary','textarea',{rows:3,ph:'وصف تفصيلي للحالة...'})
+    + _field('الإجراء الأول','eb_proc1','text',{ph:'الإجراء المتخذ...'})
+    + _field('الإجراء الثاني','eb_proc2','text',{ph:'اختياري'})
+    + _field('الإجراء الثالث','eb_proc3','text',{ph:'اختياري'})
+    + _btnPrint('طباعة النموذج','submitEblagh_()')
+    + '</div></div>';
+    document.body.appendChild(ov);
+    _initStudentPicker();
+}
+function submitEblagh_() {
+    var student = _getPickedStudent(); if (!student) return;
+    var procs = [document.getElementById('eb_proc1').value, document.getElementById('eb_proc2').value, document.getElementById('eb_proc3').value].filter(function(p){return p.trim();});
+    var d = Object.assign({}, student, {
+        eblaghReporter: document.getElementById('eb_reporter').value,
+        eblaghRole: document.getElementById('eb_role').value,
+        eblaghSummary: document.getElementById('eb_summary').value,
+        eblaghProcedures: procs
+    });
+    _printAndClose('eblagh_etha', d, 'eblagh-overlay');
+}
+
+// =================================================================
+// ★ منبثقة ١٤: تعهد التزام بالحضور
+// =================================================================
+function showTahoodHodoorModal_(baseData) {
+    var ov = _createOverlay('tahood-hodoor-overlay');
+    ov.innerHTML = '<div style="background:white;border-radius:16px;width:420px;max-width:95vw;box-shadow:0 25px 50px rgba(0,0,0,.25);overflow:hidden;direction:rtl;font-family:inherit" onclick="event.stopPropagation()">'
+    + _modalHeader('تعهد التزام بالحضور', '', 'edit_document', '#ea580c,#f97316', 'tahood-hodoor-overlay')
+    + '<div style="padding:20px;display:flex;flex-direction:column;gap:12px">'
+    + _studentPickerHtml()
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    + _field('أيام الغياب بدون عذر','th_unexcused','text',{ph:'مثال: 5'})
+    + _field('أيام الغياب بعذر','th_excused','text',{ph:'مثال: 3'})
+    + '</div>'
+    + _btnPrint('طباعة التعهد','submitTahoodHodoor_()')
+    + '</div></div>';
+    document.body.appendChild(ov);
+    _initStudentPicker();
+}
+function submitTahoodHodoor_() {
+    var student = _getPickedStudent(); if (!student) return;
+    var d = Object.assign({}, student, {
+        unexcusedDays: document.getElementById('th_unexcused').value || '0',
+        excusedDays: document.getElementById('th_excused').value || '0'
+    });
+    _printAndClose('tahood_hodoor', d, 'tahood-hodoor-overlay');
+}
+
+// =================================================================
+// ★ منبثقة ٢٠: خطة تعديل سلوك
+// =================================================================
+function showKhotaModal_(baseData) {
+    var ov = _createOverlay('khota-overlay');
+    ov.innerHTML = '<div style="background:white;border-radius:16px;width:480px;max-width:95vw;box-shadow:0 25px 50px rgba(0,0,0,.25);overflow:hidden;direction:rtl;font-family:inherit;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">'
+    + _modalHeader('خطة تعديل سلوك', '', 'psychology', '#0d9488,#14b8a6', 'khota-overlay')
+    + '<div style="padding:20px;display:flex;flex-direction:column;gap:12px">'
+    + _studentPickerHtml()
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    + _field('تاريخ الميلاد','kh_dob','date')
+    + _field('العمر','kh_age','text',{ph:'مثال: ١٢ سنة'})
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    + _field('تاريخ البداية','kh_start','date')
+    + _field('تاريخ النهاية','kh_end','date')
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:2fr 1fr;gap:12px">'
+    + _field('المشكلة السلوكية','kh_problem','text',{ph:'نوع المشكلة'})
+    + _field('الدرجة','kh_degree','select',{options:['١','٢','٣','٤','٥']})
+    + '</div>'
+    + _field('وصف المشكلة السلوكية','kh_desc','textarea',{rows:2,ph:'وصف تفصيلي...'})
+    + _field('المظهر السلوكي الأول','kh_m1','text',{ph:'المظهر الأول...'})
+    + _field('المظهر السلوكي الثاني','kh_m2','text',{ph:'المظهر الثاني...'})
+    + _btnPrint('طباعة الخطة','submitKhota_()')
+    + '</div></div>';
+    document.body.appendChild(ov);
+    _initStudentPicker();
+    document.getElementById('kh_start').value = _todayStr();
+    ['kh_dob','kh_start','kh_end'].forEach(function(id){
+        document.getElementById(id).addEventListener('change',function(){ var h=document.getElementById(id+'_hijri'); if(h) h.textContent=_hijriFromInput(id)+' هـ'; });
+    });
+    document.getElementById('kh_start_hijri').textContent = _hijriDate()+' هـ';
+}
+function submitKhota_() {
+    var student = _getPickedStudent(); if (!student) return;
+    var manifests = [document.getElementById('kh_m1').value, document.getElementById('kh_m2').value].filter(function(m){return m.trim();});
+    var d = Object.assign({}, student, {
+        khotaDob: _hijriFromInput('kh_dob'),
+        khotaAge: document.getElementById('kh_age').value,
+        khotaStart: _hijriFromInput('kh_start'),
+        khotaEnd: _hijriFromInput('kh_end'),
+        khotaProblem: document.getElementById('kh_problem').value,
+        khotaDegree: document.getElementById('kh_degree').value,
+        khotaDesc: document.getElementById('kh_desc').value,
+        khotaManifestations: manifests
+    });
+    _printAndClose('khota_tadeel', d, 'khota-overlay');
+}
+
+// =================================================================
+// ★ منبثقة ٢٣: محضر إثبات واقعة (مشاجرة)
+// =================================================================
+function showMashajaraModal_(baseData) {
+    _msDmgCount = {phys:0, mat:0}; _msAuthorCount = 0; // إعادة تعيين العدادات
+    var ov = _createOverlay('mashajara-overlay');
+    ov.innerHTML = '<div style="background:white;border-radius:16px;width:560px;max-width:95vw;box-shadow:0 25px 50px rgba(0,0,0,.25);overflow:hidden;direction:rtl;font-family:inherit;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">'
+    + _modalHeader('محضر إثبات واقعة (سلوك غير تربوي)', '', 'local_police', '#dc2626,#ef4444', 'mashajara-overlay')
+    + '<div style="padding:20px;display:flex;flex-direction:column;gap:12px">'
+    // الزمان والمكان
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">'
+    + _field('اليوم','ms_day','select',{options:['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس']})
+    + _field('التاريخ','ms_date','date')
+    + _field('الساعة','ms_time','select',{options:['٧:٠٠','٧:٣٠','٨:٠٠','٨:٣٠','٩:٠٠','٩:٣٠','١٠:٠٠','١٠:٣٠','١١:٠٠','١١:٣٠','١٢:٠٠','١٢:٣٠','١:٠٠']})
+    + '</div>'
+    + _field('المكان','ms_location','text',{ph:'الفناء، الممر، الفصل...'})
+    // اختيار الطلاب
+    + '<div style="border:1.5px solid #e5e7eb;border-radius:12px;padding:12px;background:#f9fafb">'
+    + '<label style="font-size:12px;font-weight:700;color:#1a1d2e;margin-bottom:8px;display:block">أطراف النزاع (٢-١٢ طالب)</label>'
+    + '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:8px">'
+    + '<select id="ms_grade" onchange="msMPopClasses()" style="padding:8px;border:1.5px solid #d1d5db;border-radius:10px;font-size:12px;font-family:inherit;background:white;width:100%;overflow:hidden;text-overflow:ellipsis"><option value="">الصف</option></select>'
+    + '<select id="ms_class" onchange="msMPopStudents()" disabled style="padding:8px;border:1.5px solid #d1d5db;border-radius:10px;font-size:12px;font-family:inherit;background:white;width:100%;overflow:hidden;text-overflow:ellipsis"><option value="">الفصل</option></select>'
+    + '<select id="ms_student" disabled style="padding:8px;border:1.5px solid #d1d5db;border-radius:10px;font-size:12px;font-family:inherit;background:white;width:100%;overflow:hidden;text-overflow:ellipsis"><option value="">الطالب</option></select>'
+    + '</div>'
+    + '<button onclick="msAddStudent()" style="padding:6px 14px;border:1.5px dashed #6366f1;border-radius:10px;background:white;color:#4f46e5;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">+ إضافة طالب</button>'
+    + '<div id="ms_students_list" style="margin-top:8px"></div>'
+    + '</div>'
+    // المبادر والوصف
+    + '<select id="ms_initiator" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:12px;font-size:14px;font-family:inherit;background:#f4f5f9"><option value="">اختر المبادر</option></select>'
+    + _field('وصف الواقعة','ms_desc','textarea',{rows:2,ph:'قيامه بالتالي...'})
+    // الأضرار
+    + '<div><label style="font-size:12px;font-weight:700;color:#1a1d2e;margin-bottom:4px;display:block">الأضرار الجسدية</label><div id="ms_phys"></div>'
+    + '<button onclick="msAddDamage(\'phys\')" style="margin-top:4px;padding:4px 12px;border:1px dashed #d1d5db;border-radius:8px;background:white;font-size:11px;cursor:pointer;font-family:inherit">+ إضافة</button></div>'
+    + '<div><label style="font-size:12px;font-weight:700;color:#1a1d2e;margin-bottom:4px;display:block">الأضرار المادية</label><div id="ms_mat"></div>'
+    + '<button onclick="msAddDamage(\'mat\')" style="margin-top:4px;padding:4px 12px;border:1px dashed #d1d5db;border-radius:8px;background:white;font-size:11px;cursor:pointer;font-family:inherit">+ إضافة</button></div>'
+    // محرر المحضر
+    + '<div><label style="font-size:12px;font-weight:700;color:#1a1d2e;margin-bottom:4px;display:block">محرر/محررو المحضر</label><div id="ms_authors"></div>'
+    + '<button onclick="msAddAuthor()" style="margin-top:4px;padding:4px 12px;border:1px dashed #6366f1;border-radius:8px;background:white;color:#4f46e5;font-size:11px;cursor:pointer;font-family:inherit">+ إضافة محرر</button></div>'
+    + _btnPrint('طباعة المحضر','submitMashajara_()')
+    + '</div></div>';
+    document.body.appendChild(ov);
+    document.getElementById('ms_day').value = _dayName();
+    document.getElementById('ms_date').value = _todayStr();
+    document.getElementById('ms_date').addEventListener('change',function(){ document.getElementById('ms_date_hijri').textContent=_hijriFromInput('ms_date')+' هـ'; document.getElementById('ms_day').value=_dayName(new Date(this.value)); });
+    document.getElementById('ms_date_hijri').textContent = _hijriDate()+' هـ';
+    // تعبئة قائمة الصفوف
+    var gradeSelect = document.getElementById('ms_grade');
+    var grades = [...new Set(APP_DATA.students.filter(function(s){return s['المرحلة']===currentStage;}).map(function(s){return s['الصف'];}))];
+    grades.sort(function(a,b){return a.localeCompare(b,'ar');});
+    grades.forEach(function(g){ gradeSelect.add(new Option(g,g)); });
+    // إضافة ضرر أول + محرر أول
+    msAddDamage('phys'); msAddDamage('mat'); msAddAuthor();
+    // بناء قائمة المسؤوليات
+    window._msRoles = [];
+    if(APP_DATA.settings){
+        if(APP_DATA.settings.deputies) APP_DATA.settings.deputies.forEach(function(d){window._msRoles.push({name:d.name,role:d.role||'وكيل'});});
+        if(APP_DATA.settings.counselors) APP_DATA.settings.counselors.forEach(function(c){window._msRoles.push({name:c.name,role:c.role||'موجه'});});
+    }
+    window._msStudents = [];
+}
+function msMPopClasses() {
+    var g=document.getElementById('ms_grade').value, cs=document.getElementById('ms_class'), ss=document.getElementById('ms_student');
+    cs.innerHTML='<option value="">الفصل</option>'; ss.innerHTML='<option value="">الطالب</option>'; cs.disabled=!g; ss.disabled=true;
+    if(g){var classes=[...new Set(APP_DATA.students.filter(function(s){return s['المرحلة']===currentStage&&s['الصف']===g;}).map(function(s){return s['الفصل'];}))];classes.sort();classes.forEach(function(c){cs.add(new Option(c,c));});}
+}
+function msMPopStudents() {
+    var g=document.getElementById('ms_grade').value,c=document.getElementById('ms_class').value,ss=document.getElementById('ms_student');
+    ss.innerHTML='<option value="">الطالب</option>'; ss.disabled=!c;
+    if(g&&c){var studs=APP_DATA.students.filter(function(s){return s['المرحلة']===currentStage&&s['الصف']===g&&s['الفصل']==c;});studs.sort(function(a,b){return a['اسم الطالب'].localeCompare(b['اسم الطالب'],'ar');});studs.forEach(function(s){var o=new Option(s['اسم الطالب'],s['رقم الطالب']);o.dataset.name=s['اسم الطالب'];o.dataset.grade=g+'/'+c;ss.add(o);});}
+}
+function msAddStudent() {
+    var ss=document.getElementById('ms_student'); if(!ss.value) return;
+    var opt=ss.options[ss.selectedIndex], name=opt.dataset.name, grade=opt.dataset.grade;
+    if(window._msStudents.find(function(s){return s.id===ss.value;})) { showEnhancedToast('warning','الطالب مضاف مسبقاً'); return; }
+    if(window._msStudents.length>=12) { showEnhancedToast('warning','الحد الأقصى ١٢ طالب'); return; }
+    window._msStudents.push({id:ss.value, name:name, grade:grade});
+    msRenderStudents();
+}
+function msRenderStudents() {
+    var c=document.getElementById('ms_students_list'), ini=document.getElementById('ms_initiator');
+    c.innerHTML=''; ini.innerHTML='<option value="">اختر المبادر</option>';
+    window._msStudents.forEach(function(s,i){
+        c.innerHTML += '<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:white;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:4px;font-size:12px">'
+        +'<span style="font-weight:700;color:#4f46e5">'+(i+1)+'</span> '+escapeHtml(s.name)+' <span style="color:#6b7280">('+escapeHtml(s.grade)+')</span>'
+        +'<button onclick="msRemoveStudent('+i+')" style="margin-right:auto;background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px">✕</button></div>';
+        ini.add(new Option(s.name, s.name));
+    });
+}
+function msRemoveStudent(idx) { window._msStudents.splice(idx,1); msRenderStudents(); }
+var _msDmgCount={phys:0,mat:0};
+function msAddDamage(type) {
+    _msDmgCount[type]++;
+    var c=document.getElementById('ms_'+type);
+    var div=document.createElement('div'); div.style.cssText='margin-bottom:4px';
+    div.innerHTML='<input type="text" id="ms_'+type+'_'+_msDmgCount[type]+'" placeholder="'+(type==='phys'?'ضرر جسدي...':'ضرر مادي...')+'" style="width:100%;padding:8px;border:1.5px solid #d1d5db;border-radius:10px;font-size:13px;font-family:inherit;background:#f4f5f9;box-sizing:border-box">';
+    c.appendChild(div);
+}
+var _msAuthorCount=0;
+function msAddAuthor() {
+    _msAuthorCount++;
+    var c=document.getElementById('ms_authors');
+    var div=document.createElement('div'); div.style.cssText='display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-bottom:6px';
+    var roleOpts='<option value="">الصفة</option>'
+    +'<option value="مدير المدرسة">مدير المدرسة</option>'
+    +'<option value="وكيل الشؤون التعليمية">وكيل الشؤون التعليمية</option>'
+    +'<option value="وكيل شؤون الطلاب">وكيل شؤون الطلاب</option>'
+    +'<option value="الموجه الطلابي">الموجه الطلابي</option>'
+    +'<option value="المعلم">المعلم</option>'
+    +'<option value="الإداري">الإداري</option>'
+    +'<option value="custom">إدخال يدوي</option>';
+    div.innerHTML='<select id="ms_ar_'+_msAuthorCount+'" onchange="msAuthorChange('+_msAuthorCount+')" style="padding:8px;border:1.5px solid #d1d5db;border-radius:10px;font-size:12px;font-family:inherit;background:white">'+roleOpts+'</select>'
+    +'<input type="text" id="ms_an_'+_msAuthorCount+'" placeholder="الاسم" style="padding:8px;border:1.5px solid #d1d5db;border-radius:10px;font-size:13px;font-family:inherit;background:#f4f5f9">';
+    c.appendChild(div);
+}
+function msAuthorChange(idx) {
+    var sel=document.getElementById('ms_ar_'+idx), inp=document.getElementById('ms_an_'+idx);
+    if(sel.value==='custom'){ inp.value=''; inp.placeholder='الاسم والصفة'; inp.focus(); }
+    else { inp.value=''; inp.placeholder='الاسم'; inp.focus(); }
+}
+function submitMashajara_() {
+    if(window._msStudents.length<2){ showEnhancedToast('warning','يجب إضافة طالبين على الأقل'); return; }
+    var physDmg=[], matDmg=[];
+    for(var i=1;i<=_msDmgCount.phys;i++){var v=document.getElementById('ms_phys_'+i);if(v&&v.value.trim())physDmg.push(v.value.trim());}
+    for(var j=1;j<=_msDmgCount.mat;j++){var v2=document.getElementById('ms_mat_'+j);if(v2&&v2.value.trim())matDmg.push(v2.value.trim());}
+    var authors=[];
+    for(var k=1;k<=_msAuthorCount;k++){
+        var sel=document.getElementById('ms_ar_'+k), nm=document.getElementById('ms_an_'+k);
+        if(nm&&nm.value.trim()){
+            var role=(sel.value && sel.value!=='custom')?sel.value:'';
+            authors.push({name:nm.value.trim(),role:role});
+        }
+    }
+    var d = {
+        day: document.getElementById('ms_day').value,
+        date: _hijriFromInput('ms_date'),
+        time: document.getElementById('ms_time').value,
+        location: document.getElementById('ms_location').value,
+        students: window._msStudents.map(function(s){return {name:s.name,grade:s.grade};}),
+        initiator: document.getElementById('ms_initiator').value,
+        description: document.getElementById('ms_desc').value,
+        physicalDamage: physDmg,
+        materialDamage: matDmg,
+        authors: authors,
+        authorName: authors.length>0?authors[0].name:'',
+        authorRole: authors.length>0?authors[0].role:''
+    };
+    // تنظيف
+    window._msStudents=[]; _msDmgCount={phys:0,mat:0}; _msAuthorCount=0;
+    _printAndClose('mashajara', d, 'mashajara-overlay');
+}
+
+// =================================================================
+// ★ منبثقة ١٧: سجل متابعة ورصد مخالفات (للمعلم)
+// =================================================================
+function showRasdMoalemModal_(baseData) {
+    var ov = _createOverlay('rasd-moalem-overlay');
+    ov.innerHTML = '<div style="background:white;border-radius:16px;width:560px;max-width:95vw;box-shadow:0 25px 50px rgba(0,0,0,.25);overflow:hidden;direction:rtl;font-family:inherit;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">'
+    + _modalHeader('سجل متابعة ورصد مخالفات (للمعلم)', 'النموذج ١٧', 'person_book', '#7c3aed,#8b5cf6', 'rasd-moalem-overlay')
+    + '<div style="padding:20px;display:flex;flex-direction:column;gap:12px">'
+    // خيار الطباعة: فارغ أو مملوء
+    + '<div style="display:flex;gap:10px;margin-bottom:4px">'
+    + '<label style="flex:1;display:flex;align-items:center;gap:8px;padding:12px;border:2px solid #e5e7eb;border-radius:12px;cursor:pointer;font-size:13px;font-weight:700" id="rasd_opt_blank_label">'
+    + '<input type="radio" name="rasd_mode" value="blank" id="rasd_opt_blank" checked onchange="rasdToggleMode()" style="accent-color:#7c3aed"> طباعة فارغ'
+    + '</label>'
+    + '<label style="flex:1;display:flex;align-items:center;gap:8px;padding:12px;border:2px solid #e5e7eb;border-radius:12px;cursor:pointer;font-size:13px;font-weight:700" id="rasd_opt_filled_label">'
+    + '<input type="radio" name="rasd_mode" value="filled" id="rasd_opt_filled" onchange="rasdToggleMode()" style="accent-color:#7c3aed"> طباعة مملوء'
+    + '</label>'
+    + '</div>'
+    // بيانات المعلم (تظهر في كلا الوضعين)
+    + '<div style="border:1.5px solid #e5e7eb;border-radius:12px;padding:12px;background:#f9fafb">'
+    + '<label style="font-size:12px;font-weight:700;color:#1a1d2e;margin-bottom:8px;display:block">بيانات المعلم (اختياري في الوضع الفارغ)</label>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">'
+    + _field('اسم المعلم','rasd_teacher_name','text',{ph:'اسم المعلم'})
+    + _field('المادة','rasd_subject_name','text',{ph:'الرياضيات، العلوم...'})
+    + _field('الصف','rasd_grade_name','text',{ph:'ثاني / أ'})
+    + '</div></div>'
+    // قسم المخالفات (يظهر فقط في الوضع المملوء)
+    + '<div id="rasd_violations_section" style="display:none">'
+    + '<div style="border:1.5px solid #e5e7eb;border-radius:12px;padding:12px;background:#f9fafb">'
+    + '<label style="font-size:12px;font-weight:700;color:#1a1d2e;margin-bottom:8px;display:block">المخالفات المسجلة (حتى ١٢ سطر)</label>'
+    + '<div id="rasd_viols_list"></div>'
+    + '<button onclick="rasdAddViol()" style="margin-top:6px;padding:6px 14px;border:1.5px dashed #7c3aed;border-radius:10px;background:white;color:#6d28d9;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">+ إضافة مخالفة</button>'
+    + '</div></div>'
+    + _btnPrint('طباعة النموذج','submitRasdMoalem_()')
+    + '</div></div>';
+    document.body.appendChild(ov);
+    // تطبيق التنسيق المبدئي (تمييز خيار "فارغ")
+    rasdToggleMode();
+    // إضافة 3 صفوف مخالفات افتراضية
+    window._rasdViolCount = 0;
+    rasdAddViol(); rasdAddViol(); rasdAddViol();
+}
+
+function rasdToggleMode() {
+    var filled = document.getElementById('rasd_opt_filled').checked;
+    var section = document.getElementById('rasd_violations_section');
+    var blankLbl = document.getElementById('rasd_opt_blank_label');
+    var filledLbl = document.getElementById('rasd_opt_filled_label');
+    section.style.display = filled ? 'block' : 'none';
+    blankLbl.style.borderColor = filled ? '#e5e7eb' : '#7c3aed';
+    blankLbl.style.background = filled ? 'white' : '#f5f3ff';
+    filledLbl.style.borderColor = filled ? '#7c3aed' : '#e5e7eb';
+    filledLbl.style.background = filled ? '#f5f3ff' : 'white';
+}
+
+window._rasdViolCount = 0;
+function rasdAddViol() {
+    var existingRows = document.getElementById('rasd_viols_list') ? document.getElementById('rasd_viols_list').children.length : 0;
+    if (existingRows >= 12) { showEnhancedToast('warning', 'الحد الأقصى ١٢ مخالفة'); return; }
+    window._rasdViolCount++;
+    var idx = window._rasdViolCount;
+    var c = document.getElementById('rasd_viols_list');
+    var div = document.createElement('div');
+    div.id = 'rasd_vrow_' + idx;
+    div.style.cssText = 'display:grid;grid-template-columns:auto 2fr 2fr 2fr 1fr auto;gap:6px;margin-bottom:6px;align-items:center';
+    div.innerHTML = '<span style="font-size:12px;font-weight:700;color:#6d28d9;min-width:18px;text-align:center">' + idx + '</span>'
+        + '<input type="text" id="rasd_v_name_' + idx + '" placeholder="اسم الطالب" style="padding:7px 8px;border:1.5px solid #d1d5db;border-radius:8px;font-size:12px;font-family:inherit;background:#fff;min-width:0">'
+        + '<input type="text" id="rasd_v_viol_' + idx + '" placeholder="المخالفة" style="padding:7px 8px;border:1.5px solid #d1d5db;border-radius:8px;font-size:12px;font-family:inherit;background:#fff;min-width:0">'
+        + '<input type="text" id="rasd_v_action_' + idx + '" placeholder="الإجراء المتخذ" style="padding:7px 8px;border:1.5px solid #d1d5db;border-radius:8px;font-size:12px;font-family:inherit;background:#fff;min-width:0">'
+        + '<input type="text" id="rasd_v_date_' + idx + '" placeholder="التاريخ" style="padding:7px 8px;border:1.5px solid #d1d5db;border-radius:8px;font-size:12px;font-family:inherit;background:#fff;min-width:0">'
+        + '<button onclick="rasdRemoveViol(' + idx + ')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;padding:2px">✕</button>';
+    c.appendChild(div);
+}
+
+function rasdRemoveViol(idx) {
+    var row = document.getElementById('rasd_vrow_' + idx);
+    if (row) row.remove();
+}
+
+function submitRasdMoalem_() {
+    var isFilled = document.getElementById('rasd_opt_filled').checked;
+    var teacher = (document.getElementById('rasd_teacher_name').value || '').trim();
+    var subject = (document.getElementById('rasd_subject_name').value || '').trim();
+    var grade = (document.getElementById('rasd_grade_name').value || '').trim();
+
+    var d = {
+        teacherName: teacher,
+        subject: subject,
+        grade: grade
+    };
+
+    if (isFilled) {
+        var violations = [];
+        for (var i = 1; i <= window._rasdViolCount; i++) {
+            var nameEl = document.getElementById('rasd_v_name_' + i);
+            if (!nameEl) continue; // تم حذف هذا الصف
+            var vName = (nameEl.value || '').trim();
+            var vViol = (document.getElementById('rasd_v_viol_' + i).value || '').trim();
+            var vAction = (document.getElementById('rasd_v_action_' + i).value || '').trim();
+            var vDate = (document.getElementById('rasd_v_date_' + i).value || '').trim();
+            if (vName || vViol) {
+                violations.push({
+                    studentName: vName,
+                    violation: vViol,
+                    action: vAction,
+                    date: vDate
+                });
+            }
+        }
+        if (violations.length > 0) {
+            d.violations = violations;
+        }
+    }
+
+    // تنظيف
+    window._rasdViolCount = 0;
+    _printAndClose('rasd_moalem', d, 'rasd-moalem-overlay');
+}
+
+</script>

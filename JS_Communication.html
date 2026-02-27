@@ -1,0 +1,480 @@
+<script>
+    // =================================================================
+    // صفحة سجل التواصل - Communication Log Page
+    // =================================================================
+    
+    let communicationRecords = [];
+    
+    function renderCommunicationPage() {
+        const main = document.getElementById('main-content');
+        main.innerHTML = `
+            <div class="max-w-full">
+                <!-- العنوان -->
+                <div class="flex justify-between items-center mb-5">
+                    <div class="flex items-center gap-3">
+                        <div class="p-2 bg-blue-100 rounded-xl">
+                            <span class="material-symbols-outlined text-3xl text-blue-600">history</span>
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-extrabold text-gray-900">سجل التواصل</h2>
+                            <p class="text-sm text-gray-500">توثيق جميع الرسائل المرسلة لأولياء الأمور</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- بطاقات الإحصائيات -->
+                <div id="comm-stats" class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                        <div class="text-3xl font-bold text-gray-800" id="stat-total">-</div>
+                        <div class="text-xs text-gray-500">إجمالي الرسائل</div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                        <div class="text-3xl font-bold text-green-600" id="stat-sent">-</div>
+                        <div class="text-xs text-gray-500">تم إرسالها</div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                        <div class="text-3xl font-bold text-red-600" id="stat-failed">-</div>
+                        <div class="text-xs text-gray-500">فشل الإرسال</div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                        <div class="text-3xl font-bold text-blue-600" id="stat-today">-</div>
+                        <div class="text-xs text-gray-500">اليوم</div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+                        <div class="text-3xl font-bold text-purple-600" id="stat-week">-</div>
+                        <div class="text-xs text-gray-500">هذا الأسبوع</div>
+                    </div>
+                </div>
+                
+                <!-- شريط الفلاتر والأدوات -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-5">
+                    <div class="grid grid-cols-1 md:grid-cols-6 gap-3 mb-4">
+                        <select id="comm-filter-type" onchange="filterCommunicationLog()" class="border-gray-300 rounded-lg text-sm h-10">
+                            <option value="">كل الأنواع</option>
+                            <option value="مخالفة">مخالفة سلوكية</option>
+                            <option value="ملاحظة">ملاحظة تربوية</option>
+                            <option value="غياب">غياب</option>
+                            <option value="تأخر">تأخر</option>
+                        </select>
+                        <select id="comm-filter-status" onchange="filterCommunicationLog()" class="border-gray-300 rounded-lg text-sm h-10">
+                            <option value="">كل الحالات</option>
+                            <option value="✅ تم الإرسال">تم الإرسال</option>
+                            <option value="❌ فشل">فشل</option>
+                            <option value="جاري الإرسال">جاري الإرسال</option>
+                        </select>
+                        <input type="date" id="comm-filter-from" onchange="filterCommunicationLog()" class="border-gray-300 rounded-lg text-sm h-10" placeholder="من تاريخ">
+                        <input type="date" id="comm-filter-to" onchange="filterCommunicationLog()" class="border-gray-300 rounded-lg text-sm h-10" placeholder="إلى تاريخ">
+                        <input type="text" id="comm-filter-search" onkeyup="filterCommunicationLog()" class="border-gray-300 rounded-lg text-sm h-10" placeholder="بحث بالاسم...">
+                        <button onclick="clearCommFilters()" class="bg-gray-100 text-gray-600 px-3 h-10 rounded-lg text-sm hover:bg-gray-200 font-bold">مسح الفلاتر</button>
+                    </div>
+                    
+                    <div class="flex flex-wrap gap-3 border-t border-gray-100 pt-4">
+                        <button onclick="loadCommunicationLog()" class="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium">
+                            <span class="material-symbols-outlined">refresh</span> تحديث السجل
+                        </button>
+                        <button onclick="printCommunicationLog()" class="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 text-sm font-medium">
+                            <span class="material-symbols-outlined">print</span> طباعة
+                        </button>
+                        <button onclick="exportCommunicationLog()" class="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 text-sm font-medium">
+                            <span class="material-symbols-outlined">download</span> تصدير Excel
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- جدول السجل -->
+                <div id="comm-content" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="text-center py-16">
+                        <div class="loading-bar mx-auto"><div class="loading-bar-progress"></div></div>
+                        <p class="text-gray-500 mt-4">جاري تحميل السجل...</p>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        loadCommunicationStats();
+        loadCommunicationLog();
+    }
+    
+    // =================================================================
+    // تحميل البيانات
+    // =================================================================
+function loadCommunicationStats() {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success && result.stats) {
+                    var s = result.stats;
+                    document.getElementById('stat-total').innerText = toIndic(s.total || 0);
+                    document.getElementById('stat-sent').innerText = toIndic(s.sent || 0);
+                    document.getElementById('stat-failed').innerText = toIndic(s.failed || 0);
+                    document.getElementById('stat-today').innerText = toIndic(s.todayCount || 0);
+                    document.getElementById('stat-week').innerText = toIndic(s.weekCount || 0);
+                }
+            })
+            .withFailureHandler(function(err) {
+                console.error('خطأ في تحميل الإحصائيات:', err);
+            })
+            .getCommunicationStats(currentStage);
+    }
+    
+function loadCommunicationLog() {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                console.log('Result:', result);
+                if (result && result.success) {
+                    communicationRecords = result.records || [];
+                } else if (Array.isArray(result)) {
+                    communicationRecords = result;
+                } else {
+                    communicationRecords = [];
+                }
+                displayCommunicationLog(communicationRecords);
+            })
+            .withFailureHandler(function(err) {
+                console.error('Error:', err);
+                communicationRecords = [];
+                displayCommunicationLog([]);
+            })
+            .loadCommRecords(currentStage);
+    }
+
+    function getCommFilters() {
+        return {
+            messageType: document.getElementById('comm-filter-type')?.value || '',
+            status: document.getElementById('comm-filter-status')?.value || '',
+            dateFrom: document.getElementById('comm-filter-from')?.value || '',
+            dateTo: document.getElementById('comm-filter-to')?.value || ''
+        };
+    }
+    
+    function filterCommunicationLog() {
+        const searchText = (document.getElementById('comm-filter-search')?.value || '').toLowerCase();
+        const typeFilter = document.getElementById('comm-filter-type')?.value || '';
+        const statusFilter = document.getElementById('comm-filter-status')?.value || '';
+        
+        let filtered = communicationRecords.filter(rec => {
+            let match = true;
+            
+            if (searchText && !(rec.studentName || '').toLowerCase().includes(searchText)) {
+                match = false;
+            }
+            if (typeFilter && rec.messageType !== typeFilter) {
+                match = false;
+            }
+            if (statusFilter && rec.status !== statusFilter) {
+                match = false;
+            }
+            
+            return match;
+        });
+        
+        displayCommunicationLog(filtered);
+    }
+    
+    function clearCommFilters() {
+        document.getElementById('comm-filter-type').value = '';
+        document.getElementById('comm-filter-status').value = '';
+        document.getElementById('comm-filter-from').value = '';
+        document.getElementById('comm-filter-to').value = '';
+        document.getElementById('comm-filter-search').value = '';
+        loadCommunicationLog();
+    }
+    
+    // =================================================================
+    // عرض السجل
+    // =================================================================
+    function displayCommunicationLog(records) {
+        const container = document.getElementById('comm-content');
+        
+        if (!records || records.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-16">
+                    <span class="material-symbols-outlined text-gray-300 text-6xl">inbox</span>
+                    <p class="text-gray-500 mt-2">لا توجد رسائل مسجلة</p>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = `
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500">م</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500">التاريخ</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500">الطالب</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500">الصف</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500">النوع</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500">العنوان</th>
+                            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">الحالة</th>
+                            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">إجراء</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 bg-white">
+        `;
+        
+        records.forEach((rec, index) => {
+            const typeColors = {
+                'مخالفة': 'bg-red-100 text-red-700',
+                'ملاحظة': 'bg-emerald-100 text-emerald-700',
+                'غياب': 'bg-orange-100 text-orange-700',
+                'تأخر': 'bg-yellow-100 text-yellow-700'
+            };
+            const typeClass = typeColors[rec.messageType] || 'bg-gray-100 text-gray-700';
+            
+            const statusClass = (rec.status || '').includes('تم') ? 'bg-green-100 text-green-700' :
+                               (rec.status || '').includes('فشل') ? 'bg-red-100 text-red-700' :
+                               'bg-yellow-100 text-yellow-700';
+
+            html += `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 text-sm text-gray-500">${toIndic(index + 1)}</td>
+                    <td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                        <div>${escapeHtml(rec.hijriDate || '')}</div>
+                        <div class="text-xs text-gray-400">${escapeHtml(rec.time || '')}</div>
+                    </td>
+                    <td class="px-4 py-3">
+                        <div class="text-sm font-bold text-gray-900">${escapeHtml(rec.studentName || '')}</div>
+                        <div class="text-xs text-gray-500">${escapeHtml(rec.phone || '')}</div>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-600">${escapeHtml(rec.grade || '')} / ${escapeHtml(rec.class || '')}</td>
+                    <td class="px-4 py-3">
+                        <span class="px-2 py-1 rounded-full text-xs font-bold ${typeClass}">${escapeHtml(rec.messageType || '')}</span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-700 max-w-xs truncate" title="${escapeHtml(rec.messageTitle || '')}">${escapeHtml(rec.messageTitle || '')}</td>
+                    <td class="px-4 py-3 text-center">
+                        <span class="px-2 py-1 rounded-full text-xs font-bold ${statusClass}">${escapeHtml(rec.status || '')}</span>
+                    </td>
+                    <td class="px-4 py-3 text-center">
+                        <button onclick="viewMessageDetails(${index})" class="p-1.5 hover:bg-blue-50 rounded text-blue-600" title="عرض التفاصيل">
+                            <span class="material-symbols-outlined text-lg">visibility</span>
+                        </button>
+                        <button onclick="resendMessage(${index})" class="p-1.5 hover:bg-green-50 rounded text-green-600" title="إعادة الإرسال">
+                            <span class="material-symbols-outlined text-lg">refresh</span>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+        
+        html += `</tbody></table></div>`;
+        container.innerHTML = html;
+    }
+    
+    // =================================================================
+    // عرض تفاصيل الرسالة
+    // =================================================================
+    function viewMessageDetails(index) {
+        const rec = communicationRecords[index];
+        if (!rec) return;
+        
+        const modal = document.createElement('div');
+        modal.id = 'message-detail-modal';
+        modal.className = 'fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+        modal.innerHTML = `
+            <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-2xl overflow-hidden">
+                <div class="bg-gradient-to-r from-blue-500 to-blue-600 p-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <span class="material-symbols-outlined">description</span>
+                        تفاصيل الرسالة
+                    </h3>
+                    <button onclick="document.getElementById('message-detail-modal').remove()" class="text-white/80 hover:text-white">
+                        <span class="material-symbols-outlined text-2xl">close</span>
+                    </button>
+                </div>
+                <div class="p-6">
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <div class="text-xs text-gray-500">الطالب</div>
+                            <div class="font-bold text-gray-800">${escapeHtml(rec.studentName || '')}</div>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <div class="text-xs text-gray-500">الصف</div>
+                            <div class="font-bold text-gray-800">${escapeHtml(rec.grade || '')} / ${escapeHtml(rec.class || '')}</div>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <div class="text-xs text-gray-500">التاريخ والوقت</div>
+                            <div class="font-bold text-gray-800">${escapeHtml(rec.hijriDate || '')} - ${escapeHtml(rec.time || '')}</div>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <div class="text-xs text-gray-500">رقم الجوال</div>
+                            <div class="font-bold text-gray-800 dir-ltr">${escapeHtml(rec.phone || '')}</div>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <div class="text-xs text-gray-500">نوع الرسالة</div>
+                            <div class="font-bold text-gray-800">${escapeHtml(rec.messageType || '')}</div>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <div class="text-xs text-gray-500">حالة الإرسال</div>
+                            <div class="font-bold ${(rec.status || '').includes('تم') ? 'text-green-600' : 'text-red-600'}">${escapeHtml(rec.status || '')}</div>
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <div class="text-xs text-gray-500 mb-2">نص الرسالة</div>
+                        <div class="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed border border-gray-200 rounded-lg p-3 bg-white">${escapeHtml(rec.messageContent || '')}</div>
+                    </div>
+
+                    ${rec.sender ? `
+                    <div class="mt-4 text-xs text-gray-400 text-left">
+                        المرسل: ${escapeHtml(rec.sender || '')}
+                    </div>
+                    ` : ''}
+                </div>
+                <div class="bg-gray-50 p-4 border-t border-gray-200 flex gap-3 justify-end">
+                    <button onclick="printSingleMessage(${index})" class="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg font-bold hover:bg-purple-200 flex items-center gap-2">
+                        <span class="material-symbols-outlined">print</span> طباعة
+                    </button>
+                    <button onclick="document.getElementById('message-detail-modal').remove()" class="px-5 py-2 bg-gray-600 text-white font-bold rounded-lg hover:bg-gray-700">إغلاق</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+    
+    // =================================================================
+    // إعادة الإرسال
+    // =================================================================
+    function resendMessage(index) {
+        const rec = communicationRecords[index];
+        if (!rec) return;
+        
+        showStyledConfirm_({title: 'إعادة إرسال', message: 'هل تريد إعادة إرسال الرسالة إلى ولي أمر ' + rec.studentName + '؟', icon: 'replay', color: 'blue', onConfirm: function() {
+        showEnhancedToast('info', 'جاري إعادة الإرسال...');
+        
+        google.script.run.withSuccessHandler(result => {
+            if (result && result.success) {
+                showEnhancedToast('success', 'تم إعادة الإرسال بنجاح!');
+                loadCommunicationLog();
+                loadCommunicationStats();
+            } else {
+                showEnhancedToast('danger', 'فشل الإرسال: ' + (result && result.error ? result.error : 'خطأ غير معروف'));
+            }
+        }).withFailureHandler(err => {
+            console.error('خطأ في إعادة الإرسال:', err);
+            showEnhancedToast('danger', 'حدث خطأ أثناء إعادة الإرسال');
+        }).sendWhatsAppWithLog({
+            studentId: rec.studentId,
+            studentName: rec.studentName,
+            grade: rec.grade,
+            class: rec.class,
+            phone: rec.phone,
+            messageType: rec.messageType,
+            messageTitle: rec.messageTitle + ' (إعادة إرسال)',
+            message: rec.messageContent
+        }, currentStage);
+        }});
+    }
+    
+    // =================================================================
+    function printCommunicationLog() {
+        const searchText = (document.getElementById('comm-filter-search')?.value || '').toLowerCase();
+        const typeFilter = document.getElementById('comm-filter-type')?.value || '';
+        
+        let filtered = communicationRecords.filter(rec => {
+            let match = true;
+            if (searchText && !(rec.studentName || '').toLowerCase().includes(searchText)) match = false;
+            if (typeFilter && rec.messageType !== typeFilter) match = false;
+            return match;
+        });
+
+        if (filtered.length === 0) {
+            showEnhancedToast('warning', 'لا توجد بيانات للطباعة');
+            return;
+        }
+
+        var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+        var rows = '';
+        filtered.forEach(function(rec, i) {
+            var statusColor = (rec.status || '').includes('تم') ? 'green' : '#999';
+            var statusText = (rec.status || '').includes('تم') ? '✓' : '✗';
+            rows += '<tr>'
+                + '<td class="data-cell">' + toArShared_(i+1) + '</td>'
+                + '<td class="data-cell">' + toArShared_(rec.hijriDate || '') + '</td>'
+                + '<td class="name-cell">' + escapeHtml(rec.studentName || '') + '</td>'
+                + '<td class="data-cell">' + escapeHtml(rec.grade || '') + '/' + escapeHtml(rec.class || '') + '</td>'
+                + '<td class="data-cell" style="direction:ltr;font-size:11pt">' + escapeHtml(rec.phone || '') + '</td>'
+                + '<td class="data-cell">' + escapeHtml(rec.messageType || '') + '</td>'
+                + '<td class="data-cell" style="color:' + statusColor + ';font-weight:bold">' + statusText + '</td>'
+                + '</tr>';
+        });
+        
+        var win = window.open('', '_blank');
+        win.document.write(buildSharedPrintPage_({
+            title: 'سجل التواصل مع أولياء الأمور',
+            subtitle: typeof currentStage !== 'undefined' ? currentStage : '',
+            dateText: hijri + ' | عدد الرسائل: ' + toArShared_(filtered.length),
+            colCount: 7,
+            headers: '<th class="col-header" style="width:5%">م</th><th class="col-header" style="width:12%">التاريخ</th><th class="col-header" style="width:24%">اسم الطالب</th><th class="col-header" style="width:10%">الصف</th><th class="col-header" style="width:14%">الجوال</th><th class="col-header" style="width:18%">النوع</th><th class="col-header" style="width:7%">الحالة</th>',
+            rows: rows,
+            total: toArShared_(filtered.length) + ' رسالة'
+        }));
+        win.document.close();
+        setTimeout(function(){ win.print(); }, 300);
+    }
+
+
+    function printSingleMessage(index) {
+        const rec = communicationRecords[index];
+        if (!rec) return;
+        
+        var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+        
+        var win = window.open('', '_blank');
+        win.document.write('<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">'
+            + '<title>إشعار تواصل</title>'
+            + '<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet">'
+            + '<style>'
+            + '@page{size:A4 portrait;margin:1.0cm}'
+            + 'body{margin:0;padding:0;font-family:"Traditional Arabic","Amiri",serif;font-size:16pt;direction:rtl;background:white;color:#000}'
+            + '.page{max-width:210mm;margin:0 auto;padding:1.5cm}'
+            + '.form-title{text-align:center;font-size:19pt;font-weight:bold;font-family:"Amiri",serif;margin:5mm 0 8mm}'
+            + '.info-table{width:100%;margin-bottom:20px;font-size:14pt}'
+            + '.info-table td{padding:8px}'
+            + '.info-table .lbl{background:#f5f5f5;font-weight:bold;width:25%;border:1px solid #ddd}'
+            + '.info-table .val{border:1px solid #ddd}'
+            + '.msg-box{border:1px solid #ccc;padding:15px;border-radius:5px;background:#fafafa;margin-top:15px}'
+            + '.msg-title{font-weight:bold;margin-bottom:10px;color:#555;font-size:14pt}'
+            + '.msg-body{white-space:pre-wrap;line-height:1.8;font-size:13pt}'
+            + '.footer{margin-top:40px;display:flex;justify-content:space-between;font-size:14pt;font-weight:bold}'
+            + '.with-dots{border-bottom:1px dotted #999;display:inline-block;min-width:120px;min-height:22px}'
+            + '</style></head><body>'
+            + '<div class="page">'
+            + getLetterheadHtml_()
+            + '<div class="form-title">إشعار تواصل مع ولي الأمر</div>'
+            + '<table class="info-table">'
+            + '<tr><td class="lbl">اسم الطالب:</td><td class="val">' + escapeHtml(rec.studentName || '') + '</td></tr>'
+            + '<tr><td class="lbl">الصف:</td><td class="val">' + escapeHtml(rec.grade || '') + ' / ' + escapeHtml(rec.class || '') + '</td></tr>'
+            + '<tr><td class="lbl">رقم الجوال:</td><td class="val" style="direction:ltr;text-align:right">' + escapeHtml(rec.phone || '') + '</td></tr>'
+            + '<tr><td class="lbl">تاريخ الإرسال:</td><td class="val">' + escapeHtml(rec.hijriDate || '') + ' - ' + escapeHtml(rec.time || '') + '</td></tr>'
+            + '<tr><td class="lbl">نوع الرسالة:</td><td class="val">' + escapeHtml(rec.messageType || '') + '</td></tr>'
+            + '<tr><td class="lbl">حالة الإرسال:</td><td class="val">' + escapeHtml(rec.status || '') + '</td></tr>'
+            + '</table>'
+            + '<div class="msg-box"><div class="msg-title">نص الرسالة:</div><div class="msg-body">' + escapeHtml(rec.messageContent || '').replace(/\n/g, '<br>') + '</div></div>'
+            + '<div class="footer">'
+            + '<div>وكيل شؤون الطلاب: <span class="with-dots"></span></div>'
+            + '<div>التاريخ: ' + hijri + '</div>'
+            + '</div></div></body></html>');
+        win.document.close();
+        setTimeout(function(){ win.print(); }, 300);
+    }
+
+
+    function exportCommunicationLog() {
+        showEnhancedToast('info', 'جاري إنشاء ملف Excel...');
+        
+        const filters = getCommFilters();
+        
+        google.script.run.withSuccessHandler(result => {
+            if (result && result.success) {
+                showEnhancedToast('success', 'تم إنشاء الملف بنجاح!');
+                window.open(result.url, '_blank');
+            } else {
+                showEnhancedToast('danger', 'خطأ: ' + (result && result.error ? result.error : 'خطأ غير معروف'));
+            }
+        }).withFailureHandler(err => {
+            console.error('خطأ في تصدير السجل:', err);
+            showEnhancedToast('danger', 'حدث خطأ أثناء تصدير السجل');
+        }).exportCommunicationLog(filters);
+    }
+</script>

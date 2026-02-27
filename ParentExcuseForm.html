@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>تقديم عذر غياب - ولي الأمر</title>
+  <style>
+    *{font-family:'Segoe UI','Tahoma','Arial',sans-serif;box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    body{background:#f0fdf4;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+    .header{background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);padding:14px 16px;flex-shrink:0}
+    .header-inner{max-width:480px;margin:0 auto}
+    .school-row{display:flex;align-items:center;gap:10px}
+    .school-icon{font-size:30px;line-height:1}
+    .school-name{font-size:15px;font-weight:800;color:white}
+    .school-sub{font-size:11px;color:rgba(255,255,255,0.8)}
+    .student-card{margin-top:10px;padding:12px 14px;background:rgba(255,255,255,0.12);border-radius:12px;border:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;gap:10px}
+    .student-avatar{font-size:26px;line-height:1}
+    .student-name{font-weight:800;color:white;font-size:15px}
+    .student-grade{font-size:12px;color:rgba(255,255,255,0.75)}
+    .main-container{flex:1;overflow-y:auto;padding:16px;-webkit-overflow-scrolling:touch}
+    .content-wrap{max-width:480px;margin:0 auto}
+    .date-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;background:white;border-radius:12px;margin-bottom:14px;border:2px solid #bbf7d0;font-size:13px;font-weight:600;color:#374151}
+    .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+    .stat-card{padding:16px 12px;border-radius:14px;text-align:center;border:2px solid}
+    .stat-card.danger{background:#fef2f2;border-color:#fecaca}
+    .stat-card.safe{background:#eff6ff;border-color:#bfdbfe}
+    .stat-num{font-size:28px;font-weight:800;line-height:1}
+    .stat-num.red{color:#dc2626}
+    .stat-num.blue{color:#2563eb}
+    .stat-label{font-size:12px;font-weight:600;color:#6b7280;margin-top:4px}
+    .warning-box{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#fef3c7;border:2px solid #fde68a;border-radius:12px;margin-bottom:16px}
+    .warning-icon{font-size:22px;flex-shrink:0;margin-top:2px}
+    .warning-text{font-size:12px;font-weight:600;color:#92400e;line-height:1.6}
+    .form-section{background:white;border-radius:16px;padding:18px 16px;border:2px solid #d1fae5;margin-bottom:14px}
+    .form-title{font-size:16px;font-weight:800;color:#1f2937;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+    .form-subtitle{font-size:12px;color:#6b7280;margin-bottom:14px}
+    .excuse-textarea{width:100%;min-height:140px;padding:14px;border:2px solid #d1fae5;border-radius:12px;font-size:15px;outline:none;resize:vertical;line-height:1.7;font-family:inherit;touch-action:manipulation}
+    .excuse-textarea:focus{border-color:#16a34a;box-shadow:0 0 0 3px rgba(22,163,74,0.12)}
+    .excuse-textarea::placeholder{color:#9ca3af}
+    .char-count{text-align:left;font-size:11px;color:#9ca3af;margin-top:6px}
+    .attach-section{background:white;border-radius:16px;padding:18px 16px;border:2px solid #d1fae5;margin-bottom:14px}
+    .attach-note{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#f0fdf4;border-radius:10px;margin-top:10px}
+    .attach-note p{font-size:12px;color:#374151;font-weight:600;line-height:1.6}
+    .attach-checkbox{display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f9fafb;border-radius:10px;cursor:pointer;touch-action:manipulation;margin-top:10px}
+    .attach-checkbox input{width:20px;height:20px;accent-color:#16a34a;cursor:pointer;flex-shrink:0}
+    .attach-checkbox label{font-size:14px;font-weight:600;color:#374151;cursor:pointer}
+    .submit-area{padding:14px 16px;flex-shrink:0;background:white;border-top:1px solid #d1fae5}
+    .btn-submit{width:100%;max-width:480px;margin:0 auto;display:flex;padding:16px;border:none;border-radius:14px;background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);color:white;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;box-shadow:0 4px 14px rgba(22,163,74,0.35);touch-action:manipulation;align-items:center;justify-content:center;gap:8px}
+    .btn-submit:disabled{opacity:0.5;cursor:not-allowed}
+    .btn-exit{width:100%;max-width:480px;margin:16px auto 0;display:flex;padding:14px;border:2px solid #e5e7eb;border-radius:14px;background:white;color:#6b7280;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;touch-action:manipulation;align-items:center;justify-content:center;gap:8px;transition:all 0.2s}
+    .btn-exit:hover{background:#f3f4f6;border-color:#d1d5db}
+    .success-screen{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100%;padding:32px 16px;text-align:center}
+    .success-screen.active{display:flex}
+    .success-icon{font-size:64px;margin-bottom:16px}
+    .success-details{background:#f0fdf4;padding:16px;border-radius:14px;text-align:right;width:100%;border:2px solid #bbf7d0}
+    .detail-row{display:flex;justify-content:space-between;padding:10px 0;font-size:14px}
+    .detail-row+.detail-row{border-top:1px solid #d1fae5}
+    .detail-label{color:#6b7280}
+    .detail-value{font-weight:700}
+    .error-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:32px 16px;text-align:center}
+    .loading-overlay{position:fixed;inset:0;background:rgba(255,255,255,0.95);display:flex;align-items:center;justify-content:center;z-index:100;flex-direction:column}
+    .spinner{width:48px;height:48px;border:4px solid #d1fae5;border-top-color:#16a34a;border-radius:50%;animation:spin 1s linear infinite}
+    .hidden{display:none!important}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+  </style>
+</head>
+<body>
+
+<div id="loading-screen" class="loading-overlay">
+  <div class="spinner"></div>
+  <p style="margin-top:16px;color:#666;">جاري التحميل...</p>
+</div>
+
+<div id="error-screen" class="hidden" style="height:100vh;height:100dvh;">
+  <div class="error-screen">
+    <div style="font-size:64px;margin-bottom:16px;">❌</div>
+    <h2 style="font-size:20px;font-weight:800;color:#1f2937;margin-bottom:8px;">خطأ</h2>
+    <p id="error-message" style="color:#6b7280;font-size:14px;line-height:1.6;max-width:320px;"></p>
+  </div>
+</div>
+
+<div id="app" class="hidden" style="display:flex;flex-direction:column;height:100vh;height:100dvh;">
+
+  <div class="header"><div class="header-inner">
+    <div class="school-row">
+      <span class="school-icon">🏫</span>
+      <div><div class="school-name" id="school-name">نموذج عذر الغياب</div><div class="school-sub">نموذج تقديم عذر غياب</div></div>
+    </div>
+    <div class="student-card">
+      <span class="student-avatar">👤</span>
+      <div style="flex:1;">
+        <div class="student-name" id="student-name">-</div>
+        <div class="student-grade" id="student-grade">-</div>
+      </div>
+    </div>
+  </div></div>
+
+  <div id="form-view" class="main-container">
+    <div class="content-wrap">
+      <div class="date-bar">📅 <span id="today-date">-</span></div>
+      <div class="stats-grid">
+        <div class="stat-card danger">
+          <div class="stat-num red" id="stat-unexcused">0</div>
+          <div class="stat-label">غياب بدون عذر</div>
+        </div>
+        <div class="stat-card safe">
+          <div class="stat-num blue" id="stat-excused">0</div>
+          <div class="stat-label">غياب بعذر</div>
+        </div>
+      </div>
+      <div class="warning-box">
+        <span class="warning-icon">⚠️</span>
+        <div class="warning-text">تنبيه: الطالب الذي يتجاوز غيابه <strong>18 يوم دراسي بدون عذر</strong> يُحرم من دخول الاختبارات حسب لائحة الانتظام الدراسي.</div>
+      </div>
+      <div class="form-section">
+        <div class="form-title">📅 تاريخ الغياب</div>
+        <div class="form-subtitle">حدد يوم أو أيام الغياب</div>
+        <input type="date" id="absence-date" class="excuse-textarea" style="min-height:auto;padding:12px 14px;font-size:14px;" max="">
+        <div style="font-size:11px;color:#9ca3af;margin-top:6px;">اختر تاريخ يوم الغياب (أو آخر يوم إذا كان أكثر من يوم)</div>
+      </div>
+      <div class="form-section">
+        <div class="form-title">✏️ سبب الغياب</div>
+        <div class="form-subtitle">اكتب سبب غياب ابنك بالتفصيل</div>
+        <textarea id="excuse-text" class="excuse-textarea" placeholder="مثال: كان يعاني من ارتفاع في درجة الحرارة ولم يتمكن من الحضور..." oninput="updateCharCount()"></textarea>
+        <div class="char-count"><span id="char-count">0</span> / 500</div>
+      </div>
+      <div class="attach-section">
+        <div class="form-title">📎 المرفقات</div>
+        <div class="attach-note">
+          <span style="font-size:18px;flex-shrink:0;">ℹ️</span>
+          <p>المرفقات (تقارير طبية، أعذار رسمية) تُسلّم ورقياً مع الطالب عند حضوره للمدرسة.</p>
+        </div>
+        <div class="attach-checkbox" onclick="toggleAttach()">
+          <input type="checkbox" id="has-attachment">
+          <label for="has-attachment">لدي مرفقات سيتم تسليمها مع ابني</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="submit-area" class="submit-area">
+    <button id="submit-btn" class="btn-submit" onclick="submitExcuse()" disabled>📤 إرسال العذر</button>
+  </div>
+
+  <div id="success-view" class="main-container hidden">
+    <div class="success-screen active">
+      <div class="success-icon" style="animation:pulse 2s ease infinite;">✅</div>
+      <h2 style="font-size:22px;font-weight:800;color:#1f2937;margin-bottom:8px;">تم إرسال العذر بنجاح!</h2>
+      <p style="color:#6b7280;margin-bottom:16px;font-size:14px;line-height:1.6;" id="success-message">سيتم مراجعة العذر من قبل إدارة المدرسة.</p>
+      <div class="success-details" id="success-details"></div>
+      <div style="margin-top:20px;padding:12px 14px;background:#fef3c7;border:2px solid #fde68a;border-radius:12px;width:100%;">
+        <p style="font-size:12px;font-weight:600;color:#92400e;line-height:1.6;text-align:right;">ℹ️ في حال وجود مرفقات، يرجى تسليمها مع الطالب عند حضوره للمدرسة.</p>
+      </div>
+      <button class="btn-exit" onclick="exitPage()">🚪 إغلاق الصفحة</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function E(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+var PAGE_DATA;
+try { PAGE_DATA = <?!= pageData ?>; } catch(e) { PAGE_DATA = {success:false, error:'خطأ في تحليل البيانات: ' + e.message}; }
+var TOKEN = (PAGE_DATA && PAGE_DATA.token) ? PAGE_DATA.token : '';
+
+function init(){
+  if(!PAGE_DATA || !PAGE_DATA.success){
+    document.getElementById('loading-screen').classList.add('hidden');
+    document.getElementById('error-screen').classList.remove('hidden');
+    document.getElementById('error-message').textContent = PAGE_DATA ? PAGE_DATA.error : 'خطأ في تحميل البيانات';
+    return;
+  }
+  var d = PAGE_DATA;
+  if(d.schoolName) document.getElementById('school-name').textContent = d.schoolName;
+  document.getElementById('student-name').textContent = d.student.name;
+  document.getElementById('student-grade').textContent = d.student.grade + ' - ' + d.student.section;
+  document.getElementById('today-date').textContent = d.today.day + ' - ' + d.today.date;
+  document.getElementById('stat-unexcused').textContent = d.absence.unexcused;
+  document.getElementById('stat-excused').textContent = d.absence.excused;
+  // ★ ضبط حقل التاريخ: الحد الأقصى = اليوم، القيمة الافتراضية = اليوم
+  var today = new Date();
+  var yyyy = today.getFullYear(), mm = String(today.getMonth()+1).padStart(2,'0'), dd = String(today.getDate()).padStart(2,'0');
+  var todayISO = yyyy + '-' + mm + '-' + dd;
+  document.getElementById('absence-date').max = todayISO;
+  document.getElementById('absence-date').value = todayISO;
+  document.getElementById('loading-screen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('app').style.display = 'flex';
+}
+
+function updateCharCount(){
+  var c = document.getElementById('excuse-text').value.length;
+  document.getElementById('char-count').textContent = c;
+  document.getElementById('submit-btn').disabled = c < 5;
+}
+
+function toggleAttach(){ var cb = document.getElementById('has-attachment'); cb.checked = !cb.checked; }
+
+function submitExcuse(){
+  var text = document.getElementById('excuse-text').value.trim();
+  if(text.length < 5){ alert('يرجى كتابة سبب الغياب (5 أحرف على الأقل)'); return; }
+  if(text.length > 500){ alert('سبب الغياب يجب أن لا يتجاوز 500 حرف'); return; }
+  var btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ جاري الإرسال...';
+  google.script.run
+    .withSuccessHandler(function(r){
+      if(r && r.success) showSuccess(r);
+      else { alert('خطأ: ' + (r ? r.error : 'غير معروف')); btn.disabled = false; btn.textContent = '📤 إرسال العذر'; }
+    })
+    .withFailureHandler(function(e){ alert('خطأ: ' + e); btn.disabled = false; btn.textContent = '📤 إرسال العذر'; })
+    .submitParentExcuse({ token: TOKEN, reason: text, hasAttachment: document.getElementById('has-attachment').checked, absenceDate: document.getElementById('absence-date').value || '' });
+}
+
+function showSuccess(result){
+  document.getElementById('form-view').classList.add('hidden');
+  document.getElementById('submit-area').classList.add('hidden');
+  document.getElementById('success-view').classList.remove('hidden');
+  if(result.message) document.getElementById('success-message').textContent = result.message;
+  var d = PAGE_DATA, t = document.getElementById('excuse-text').value.trim();
+  var absDate = document.getElementById('absence-date').value || '';
+  var h = '<div class="detail-row"><span class="detail-label">الطالب:</span><span class="detail-value">' + E(d.student.name) + '</span></div>';
+  h += '<div class="detail-row"><span class="detail-label">الصف:</span><span class="detail-value">' + E(d.student.grade) + ' - ' + E(d.student.section) + '</span></div>';
+  if(absDate) h += '<div class="detail-row"><span class="detail-label">تاريخ الغياب:</span><span class="detail-value">' + E(absDate) + '</span></div>';
+  h += '<div class="detail-row"><span class="detail-label">العذر:</span><span class="detail-value" style="font-size:13px;max-width:200px;text-align:left;">' + E(t.substring(0,80)) + (t.length > 80 ? '...' : '') + '</span></div>';
+  if(document.getElementById('has-attachment').checked)
+    h += '<div class="detail-row"><span class="detail-label">المرفقات:</span><span class="detail-value" style="color:#16a34a;">ستُسلم مع الطالب</span></div>';
+  document.getElementById('success-details').innerHTML = h;
+}
+
+function exitPage(){
+  try { google.script.host.close(); } catch(e) {}
+  try { window.close(); } catch(e) {}
+  // إذا ما قدر يقفل (بعض المتصفحات تمنع) نعرض رسالة
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;font-family:inherit;"><div><div style="font-size:64px;margin-bottom:16px;">✅</div><h2 style="font-size:20px;font-weight:800;color:#1f2937;margin-bottom:8px;">يمكنك إغلاق هذه الصفحة</h2><p style="color:#6b7280;font-size:14px;">تم تسجيل العذر بنجاح</p></div></div>';
+}
+
+document.addEventListener('DOMContentLoaded', function(){ init(); });
+</script>
+</body>
+</html>

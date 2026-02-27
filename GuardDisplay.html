@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>سجل المستأذنين - الحارس</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI','Tahoma','Arial',sans-serif;-webkit-tap-highlight-color:transparent}
+body{background:#f0f2f5;min-height:100vh;min-height:100dvh;color:#1f2937}
+.header{background:linear-gradient(135deg,#1e3a5f,#2c5282);padding:16px 20px;position:sticky;top:0;z-index:40;box-shadow:0 2px 12px rgba(30,58,95,.3)}
+.hdr-row{display:flex;align-items:center;justify-content:space-between;max-width:600px;margin:0 auto}
+.hdr-info h1{font-size:20px;font-weight:800;color:#fff}
+.hdr-sub{font-size:12px;color:rgba(255,255,255,.8);margin-top:2px}
+.tabs{display:flex;background:#fff;margin:16px 16px 0;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.tab{flex:1;padding:14px;text-align:center;font-size:15px;font-weight:700;border:none;background:#fff;color:#6b7280;cursor:pointer;transition:all .25s}
+.tab.active{color:#fff;background:linear-gradient(135deg,#1e3a5f,#2c5282)}
+.main{max-width:600px;margin:0 auto;padding:16px 16px 100px}
+.summary{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.sum-card{background:#fff;border-radius:14px;padding:14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.sum-num{font-size:28px;font-weight:800;line-height:1}
+.sum-num.waiting{color:#f59e0b}
+.sum-num.done{color:#16a34a}
+.sum-label{font-size:12px;font-weight:700;color:#6b7280;margin-top:4px}
+.cards-wrap{display:grid;gap:12px}
+.s-card{background:#fff;border-radius:16px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05);display:flex;align-items:center;gap:14px;border-right:5px solid #f59e0b;transition:all .3s}
+.s-card.confirmed{border-right-color:#16a34a;background:#f0fdf4}
+.s-info{flex:1}
+.s-name{font-size:16px;font-weight:700;color:#1f2937;margin-bottom:4px}
+.s-detail{font-size:12px;color:#6b7280;display:flex;flex-wrap:wrap;gap:8px}
+.s-detail span{display:flex;align-items:center;gap:3px}
+.s-btn{width:56px;height:56px;border-radius:50%;border:none;color:#fff;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s}
+.s-btn.waiting{background:linear-gradient(135deg,#d97706,#f59e0b);box-shadow:0 4px 12px rgba(245,158,11,.3)}
+.s-btn.waiting:active{transform:scale(.9)}
+.s-btn.done{background:#16a34a;cursor:default;box-shadow:none}
+.s-btn:disabled{opacity:.6;cursor:not-allowed}
+.empty{text-align:center;padding:60px 20px;color:#9ca3af;font-size:15px}
+.empty-icon{font-size:48px;margin-bottom:12px}
+.fab{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);padding:16px 40px;border:none;border-radius:100px;background:linear-gradient(135deg,#1e3a5f,#2c5282);color:#fff;font-size:16px;font-weight:800;font-family:inherit;cursor:pointer;box-shadow:0 6px 20px rgba(30,58,95,.3);z-index:30;display:flex;align-items:center;gap:8px}
+.fab:active{transform:translateX(-50%) scale(.95)}
+@keyframes spin{to{transform:rotate(360deg)}}.spinning{animation:spin .8s linear infinite;display:inline-block}
+.toast{position:fixed;top:80px;left:50%;transform:translateX(-50%) translateY(-20px);padding:14px 24px;border-radius:14px;color:#fff;font-size:15px;font-weight:700;z-index:60;opacity:0;transition:all .3s;pointer-events:none;text-align:center;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.ts{background:#16a34a}.toast.te{background:#dc2626}.toast.ti{background:#3b82f6}
+.err-s{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;padding:32px}
+.err-i{font-size:64px;margin-bottom:16px}
+.err-t{font-size:20px;font-weight:800;margin-bottom:8px}
+.err-m{color:#6b7280;font-size:14px}
+.hid{display:none!important}
+</style>
+</head>
+<body>
+
+<div class="header"><div class="hdr-row">
+  <div class="hdr-info"><h1>🛡️ سجل المستأذنين</h1><div class="hdr-sub" id="guardName"></div></div>
+</div></div>
+
+<!-- شاشة الخطأ -->
+<div id="errScr" class="err-s hid"><div class="err-i">🔒</div><div class="err-t">رابط غير صالح</div><div class="err-m" id="errMsg">تأكد من صحة الرابط</div></div>
+
+<!-- المحتوى الرئيسي -->
+<div id="appWrap" class="hid">
+<div class="tabs" id="stageTabs"></div>
+<div class="main">
+  <div class="summary">
+    <div class="sum-card"><div class="sum-num waiting" id="waitCount">0</div><div class="sum-label">⏳ بانتظار الخروج</div></div>
+    <div class="sum-card"><div class="sum-num done" id="doneCount">0</div><div class="sum-label">✅ تم تأكيد خروجهم</div></div>
+  </div>
+  <div class="cards-wrap" id="cardsWrap"></div>
+  <div id="emptyMsg" class="empty hid"><div class="empty-icon">📭</div>لا يوجد مستأذنين اليوم</div>
+</div></div>
+
+<button class="fab" id="refreshFab" onclick="doRefresh()"><span id="refIcon">🔄</span> تحديث</button>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ★★★ قراءة البيانات المحقونة من السيرفر — نفس طريقة المعلم بالضبط ★★★
+var PAGE_DATA;
+try { PAGE_DATA = <?!= pageData ?>; } catch(e) { PAGE_DATA = {success:false, error:'خطأ في تحليل البيانات: ' + e.message}; }
+
+var D=document, curStage='', guardToken='';
+var STAGE_ICONS={'طفولة مبكرة':'🟣','ابتدائي':'🟢','متوسط':'🔷','ثانوي':'🔶'};
+
+// ★★★ التهيئة — تقرأ البيانات الجاهزة بدون استدعاء سيرفر ★★★
+function init(){
+  if(!PAGE_DATA || typeof PAGE_DATA !== 'object') { showErr('فشل تحميل البيانات'); return; }
+  if(!PAGE_DATA.success) { showErr(PAGE_DATA.error || 'رابط غير صالح أو منتهي'); return; }
+
+  guardToken = PAGE_DATA.token || '';
+  D.getElementById('guardName').textContent = '👤 ' + PAGE_DATA.staff.name;
+  D.getElementById('appWrap').classList.remove('hid');
+  // ★ بناء تبويبات المراحل ديناميكياً
+  var stages = PAGE_DATA.enabledStages || ['متوسط','ثانوي'];
+  var tabsHtml = '';
+  stages.forEach(function(s, i) {
+    tabsHtml += '<button class="tab' + (i===0?' active':'') + '" data-stage="' + E(s) + '">' + (STAGE_ICONS[s]||'🔹') + ' ' + E(s) + '</button>';
+  });
+  D.getElementById('stageTabs').innerHTML = tabsHtml;
+  curStage = stages[0];
+  loadRecs(curStage);
+}
+
+function showErr(m){ D.getElementById('errScr').classList.remove('hid'); D.getElementById('errMsg').textContent = m; }
+
+function chStage(s){
+  curStage=s;
+  D.querySelectorAll('#stageTabs .tab').forEach(function(btn){ btn.classList.toggle('active', btn.getAttribute('data-stage')===s); });
+  loadRecs(s);
+}
+
+function loadRecs(stage){
+  var wrap=D.getElementById('cardsWrap'),emp=D.getElementById('emptyMsg');
+  wrap.innerHTML='<div class="empty" style="padding:30px">⏳ جاري التحميل...</div>';
+  emp.classList.add('hid');
+
+  google.script.run.withSuccessHandler(function(r){
+    if(!r||!r.success){wrap.innerHTML='<div class="empty">❌ خطأ في جلب السجلات</div>';return;}
+    var recs=r.records||[];
+    if(!recs.length){wrap.innerHTML='';emp.classList.remove('hid');D.getElementById('waitCount').textContent='0';D.getElementById('doneCount').textContent='0';return;}
+
+    var waiting=0,done=0,h='';
+    recs.forEach(function(rec){
+      var conf=rec.isConfirmed;if(conf)done++;else waiting++;
+      h+='<div class="s-card'+(conf?' confirmed':'')+'" id="card-'+rec.rowIndex+'">';
+      h+='<div class="s-info"><div class="s-name">'+E(rec.studentName)+'</div>';
+      h+='<div class="s-detail">';
+      h+='<span>🏫 '+E(rec.className)+'</span>';
+      if(rec.reason)h+='<span>📝 '+E(rec.reason)+'</span>';
+      if(rec.time)h+='<span>🕐 '+E(rec.time)+'</span>';
+      if(conf)h+='<span>✅ خرج: '+E(rec.status)+'</span>';
+      h+='</div></div>';
+      if(conf){h+='<div class="s-btn done">✅</div>';}
+      else{h+='<button class="s-btn waiting" data-row="'+parseInt(rec.rowIndex)+'" data-stage="'+E(stage)+'">🚪</button>';}
+      h+='</div>';
+    });
+    wrap.innerHTML=h;
+    D.getElementById('waitCount').textContent=waiting;
+    D.getElementById('doneCount').textContent=done;
+  }).withFailureHandler(function(){wrap.innerHTML='<div class="empty">❌ خطأ في الاتصال</div>';}).getPermissionRecordsForGuard(stage, guardToken);
+}
+
+function confirmExit(row,stage,btn){
+  if(btn.dataset.processing)return;btn.dataset.processing='1';
+  btn.disabled=true;btn.innerHTML='⏳';
+  google.script.run.withSuccessHandler(function(r){
+    if(r&&r.success){
+      toast('✅ تم تأكيد الخروج','ts');
+      var card=D.getElementById('card-'+row);
+      if(card){card.classList.add('confirmed');btn.className='s-btn done';btn.innerHTML='✅';}
+      var w=parseInt(D.getElementById('waitCount').textContent)||0;
+      var d=parseInt(D.getElementById('doneCount').textContent)||0;
+      D.getElementById('waitCount').textContent=Math.max(0,w-1);
+      D.getElementById('doneCount').textContent=d+1;
+    } else {toast('❌ '+(r?r.error:'فشل'),'te');delete btn.dataset.processing;btn.disabled=false;btn.innerHTML='🚪';}
+  }).withFailureHandler(function(e){toast('❌ '+e.message,'te');delete btn.dataset.processing;btn.disabled=false;btn.innerHTML='🚪';}).confirmStudentExit(row,stage,guardToken);
+}
+
+function doRefresh(){
+  var icon=D.getElementById('refIcon');icon.classList.add('spinning');
+  loadRecs(curStage);
+  setTimeout(function(){icon.classList.remove('spinning');},1500);
+}
+
+function E(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+function toast(m,c){var t=D.getElementById('toast');t.textContent=m;t.className='toast '+(c||'ti')+' show';clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove('show');},2500);}
+
+// ★ Event delegation — بديل آمن عن inline onclick
+D.addEventListener('click',function(e){
+  // تبويبات المراحل
+  var tab=e.target.closest('#stageTabs .tab');if(tab){var s=tab.getAttribute('data-stage');if(s)chStage(s);return;}
+  // زر تأكيد الخروج
+  var btn=e.target.closest('.s-btn.waiting');if(btn&&!btn.dataset.processing){var row=parseInt(btn.getAttribute('data-row')),st=btn.getAttribute('data-stage');if(!isNaN(row)&&st)confirmExit(row,st,btn);return;}
+});
+
+// ★★★ بدء التطبيق فوراً — البيانات محقونة مسبقاً ★★★
+init();
+</script>
+</body>
+</html>

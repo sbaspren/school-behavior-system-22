@@ -1,0 +1,2878 @@
+<script>
+// ★ معالج أخطاء عام لتشخيص مشاكل الغياب
+window.addEventListener('error', function(e) {
+    console.error('JS_Absence Error:', e.message, e.filename, e.lineno);
+});
+
+// =================================================================
+// نظام الغياب المتكامل - الإصدار الجديد
+// =================================================================
+
+const SCHOOL_DAYS = 180;
+let allAbsenceData = [];
+let absenceTodayRecords = [];
+let absenceExcusesRecords = [];
+let currentFilter = 'all';
+let currentView = 'cards';
+let currentSort = 'desc';
+let absenceCurrentTab = 'today'; // today, approved, excuses, reports
+
+// =================================================================
+// 1. الصفحة الرئيسية
+// =================================================================
+function renderAbsencePage() {
+  try {
+    const main = document.getElementById('main-content');
+    var _hd = new Date();
+    var _hjri = _hd.toLocaleDateString('ar-SA-u-ca-islamic', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    main.innerHTML = `
+        <div class="sec-absence" style="position:relative">
+            <div id="loading-overlay" style="position:absolute;inset:0;background:rgba(255,255,255,0.9);z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;border-radius:16px">
+                <div class="w-16 h-16 border-4 border-orange-200 border-t-orange-600 rounded-full animate-spin mb-4"></div>
+                <h3 class="text-lg font-bold text-gray-800">جاري معالجة البيانات...</h3>
+                <p class="text-sm text-gray-500">يرجى الانتظار</p>
+            </div>
+
+            <div class="page-hero">
+                <div class="hero-content">
+                    <div class="hero-info">
+                        <h1>الغياب — ${escapeHtml(getStageName_(currentStage))}</h1>
+                        <p>${_hjri}</p>
+                    </div>
+                    <div class="hero-stats">
+                        <div class="hero-stat"><div class="hero-stat-icon">📋</div><div class="hero-stat-num" id="abs-today-count">٠</div><div class="hero-stat-label">غياب اليوم</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon">📄</div><div class="hero-stat-num" id="abs-excuses-count">٠</div><div class="hero-stat-label">أعذار معلقة</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon">🛡️</div><div class="hero-stat-num" id="abs-critical-count">٠</div><div class="hero-stat-label">حماية (10+)</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tabs-bar">
+                <div class="tab-item active" onclick="switchAbsenceTab('today')" id="abs-tab-today"><span class="material-symbols-outlined">today</span> الغياب اليومي</div>
+                <div class="tab-item" onclick="switchAbsenceTab('approved')" id="abs-tab-approved"><span class="material-symbols-outlined">verified</span> المعتمد</div>
+                <div class="tab-item" onclick="switchAbsenceTab('excuses')" id="abs-tab-excuses"><span class="material-symbols-outlined">assignment_late</span> الأعذار</div>
+                <div class="tab-item" onclick="switchAbsenceTab('reports')" id="abs-tab-reports"><span class="material-symbols-outlined">bar_chart</span> التقارير</div>
+            </div>
+
+            <div id="abs-tab-content"></div>
+        </div>
+        ${getAbsenceModalsHTML()}
+    `;
+
+    switchAbsenceTab('today');
+  } catch(err) {
+    var mainC = document.getElementById('main-content');
+    if (mainC) { mainC.innerHTML = '<div style="padding:40px;text-align:center;direction:rtl"><h2 style="color:red">خطأ في تحميل الغياب</h2><pre style="background:#f5f5f5;padding:20px;border-radius:var(--r-sm,8px);text-align:left;margin-top:20px;overflow:auto"></pre></div>'; mainC.querySelector('pre').textContent = err.message; }
+  }
+}
+
+// =================================================================
+// 2. تبديل التبويبات
+// =================================================================
+function switchAbsenceTab(tab) {
+  try {
+    absenceCurrentTab = tab;
+    document.querySelectorAll('.sec-absence .tab-item').forEach(function(t) { t.classList.remove('active'); });
+    var btn = document.getElementById('abs-tab-' + tab);
+    if (btn) btn.classList.add('active');
+
+    if (tab === 'today') renderAbsenceTodayTab();
+    else if (tab === 'approved') renderAbsenceApprovedTab();
+    else if (tab === 'excuses') renderAbsenceExcusesTab();
+    else if (tab === 'reports') renderAbsenceReportsTab();
+  } catch(err) {
+    var ct = document.getElementById('abs-tab-content');
+    if (ct) { ct.innerHTML = '<pre style="color:red;padding:20px"></pre>'; ct.querySelector('pre').textContent = err.message; }
+  }
+}
+
+// =================================================================
+// 3. تبويب الغياب اليومي (الجديد)
+// =================================================================
+function renderAbsenceTodayTab() {
+  try {
+    const today = new Date();
+    const hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    const miladiDate = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
+    const dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
+    
+    const content = document.getElementById('abs-tab-content');
+    content.innerHTML = `
+        <input type="file" id="excel-upload" accept=".xlsx,.xls" class="hidden" onchange="handleExcelImport(this)">
+        <input type="file" id="platform-excel-upload" accept=".xlsx,.xls" class="hidden" onchange="handlePlatformExcelImport(this)">
+
+        <!-- أزرار الإجراءات -->
+        <div class="action-bar">
+            <div class="action-group">
+                <div class="dropdown-wrapper" id="importDropdown">
+                    <button class="btn-hero btn-hero-primary" onclick="toggleDropdown('importDropdown')">
+                        <span class="material-symbols-outlined" style="font-size:18px">upload_file</span> استيراد <span class="material-symbols-outlined" style="font-size:16px">expand_more</span>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="dropdown-item" onclick="document.getElementById('excel-upload').click();toggleDropdown('importDropdown')">
+                            <span class="material-symbols-outlined">cloud_upload</span> استيراد Excel (نور)
+                        </div>
+                        <div class="dropdown-item" onclick="document.getElementById('platform-excel-upload').click();toggleDropdown('importDropdown')">
+                            <span class="material-symbols-outlined">table_view</span> استيراد منصة (Excel)
+                        </div>
+                    </div>
+                </div>
+                <button class="btn-hero btn-hero-primary" onclick="openAbsenceAddModal()">
+                    <span class="material-symbols-outlined" style="font-size:18px">add_circle</span> تسجيل يدوي
+                </button>
+                <button class="btn-hero btn-hero-outline" onclick="loadAbsenceTodayRecords()">
+                    <span class="material-symbols-outlined" style="font-size:18px">refresh</span> تحديث
+                </button>
+            </div>
+            <div class="action-group">
+                <button class="btn-hero btn-hero-success" onclick="sendAllTodayAbsence()" id="btn-send-all" disabled>
+                    <span class="material-symbols-outlined" style="font-size:18px">send</span> إرسال للجميع
+                </button>
+                <button class="btn-hero btn-hero-outline" onclick="printTodayAbsence()">
+                    <span class="material-symbols-outlined" style="font-size:18px">print</span> طباعة الكشف
+                </button>
+            </div>
+        </div>
+
+        <!-- جدول الغياب اليومي -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div id="abs-today-table">
+                <div class="text-center py-16">
+                    <div class="loading-bar mx-auto"><div class="loading-bar-progress"></div></div>
+                    <p class="text-gray-500 mt-4">جاري تحميل البيانات...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ملاحظة الترحيل -->
+        <div class="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center gap-2">
+            <span class="material-symbols-outlined text-gray-400">info</span>
+            <span class="text-sm text-gray-600">سيتم ترحيل بيانات اليوم تلقائياً إلى السجل التراكمي الساعة 12:00 صباحاً</span>
+        </div>
+    `;
+    
+    loadAbsenceTodayRecords();
+  } catch(err) {
+    var ct = document.getElementById('abs-tab-content');
+    if (ct) { ct.innerHTML = '<pre style="color:red;padding:20px"></pre>'; ct.querySelector('pre').textContent = 'renderAbsenceTodayTab: ' + err.message; }
+  }
+}
+
+// =================================================================
+// 4. تحميل وعرض سجلات الغياب اليومي
+// =================================================================
+function loadAbsenceTodayRecords() {
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        showEnhancedToast('info', 'جاري تحديث البيانات...');
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                    absenceTodayRecords = result.records || [];
+                    displayAbsenceTodayTable();
+                    updateTodayCounts();
+                    showEnhancedToast('success', 'تم التحديث ✓ (' + absenceTodayRecords.length + ' سجل)');
+                } else {
+                    displayAbsenceTodayTable();
+                    showEnhancedToast('warning', 'لا توجد بيانات');
+                }
+            })
+            .withFailureHandler(function(err) {
+                console.error('خطأ:', err);
+                displayAbsenceTodayTable();
+                showEnhancedToast('error', 'خطأ في التحديث: ' + err.message);
+            })
+            .getTodayAbsenceRecords(currentStage);
+    } else {
+        // وضع التجربة
+        absenceTodayRecords = [];
+        displayAbsenceTodayTable();
+    }
+}
+
+// ★ الدوال المشتركة (getF_, classKey_, sheetGroupInfo_, countBadge_) معرّفة في JS_Core.html
+
+function displayAbsenceTodayTable() {
+  try {
+    const container = document.getElementById('abs-today-table');
+    
+    if (!absenceTodayRecords || absenceTodayRecords.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-16">
+                <span class="material-symbols-outlined text-gray-300 text-7xl">event_available</span>
+                <p class="text-gray-500 mt-4 text-lg">لا يوجد غياب مسجل اليوم</p>
+                <p class="text-gray-400 text-sm mt-2">قم باستيراد ملف Excel من نظام نور أو أضف يدوياً</p>
+                <div class="flex justify-center gap-3 mt-6">
+                    <button onclick="document.getElementById('excel-upload').click()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-bold">
+                        <span class="material-symbols-outlined align-middle ml-1">upload_file</span> استيراد Excel
+                    </button>
+                    <button onclick="openAbsenceAddModal()" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm font-bold">
+                        <span class="material-symbols-outlined align-middle ml-1">add_circle</span> تسجيل يدوي
+                    </button>
+                </div>
+            </div>
+        `;
+        var btnAll = document.getElementById('btn-send-all'); if (btnAll) btnAll.disabled = true;
+        return;
+    }
+    
+    var btnAll = document.getElementById('btn-send-all'); if (btnAll) btnAll.disabled = false;
+    
+    var sorted = sortRecordsByClass_(absenceTodayRecords);
+    var groups = sheetGroupInfo_(sorted);
+    var cntAbsent = 0, cntLate = 0, cntSent = 0;
+    
+    var html = '<table class="sht"><thead><tr style="background:#ea580c">';
+    html += '<th style="width:36px">#</th>';
+    html += '<th style="min-width:130px">اسم الطالب</th>';
+    html += '<th>المعلم</th>';
+    html += '<th style="width:80px">الحالة</th>';
+    html += '<th style="width:80px">الإرسال</th>';
+    html += '<th style="width:80px">طباعة</th>';
+    html += '<th style="width:36px"></th>';
+    html += '</tr></thead><tbody>';
+
+    sorted.forEach(function(record, idx) {
+        var g = groups[idx];
+        var origIdx = absenceTodayRecords.indexOf(record);
+        var isSent = getF_(record, 'تم_الإرسال') === 'نعم' || getF_(record, 'تم_الإرسال') === true;
+        var status = getF_(record, 'حالة_التأخر') || 'غائب';
+        var lateTime = getF_(record, 'وقت_الحضور') || '';
+        var excuseType = getF_(record, 'نوع_العذر') || 'بدون عذر';
+        var rawTeacher = getF_(record, 'المسجل') || '-';
+        var teacher = (rawTeacher === '-' || rawTeacher === 'مدير_النظام' || rawTeacher === 'يدوي' || rawTeacher.indexOf('sbaspren') >= 0) ? 'الوكيل' : rawTeacher;
+        var cls = (idx % 2 === 0) ? 'rw' : 'rg';
+
+        if (g.first) {
+            var classLabel = escapeHtml((getF_(record, 'الصف') || '') + ' / ' + (getF_(record, 'الفصل') || ''));
+            if (idx > 0) html += '<tr class="sht-sep"><td colspan="7"></td></tr>';
+            html += '<tr class="sht-gh"><td colspan="7"><span class="sht-gl">' + classLabel + '</span> <span class="sht-gc">(' + g.span + ')</span></td></tr>';
+        }
+
+        if (isSent) cntSent++;
+        if (status === 'متأخر') cntLate++; else cntAbsent++;
+
+        var statusBadge;
+        if (status === 'متأخر') {
+            statusBadge = '<button onclick="openLateModal(' + record.rowIndex + ')" class="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold hover:bg-amber-200"><span class="material-symbols-outlined text-[14px]">schedule</span> متأخر ' + lateTime + '</button>';
+        } else if (excuseType === 'بعذر') {
+            statusBadge = '<button onclick="toggleExcuseType(' + record.rowIndex + ',' + origIdx + ')" class="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold hover:bg-green-200 cursor-pointer"><span class="material-symbols-outlined text-[14px]">check_circle</span> بعذر</button>';
+        } else {
+            statusBadge = '<button onclick="toggleExcuseType(' + record.rowIndex + ',' + origIdx + ')" class="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold hover:bg-red-200 cursor-pointer"><span class="material-symbols-outlined text-[14px]">block</span> بدون عذر</button>';
+        }
+
+        html += '<tr class="' + cls + '">';
+        html += '<td>' + (idx + 1) + '</td>';
+        html += '<td class="nm">' + escapeHtml(getF_(record, 'اسم_الطالب') || '-') + '</td>';
+        html += '<td class="text-xs" style="color:' + (teacher === '-' ? '#9ca3af' : '#374151') + '">' + escapeHtml(teacher) + '</td>';
+        html += '<td>' + statusBadge + '</td>';
+        html += '<td>' + countBadge_(isSent, 'sendSingleAbsence(' + origIdx + ')') + '</td>';
+        html += '<td><div class="flex gap-0.5 justify-center">';
+        html += '<button onclick="printAbsTodayDoc(\'tahood_hodoor\',' + origIdx + ')" class="p-1 text-indigo-500 hover:bg-indigo-50 rounded" title="تعهد حضور"><span class="material-symbols-outlined text-[15px]">verified</span></button>';
+        html += '<button onclick="printAbsTodayDoc(\'ehalat_absence\',' + origIdx + ')" class="p-1 text-blue-500 hover:bg-blue-50 rounded" title="إحالة غياب"><span class="material-symbols-outlined text-[15px]">forward_to_inbox</span></button>';
+        html += '<button onclick="printAbsTodayDoc(\'tawtheeq_tawasol\',' + origIdx + ')" class="p-1 text-green-500 hover:bg-green-50 rounded" title="توثيق تواصل"><span class="material-symbols-outlined text-[15px]">contact_phone</span></button>';
+        html += '</div></td>';
+        html += '<td><button onclick="deleteTodayRecord(' + record.rowIndex + ')" class="p-1.5 text-red-500 hover:bg-red-50 rounded-lg" title="حذف"><span class="material-symbols-outlined text-[18px]">delete</span></button></td>';
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table>';
+    html += '<div class="tbl-footer">';
+    html += '<div class="s"><div class="d" style="background:#fee2e2;border-color:#fca5a5"></div> غائب: ' + cntAbsent + '</div>';
+    html += '<div class="s"><div class="d" style="background:#fef3c7;border-color:#fde68a"></div> متأخر: ' + cntLate + '</div>';
+    html += '<div class="s" style="margin-right:auto"><div class="d" style="background:#d1fae5"></div> تم: ' + cntSent + '</div>';
+    html += '<div class="s"><div class="d" style="background:#fef3c7"></div> لم يُرسل: ' + (sorted.length - cntSent) + '</div>';
+    html += '</div>';
+    
+    container.innerHTML = html;
+    injectCheckboxes_abs();
+  } catch(err) {
+    var ct = document.getElementById('abs-today-table');
+    if (ct) { ct.innerHTML = '<pre style="color:red;padding:20px"></pre>'; ct.querySelector('pre').textContent = 'displayAbsenceTodayTable: ' + err.message; }
+  }
+}
+
+function updateTodayCounts() {
+    const total = absenceTodayRecords.length;
+    var el1 = document.getElementById('abs-today-count'); if (el1) el1.textContent = total;
+
+    // تحديث عدد الحالات الحرجة (10+ غياب بدون عذر)
+    var criticalCount = absenceTodayRecords.filter(function(r) {
+        return getF_(r, 'نوع_العذر') === 'بدون عذر' || !getF_(r, 'نوع_العذر');
+    }).length;
+    var el2 = document.getElementById('abs-critical-count'); if (el2) el2.textContent = criticalCount;
+}
+
+// =================================================================
+// 5. استيراد Excel من نظام نور
+// =================================================================
+function handleExcelImport(input) {
+    if (!input.files || !input.files[0]) return;
+    
+    const file = input.files[0];
+    showEnhancedToast('info', 'جاري قراءة الملف...');
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            
+            // ★ معالجة الخلايا المدمجة (merged cells) — ملء القيم للأسفل
+            if (sheet['!merges']) {
+                sheet['!merges'].forEach(function(merge) {
+                    var startR = merge.s.r, startC = merge.s.c;
+                    var endR = merge.e.r;
+                    var cellRef = XLSX.utils.encode_cell({r: startR, c: startC});
+                    var srcCell = sheet[cellRef];
+                    if (srcCell) {
+                        for (var r = startR + 1; r <= endR; r++) {
+                            var targetRef = XLSX.utils.encode_cell({r: r, c: startC});
+                            if (!sheet[targetRef]) {
+                                sheet[targetRef] = {t: srcCell.t, v: srcCell.v};
+                                if (srcCell.w) sheet[targetRef].w = srcCell.w;
+                            }
+                        }
+                    }
+                });
+            }
+            
+            const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+            
+            // ★ تأمين إضافي: ملء الفراغات في الأعمدة الرئيسية (الفصل/المرحلة)
+            fillDownEmptyCells(jsonData);
+            
+            processNoorExcelData(jsonData);
+        } catch (err) {
+            showEnhancedToast('error', 'خطأ في قراءة الملف: ' + err.message);
+        }
+    };
+    reader.readAsArrayBuffer(file);
+    input.value = '';
+}
+
+// ★ ملء الخلايا الفارغة في الأعمدة الرئيسية (الفصل، المرحلة) من أعلى لأسفل
+function fillDownEmptyCells(data) {
+    if (!data || data.length < 2) return;
+    
+    // تحديد صف الرؤوس
+    var headerRowIdx = -1;
+    for (var i = 0; i < Math.min(10, data.length); i++) {
+        if (data[i] && data[i].some(function(c) { return c && String(c).includes('الإسم'); })) {
+            headerRowIdx = i;
+            break;
+        }
+    }
+    if (headerRowIdx === -1) return;
+    
+    var headers = data[headerRowIdx];
+    // الأعمدة التي يجب ملؤها: الفصل، المرحلة، نوع الغياب
+    var fillCols = [];
+    headers.forEach(function(h, idx) {
+        if (h && (String(h).includes('الفصل') || String(h).includes('المرحلة') || String(h).includes('نوع'))) {
+            fillCols.push(idx);
+        }
+    });
+    
+    // ملء من أعلى لأسفل
+    for (var c = 0; c < fillCols.length; c++) {
+        var colIdx = fillCols[c];
+        var lastVal = '';
+        for (var r = headerRowIdx + 1; r < data.length; r++) {
+            if (!data[r]) continue;
+            var val = data[r][colIdx];
+            if (val && String(val).trim()) {
+                lastVal = String(val).trim();
+            } else if (lastVal) {
+                data[r][colIdx] = lastVal;
+            }
+        }
+    }
+}
+
+function processNoorExcelData(data) {
+    // البحث عن صف الرؤوس
+    let headerRowIndex = -1;
+    for (let i = 0; i < Math.min(10, data.length); i++) {
+        const row = data[i];
+        if (row && row.some(cell => cell && String(cell).includes('الإسم'))) {
+            headerRowIndex = i;
+            break;
+        }
+    }
+    
+    if (headerRowIndex === -1) {
+        showEnhancedToast('error', 'لم يتم التعرف على هيكل الملف');
+        return;
+    }
+    
+    const headers = data[headerRowIndex];
+    const nameCol = headers.findIndex(h => h && String(h).includes('الإسم'));
+    const idCol = headers.findIndex(h => h && String(h).includes('الهوية'));
+    const phoneCol = headers.findIndex(h => h && String(h).includes('الجوال'));
+    const stageCol = headers.findIndex(h => h && String(h).includes('المرحلة'));
+    const classCol = headers.findIndex(h => h && String(h).includes('الفصل'));
+    const typeCol = headers.findIndex(h => h && String(h).includes('نوع'));
+    
+    var enrichedCount = 0, totalCount = 0;
+    const students = [];
+    for (let i = headerRowIndex + 1; i < data.length; i++) {
+        const row = data[i];
+        if (!row || !row[nameCol]) continue;
+        
+        var studentId = String(row[idCol] || '').trim();
+        var studentName = String(row[nameCol] || '').trim();
+        var excelPhone = String(row[phoneCol] || '').trim();
+        var excelGrade = String(row[stageCol] || '').trim();
+        var excelClass = String(row[classCol] || '').trim();
+        
+        // ★ البحث في بيانات الطلاب الأصلية لجلب الصف والفصل الصحيح
+        var matched = null;
+        if (APP_DATA && APP_DATA.students && APP_DATA.students.length > 0) {
+            // المحاولة ١: بالرقم (رقم الهوية)
+            if (studentId) {
+                matched = APP_DATA.students.find(function(s) {
+                    return String(s['رقم الطالب'] || s['رقم_الطالب'] || '').trim() === studentId;
+                });
+            }
+            // المحاولة ٢: بالاسم (تطابق كامل بعد تنظيف المسافات)
+            if (!matched && studentName) {
+                var cleanName = studentName.replace(/\s+/g, ' ').trim();
+                matched = APP_DATA.students.find(function(s) {
+                    var sName = String(s['اسم الطالب'] || s['اسم_الطالب'] || '').replace(/\s+/g, ' ').trim();
+                    return sName === cleanName;
+                });
+                // المحاولة ٣: بدون "بن" مقابل بمسافة
+                if (!matched) {
+                    var normName = cleanName.replace(/\s+بن\s+/g, ' ');
+                    matched = APP_DATA.students.find(function(s) {
+                        var sName = String(s['اسم الطالب'] || s['اسم_الطالب'] || '').replace(/\s+/g, ' ').trim().replace(/\s+بن\s+/g, ' ');
+                        return sName === normName;
+                    });
+                }
+                // المحاولة ٤: بدون تشكيل + تطبيع الألف والهمزة
+                if (!matched) {
+                    var normName2 = normalizeArabic_(cleanName);
+                    matched = APP_DATA.students.find(function(s) {
+                        var sName = normalizeArabic_(String(s['اسم الطالب'] || s['اسم_الطالب'] || ''));
+                        return sName === normName2;
+                    });
+                }
+                // المحاولة ٥: الاسم الأول + الأخير (تطابق جزئي)
+                if (!matched) {
+                    var nameParts = cleanName.split(' ');
+                    if (nameParts.length >= 2) {
+                        var firstName = nameParts[0];
+                        var lastName = nameParts[nameParts.length - 1];
+                        var candidates = APP_DATA.students.filter(function(s) {
+                            var sName = String(s['اسم الطالب'] || s['اسم_الطالب'] || '').replace(/\s+/g, ' ').trim();
+                            var sParts = sName.split(' ');
+                            return sParts.length >= 2 && sParts[0] === firstName && sParts[sParts.length - 1] === lastName;
+                        });
+                        if (candidates.length === 1) matched = candidates[0]; // فقط لو نتيجة وحيدة
+                    }
+                }
+            }
+        }
+        
+        var finalGrade, finalClass, finalPhone;
+        if (matched) {
+            finalGrade = matched['الصف'] || excelGrade;
+            finalClass = matched['الفصل'] || excelClass;
+            finalPhone = matched['رقم الجوال'] || excelPhone;
+            enrichedCount++;
+        } else {
+            // لم يُطابق — نحاول فصل عمود الفصل المدمج من نور
+            // مثال: "الثالث الثانوي المسار العام / 2" → الصف: "الثالث الثانوي المسار العام" ، الفصل: "2"
+            if (excelClass && excelClass.includes('/')) {
+                var parts = excelClass.split('/');
+                finalGrade = parts[0].trim();
+                finalClass = parts[parts.length - 1].trim();
+            } else {
+                finalGrade = excelGrade;
+                finalClass = excelClass;
+            }
+            finalPhone = excelPhone;
+        }
+        
+        students.push({
+            id: studentId,
+            name: studentName,
+            phone: finalPhone,
+            grade: finalGrade,
+            class: finalClass,
+            absenceType: row[typeCol] ? String(row[typeCol]).trim() : 'غياب بدون عذر',
+            _matched: !!matched
+        });
+        totalCount++;
+    }
+    
+    if (students.length === 0) {
+        showEnhancedToast('warning', 'لم يتم العثور على بيانات طلاب');
+        return;
+    }
+    
+    // عرض إحصائية التطابق
+    if (enrichedCount < totalCount) {
+        showEnhancedToast('warning', 'تم مطابقة ' + enrichedCount + ' من ' + totalCount + ' طالب مع بيانات النظام');
+    } else {
+        showEnhancedToast('success', 'تم مطابقة جميع الطلاب (' + totalCount + ') مع بيانات النظام ✓');
+    }
+    
+    // عرض نافذة التأكيد
+    openExcelPreviewModal(students, enrichedCount, totalCount);
+}
+
+function openExcelPreviewModal(students, enrichedCount, totalCount) {
+    const modal = document.createElement('div');
+    modal.id = 'excel-preview-modal';
+    modal.className = 'fixed inset-0 bg-gray-900 bg-opacity-50 z-50 flex justify-center items-center backdrop-blur-sm';
+    
+    var unmatchedCount = totalCount - enrichedCount;
+    
+    let tableRows = students.slice(0, 15).map((s, i) => `
+        <tr class="border-b border-gray-100 ${s._matched ? '' : 'bg-amber-50'}">
+            <td class="px-2 py-2 text-sm text-center">${i + 1}</td>
+            <td class="px-2 py-2 text-sm font-medium">${escapeHtml(s.name)}</td>
+            <td class="px-2 py-2 text-sm">${escapeHtml(s.grade || '-')}</td>
+            <td class="px-2 py-2 text-sm">${escapeHtml(s.class || '-')}</td>
+            <td class="px-2 py-2 text-sm">${escapeHtml(s.absenceType)}</td>
+            <td class="px-2 py-2 text-center">${s._matched 
+                ? '<span class="material-symbols-outlined text-green-600 text-[16px]">check_circle</span>' 
+                : '<span class="material-symbols-outlined text-amber-500 text-[16px]">warning</span>'}</td>
+        </tr>
+    `).join('');
+    
+    if (students.length > 15) {
+        tableRows += `<tr><td colspan="6" class="px-3 py-2 text-center text-gray-400">... و ${students.length - 15} طالب آخر</td></tr>`;
+    }
+    
+    var matchBadge = enrichedCount === totalCount
+        ? '<div class="bg-green-50 border border-green-200 rounded-lg p-3 mb-3 flex items-center gap-2"><span class="material-symbols-outlined text-green-600">verified</span><span class="text-sm text-green-800">تم مطابقة <strong>جميع الطلاب</strong> مع بيانات النظام — الصف والفصل والجوال صحيحة ✓</span></div>'
+        : '<div class="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 flex items-center gap-2"><span class="material-symbols-outlined text-amber-600">warning</span><span class="text-sm text-amber-800">تم مطابقة <strong>' + enrichedCount + '</strong> من <strong>' + totalCount + '</strong> طالب. <strong>' + unmatchedCount + '</strong> طالب لم يُطابقوا (صفوفهم من ملف نور)</span></div>';
+    
+    modal.innerHTML = `
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-4 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100 bg-emerald-50 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-emerald-600">preview</span>
+                    معاينة البيانات المستوردة
+                </h3>
+                <button onclick="closeExcelPreviewModal()" class="text-gray-400 hover:text-gray-600">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="p-6">
+                <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-3 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-emerald-600">info</span>
+                    <span class="text-sm text-emerald-800">تم العثور على <strong>${students.length}</strong> طالب في الملف</span>
+                </div>
+                ${matchBadge}
+                <div class="max-h-72 overflow-y-auto border border-gray-200 rounded-lg">
+                    <table class="w-full">
+                        <thead class="bg-gray-100 sticky top-0">
+                            <tr>
+                                <th class="px-2 py-2 text-right text-xs font-bold text-gray-600 w-8">#</th>
+                                <th class="px-2 py-2 text-right text-xs font-bold text-gray-600">الاسم</th>
+                                <th class="px-2 py-2 text-right text-xs font-bold text-gray-600">الصف</th>
+                                <th class="px-2 py-2 text-right text-xs font-bold text-gray-600">الفصل</th>
+                                <th class="px-2 py-2 text-right text-xs font-bold text-gray-600">النوع</th>
+                                <th class="px-2 py-2 text-center text-xs font-bold text-gray-600 w-10">✓</th>
+                            </tr>
+                        </thead>
+                        <tbody>${tableRows}</tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
+                <button onclick="closeExcelPreviewModal()" class="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">إلغاء</button>
+                <button onclick="confirmExcelImport()" class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-bold flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[18px]">save</span> استيراد ${students.length} طالب
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    window._pendingExcelStudents = students;
+}
+
+function closeExcelPreviewModal() {
+    const modal = document.getElementById('excel-preview-modal');
+    if (modal) modal.remove();
+    window._pendingExcelStudents = null;
+    window._platformImportMode = false; // ★ إعادة تعيين
+}
+
+function confirmExcelImport() {
+    const students = window._pendingExcelStudents;
+    if (!students || students.length === 0) return;
+    
+    var isPlatform = !!window._platformImportMode; // ★ هل هو استيراد منصة؟
+    var notes = isPlatform ? 'منصة' : '';
+    
+    closeExcelPreviewModal();
+    showEnhancedToast('info', isPlatform ? 'جاري حفظ غياب المنصة...' : 'جاري حفظ البيانات...');
+    
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                    showEnhancedToast('success', result.message || 'تم الاستيراد بنجاح');
+                    loadAbsenceTodayRecords();
+                } else {
+                    showEnhancedToast('error', result.error || 'فشل الاستيراد');
+                }
+            })
+            .withFailureHandler(function(err) {
+                showEnhancedToast('error', 'خطأ: ' + err.message);
+            })
+            .importExcelAbsence(currentStage, students, notes);
+    } else {
+        showEnhancedToast('success', 'تم استيراد ' + students.length + ' طالب (وضع تجريبي)' + (isPlatform ? ' [منصة]' : ''));
+    }
+    
+    window._platformImportMode = false; // ★ إعادة تعيين
+}
+
+// =================================================================
+// 6. تحويل من غائب لمتأخر
+// =================================================================
+function openLateModal(rowIndex) {
+    const record = absenceTodayRecords.find(r => r.rowIndex === rowIndex);
+    if (!record) return;
+    
+    const modal = document.createElement('div');
+    modal.id = 'late-modal';
+    modal.className = 'fixed inset-0 bg-gray-900 bg-opacity-50 z-50 flex justify-center items-center backdrop-blur-sm';
+    
+    const currentStatus = getF_(record, 'حالة_التأخر') || 'غائب';
+    const currentTime = getF_(record, 'وقت_الحضور') || '';
+    
+    modal.innerHTML = `
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100 bg-amber-50 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-gray-800">تعديل حالة الطالب</h3>
+                <button onclick="closeLateModal()" class="text-gray-400 hover:text-gray-600">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="bg-gray-50 p-3 rounded-lg">
+                    <p class="font-bold text-gray-800">${escapeHtml(getF_(record, 'اسم_الطالب'))}</p>
+                    <p class="text-sm text-gray-500">${escapeHtml(getF_(record, 'الصف') || '')} ${escapeHtml(getF_(record, 'الفصل') || '')}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">الحالة</label>
+                    <div class="flex gap-3">
+                        <label class="flex-1 cursor-pointer">
+                            <input type="radio" name="status" value="غائب" ${currentStatus === 'غائب' ? 'checked' : ''} class="sr-only peer" onchange="toggleLateTimeInput()">
+                            <div class="p-3 border-2 rounded-lg text-center peer-checked:border-red-500 peer-checked:bg-red-50">
+                                <span class="material-symbols-outlined text-red-500">event_busy</span>
+                                <p class="text-sm font-bold mt-1">غائب</p>
+                            </div>
+                        </label>
+                        <label class="flex-1 cursor-pointer">
+                            <input type="radio" name="status" value="متأخر" ${currentStatus === 'متأخر' ? 'checked' : ''} class="sr-only peer" onchange="toggleLateTimeInput()">
+                            <div class="p-3 border-2 rounded-lg text-center peer-checked:border-amber-500 peer-checked:bg-amber-50">
+                                <span class="material-symbols-outlined text-amber-500">schedule</span>
+                                <p class="text-sm font-bold mt-1">متأخر</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                <div id="late-time-container" class="${currentStatus === 'متأخر' ? '' : 'hidden'}">
+                    <label class="block text-sm font-bold text-gray-700 mb-2">وقت الحضور</label>
+                    <input type="time" id="late-time" value="${currentTime}" class="w-full border-gray-300 rounded-lg">
+                </div>
+                <input type="hidden" id="late-row-index" value="${rowIndex}">
+            </div>
+            <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
+                <button onclick="closeLateModal()" class="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">إلغاء</button>
+                <button onclick="saveLateStatus()" class="px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-bold">حفظ</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+function toggleLateTimeInput() {
+    const status = document.querySelector('input[name="status"]:checked').value;
+    const container = document.getElementById('late-time-container');
+    if (status === 'متأخر') {
+        container.classList.remove('hidden');
+    } else {
+        container.classList.add('hidden');
+    }
+}
+
+function closeLateModal() {
+    const modal = document.getElementById('late-modal');
+    if (modal) modal.remove();
+}
+
+function saveLateStatus() {
+    const rowIndex = document.getElementById('late-row-index').value;
+    const status = document.querySelector('input[name="status"]:checked').value;
+    const lateTime = status === 'متأخر' ? document.getElementById('late-time').value : '';
+    
+    closeLateModal();
+    showEnhancedToast('info', 'جاري الحفظ...');
+    
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                    showEnhancedToast('success', 'تم التحديث');
+                    loadAbsenceTodayRecords();
+                } else {
+                    showEnhancedToast('error', result.error || 'فشل التحديث');
+                }
+            })
+            .updateAbsenceLateStatus(currentStage, parseInt(rowIndex), status, lateTime);
+    } else {
+        showEnhancedToast('success', 'تم التحديث (وضع تجريبي)');
+    }
+}
+
+// =================================================================
+// 7. حذف سجل من الغياب اليومي
+// =================================================================
+// ★ تبديل نوع العذر (بعذر / بدون عذر)
+function toggleExcuseType(rowIndex, origIdx) {
+    var rec = absenceTodayRecords[origIdx];
+    if (!rec) return;
+    var current = getF_(rec, 'نوع_العذر') || 'بدون عذر';
+    var newType = (current === 'بعذر') ? 'بدون عذر' : 'بعذر';
+    
+    // تحديث محلي فوري
+    rec['نوع_العذر'] = newType;
+    displayAbsenceTodayTable();
+    
+    // حفظ في الشيت
+    google.script.run.withSuccessHandler(function(r) {
+        if (r && r.success) {
+            showEnhancedToast('success', 'تم تغيير العذر إلى: ' + newType);
+        } else {
+            showEnhancedToast('danger', 'خطأ في الحفظ');
+            rec['نوع_العذر'] = current;
+            displayAbsenceTodayTable();
+        }
+    }).withFailureHandler(function(err) {
+        showEnhancedToast('danger', 'خطأ: ' + err.message);
+        rec['نوع_العذر'] = current;
+        displayAbsenceTodayTable();
+    }).updateAbsenceExcuseType(currentStage, rowIndex, newType);
+}
+
+function deleteTodayRecord(rowIndex) {
+    showStyledConfirm_({title: 'حذف السجل', message: 'هل أنت متأكد من حذف هذا السجل؟', icon: 'delete', color: 'red', onConfirm: function() {
+        showEnhancedToast('info', 'جاري الحذف...');
+    
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                    showEnhancedToast('success', 'تم الحذف');
+                    loadAbsenceTodayRecords();
+                } else {
+                    showEnhancedToast('error', result.error || 'فشل الحذف');
+                }
+            })
+            .deleteAbsenceRecord(currentStage, rowIndex);
+    } else {
+        showEnhancedToast('success', 'تم الحذف (وضع تجريبي)');
+    }
+    }});
+}
+
+// =================================================================
+// 8. إرسال إشعارات الغياب
+// =================================================================
+
+// ★ إرسال فردي لطالب غائب واحد (تحويل للدالة الجديدة sendSingleAbsence)
+function sendSingleAbsenceWhatsApp(idx) {
+    sendSingleAbsence(idx);
+}
+
+function sendAllTodayAbsence() {
+    const unsent = absenceTodayRecords.filter(r => r['تم_الإرسال'] !== 'نعم' && r['تم_الإرسال'] !== true);
+    
+    if (unsent.length === 0) {
+        showEnhancedToast('info', 'تم إرسال جميع الإشعارات سابقاً');
+        return;
+    }
+    
+    showStyledConfirm_({title: 'إرسال إشعارات', message: 'سيتم إرسال إشعارات لـ ' + unsent.length + ' ولي أمر.\n⏱️ التقدير: ~' + Math.ceil(unsent.length * 15 / 60) + ' دقائق\nمتابعة؟', icon: 'send', color: 'orange', onConfirm: function() {
+        showEnhancedToast('info', 'جاري إرسال ' + unsent.length + ' إشعار... (تقريباً ' + Math.ceil(unsent.length * 15 / 60) + ' دقائق)');
+        if (typeof google !== 'undefined' && google.script && google.script.run) {
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    if (result && result.success) {
+                        showEnhancedToast('success', result.message || 'تم الإرسال بنجاح');
+                        loadAbsenceTodayRecords();
+                    } else {
+                        showEnhancedToast('error', result.error || 'فشل الإرسال');
+                    }
+                })
+                .sendAbsenceNotifications(currentStage, unsent.map(function(r){ return r.rowIndex; }));
+        }
+    }});
+}
+
+// =================================================================
+// ★★★ نظام محرر الرسائل ★★★
+var _msgEditorCallback = null;
+var _msgEditorType = '';
+var _msgEditorData = {};
+var _templateCache = {};
+
+function showMessageEditor_(opts) {
+    if (!document.getElementById('msg-editor-modal')) {
+        var d = document.createElement('div');
+        d.innerHTML = '<div id="msg-editor-modal" class="fixed inset-0 bg-gray-900/50 hidden z-[999] flex items-center justify-center backdrop-blur-sm" onclick="if(event.target===this)_closeEditor()">'
+            + '<div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-lg mx-4 overflow-hidden">'
+            + '<div class="px-5 py-3 bg-green-600 text-white flex justify-between items-center">'
+            + '<h3 class="font-bold flex items-center gap-2"><span class="material-symbols-outlined">edit_note</span> تعديل الرسالة قبل الإرسال</h3>'
+            + '<button onclick="_closeEditor()" class="text-white/80 hover:text-white"><span class="material-symbols-outlined">close</span></button></div>'
+            + '<div class="px-5 py-3 bg-green-50 border-b flex justify-between items-center">'
+            + '<div><span class="text-sm font-bold text-gray-700" id="me-student"></span>'
+            + '<span class="text-xs text-gray-500 mr-2" id="me-type-badge"></span></div>'
+            + '<span class="text-xs text-gray-400" id="me-phone" style="direction:ltr"></span></div>'
+            + '<div class="p-5">'
+            + '<textarea id="me-text" rows="12" class="w-full border border-gray-300 rounded-lg p-3 text-sm leading-relaxed resize-y focus:ring-2 focus:ring-green-400" style="direction:rtl;font-family:Traditional Arabic,Tahoma,serif"></textarea>'
+            + '<div id="me-tmpl-note" class="hidden mt-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-600">'
+            + '<span class="material-symbols-outlined text-[14px] align-middle">info</span> يتم استخدام قالبك المحفوظ</div></div>'
+            + '<div class="px-5 py-3 bg-gray-50 flex justify-between items-center gap-2 flex-wrap">'
+            + '<div class="flex gap-2">'
+            + '<button onclick="_saveAsDefault()" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">bookmark</span> حفظ كقالب افتراضي</button>'
+            + '<button onclick="_resetTemplate()" class="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-300 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">restart_alt</span> استعادة</button></div>'
+            + '<div class="flex gap-2">'
+            + '<button onclick="_closeEditor()" class="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg text-sm font-bold">إلغاء</button>'
+            + '<button onclick="_confirmSend()" class="px-6 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 flex items-center gap-2 shadow-md"><span class="material-symbols-outlined text-[18px]">send</span> إرسال</button>'
+            + '</div></div></div></div>';
+        document.body.appendChild(d.firstElementChild);
+    }
+    _msgEditorType = opts.type || '';
+    _msgEditorData = opts.data || {};
+    _msgEditorCallback = opts.onSend || null;
+    document.getElementById('me-student').textContent = opts.studentName || '';
+    document.getElementById('me-type-badge').textContent = opts.type || '';
+    document.getElementById('me-phone').textContent = opts.phone || '';
+    var cached = _templateCache[_msgEditorType];
+    if (cached !== undefined) { _loadMsgEditor(cached, opts); }
+    else if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(function(r) {
+            var t = (r && r.template) ? r.template : '';
+            _templateCache[_msgEditorType] = t;
+            _loadMsgEditor(t, opts);
+        }).withFailureHandler(function() { _templateCache[_msgEditorType]=''; _loadMsgEditor('', opts); }).getMessageTemplate(_msgEditorType);
+    } else { _loadMsgEditor('', opts); }
+    document.getElementById('msg-editor-modal').classList.remove('hidden');
+}
+function _loadMsgEditor(saved, opts) {
+    var note = document.getElementById('me-tmpl-note');
+    var txt;
+    if (saved) {
+        txt = saved; for (var k in (opts.data||{})) { txt = txt.split('{'+k+'}').join(opts.data[k]||''); }
+        // ★ إضافة النص الديناميكي (مثل رابط العذر) إذا لم يكن موجوداً في القالب
+        if (opts.appendText && txt.indexOf(opts.appendText.trim().substring(0, 30)) === -1) {
+            // نضيفه قبل آخر سطر (التحيات)
+            var lastNewline = txt.lastIndexOf('\n\nمع تحيات');
+            if (lastNewline > -1) {
+                txt = txt.substring(0, lastNewline) + opts.appendText + txt.substring(lastNewline);
+            } else {
+                txt += opts.appendText;
+            }
+        }
+        note.classList.remove('hidden');
+    } else { txt = opts.defaultMessage || ''; note.classList.add('hidden'); }
+    var el = document.getElementById('me-text');
+    el.value = txt; el.dataset.defaultMsg = opts.defaultMessage || '';
+}
+function _confirmSend() {
+    var msg = document.getElementById('me-text').value;
+    if (!msg.trim()) { showEnhancedToast('warning', 'الرسالة فارغة'); return; }
+    _closeEditor(); if (_msgEditorCallback) _msgEditorCallback(msg);
+}
+function _saveAsDefault() {
+    var msg = document.getElementById('me-text').value;
+    var tmpl = msg;
+    var entries = [];
+    for (var k in _msgEditorData) { if (_msgEditorData[k] && String(_msgEditorData[k]).trim()) entries.push({k:k,v:String(_msgEditorData[k])}); }
+    entries.sort(function(a,b){return b.v.length-a.v.length;});
+    entries.forEach(function(e){ tmpl = tmpl.split(e.v).join('{'+e.k+'}'); });
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(function(r) {
+            if (r && r.success) { _templateCache[_msgEditorType]=tmpl; showEnhancedToast('success','تم حفظ القالب كافتراضي ✓'); document.getElementById('me-tmpl-note').classList.remove('hidden'); }
+            else showEnhancedToast('danger','فشل الحفظ');
+        }).saveMessageTemplate(_msgEditorType, tmpl);
+    }
+}
+function _resetTemplate() {
+    document.getElementById('me-text').value = document.getElementById('me-text').dataset.defaultMsg || '';
+    document.getElementById('me-tmpl-note').classList.add('hidden');
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(function(){ _templateCache[_msgEditorType]=''; showEnhancedToast('info','تم استعادة القالب الافتراضي'); }).deleteMessageTemplate(_msgEditorType);
+    }
+}
+function _closeEditor() { document.getElementById('msg-editor-modal').classList.add('hidden'); }
+
+
+// ★★★ نظام التحديد - الغياب ★★★
+var selected_abs = new Set();
+
+function toggleSelect_abs(idx) {
+    if (selected_abs.has(idx)) selected_abs.delete(idx);
+    else selected_abs.add(idx);
+    updateSelBar_abs();
+    var allChks = document.querySelectorAll('.sel-abs');
+    var sa = document.getElementById('sel-all-abs');
+    if (sa) sa.checked = selected_abs.size === allChks.length && allChks.length > 0;
+}
+
+function toggleSelectAll_abs(cb) {
+    document.querySelectorAll('.sel-abs').forEach(function(c) {
+        c.checked = cb.checked;
+        var idx = parseInt(c.dataset.idx);
+        if (cb.checked) selected_abs.add(idx);
+        else selected_abs.delete(idx);
+    });
+    updateSelBar_abs();
+}
+
+function updateSelBar_abs() {
+    var bar = document.getElementById('sel-bar-abs');
+    if (!bar) return;
+    if (selected_abs.size > 0) {
+        bar.classList.remove('hidden');
+        document.getElementById('sel-cnt-abs').textContent = toArShared_(selected_abs.size);
+    } else bar.classList.add('hidden');
+}
+
+function clearSel_abs() {
+    selected_abs.clear();
+    document.querySelectorAll('.sel-abs').forEach(function(c){ c.checked=false; });
+    var sa = document.getElementById('sel-all-abs'); if(sa) sa.checked=false;
+    updateSelBar_abs();
+}
+
+function getSelectedRecords_abs() {
+    if (selected_abs.size === 0) return absenceTodayRecords.slice();
+    return Array.from(selected_abs).sort().map(function(i){ return absenceTodayRecords[i]; }).filter(Boolean);
+}
+
+function injectCheckboxes_abs() {
+    var table = document.querySelector('#abs-today-table table');
+    if (!table) return;
+    selected_abs.clear();
+    var thead = table.querySelector('thead tr');
+    if (thead && !thead.querySelector('.sel-all-th')) {
+        var th = document.createElement('th');
+        th.className = 'px-2 py-3 w-8 sel-all-th';
+        th.innerHTML = '<input type="checkbox" id="sel-all-abs" onchange="toggleSelectAll_abs(this)" class="w-4 h-4 rounded accent-indigo-600 cursor-pointer">';
+        thead.insertBefore(th, thead.firstChild);
+    }
+    var rows = table.querySelectorAll('tbody tr');
+    var dataIdx = 0;
+    rows.forEach(function(row) {
+        if (row.querySelector('td[colspan]') || row.children.length <= 1) {
+            var td = row.querySelector('td[colspan]');
+            if (td) td.colSpan = parseInt(td.colSpan || td.children.length) + 1;
+            return;
+        }
+        var td = document.createElement('td');
+        td.className = 'px-2 py-3';
+        td.innerHTML = '<input type="checkbox" class="sel-abs w-4 h-4 rounded accent-indigo-600 cursor-pointer" data-idx="' + dataIdx + '" onchange="toggleSelect_abs(' + dataIdx + ')">';
+        row.insertBefore(td, row.firstChild);
+        dataIdx++;
+    });
+    // Selection bar
+    if (!document.getElementById('sel-bar-abs')) {
+        var bar = document.createElement('div');
+        bar.id = 'sel-bar-abs';
+        bar.className = 'hidden fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-800/95 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-4 z-50 backdrop-blur-sm';
+        bar.innerHTML = '<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[18px]">check_circle</span> <span id="sel-cnt-abs" class="font-bold">٠</span> محدد</span>'
+            + '<span class="w-px h-6 bg-white/30"></span>'
+            + '<button onclick="printSelectedToday_abs()" class="flex items-center gap-1.5 text-sm hover:text-purple-300 transition"><span class="material-symbols-outlined text-[16px]">print</span> طباعة</button>'
+            + '<button onclick="sendSelectedToday_abs()" class="flex items-center gap-1.5 text-sm hover:text-green-300 transition"><span class="material-symbols-outlined text-[16px]">send</span> إرسال</button>'
+            + '<button onclick="clearSel_abs()" class="text-white/60 hover:text-white mr-2 transition"><span class="material-symbols-outlined text-[16px]">close</span></button>';
+        document.body.appendChild(bar);
+    }
+}
+
+function printSelectedToday_abs() {
+    var recs = getSelectedRecords_abs();
+    if (recs.length === 0) { showEnhancedToast('warning', 'لا يوجد بيانات'); return; }
+    var bak = absenceTodayRecords; absenceTodayRecords = recs; printTodayAbsence(); absenceTodayRecords = bak; clearSel_abs();
+}
+function sendSelectedToday_abs() {
+    var indices = Array.from(selected_abs).sort();
+    if (indices.length === 0) { showEnhancedToast('warning', 'حدد طلاب أولاً'); return; }
+    var unsent = indices.filter(function(i) { var r = absenceTodayRecords[i]; return r && getF_(r,'تم_الإرسال') !== 'نعم'; });
+    if (unsent.length === 0) { showEnhancedToast('info', 'تم إرسال الجميع'); return; }
+    showStyledConfirm_({title: 'إرسال للمحددين', message: 'إرسال ' + unsent.length + ' رسالة؟', icon: 'send', color: 'orange', onConfirm: function() {
+        unsent.forEach(function(i) { sendSingleAbsence(i); }); clearSel_abs();
+    }});
+}
+
+function printTodayAbsence() {
+    var _printRecs = (typeof getSelectedRecords_abs === 'function') ? getSelectedRecords_abs() : absenceTodayRecords;
+    if (_printRecs.length === 0) { showEnhancedToast('warning', 'لا يوجد بيانات للطباعة'); return; }
+    var today = new Date();
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var miladi = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
+    var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
+    var stageName = getStageName_(currentStage);
+    var sorted = sortRecordsByClass_(_printRecs);
+    var rows = '', lastKey = '';
+    sorted.forEach(function(rec, i) {
+        var grade = getF_(rec, 'الصف'), cls = getF_(rec, 'الفصل');
+        var key = grade + cls;
+        if (key !== lastKey && i > 0) rows += '<tr class="sep-row"><td colspan="6"></td></tr>';
+        lastKey = key;
+        var excuseType = getF_(rec, 'نوع_العذر') || 'بدون عذر';
+        var rawTeacher = getF_(rec, 'المسجل') || '-';
+        var teacher = (rawTeacher === '-' || rawTeacher === 'مدير_النظام' || rawTeacher === 'يدوي' || rawTeacher.indexOf('sbaspren') >= 0) ? 'الوكيل' : rawTeacher;
+        var isSent = getF_(rec, 'تم_الإرسال') === 'نعم' || getF_(rec, 'تم_الإرسال') === true;
+        var notes = getF_(rec, 'ملاحظات') || '';
+        var platformTag = (notes.indexOf('منصة') >= 0) ? ' <span style="color:#0891b2;font-size:10pt;font-weight:bold">(منصة)</span>' : '';
+        rows += '<tr>'
+            + '<td class="data-cell">' + toArShared_(i+1) + '</td>'
+            + '<td class="name-cell">' + escapeHtml(getF_(rec, 'اسم_الطالب') || '-') + platformTag + '</td>'
+            + '<td class="data-cell">' + formatClassShared_(grade, cls) + '</td>'
+            + '<td class="data-cell" style="font-size:11pt">' + escapeHtml(teacher) + '</td>'
+            + '<td class="data-cell">' + escapeHtml(excuseType) + '</td>'
+            + '<td class="data-cell" style="color:' + (isSent ? 'green' : '#999') + ';font-weight:bold">' + (isSent ? 'تم' : '-') + '</td>'
+            + '</tr>';
+    });
+    var win = window.open('', '_blank');
+    win.document.write(buildSharedPrintPage_({
+        title: 'كشف الغياب اليومي ليوم ' + dayName,
+        subtitle: stageName,
+        dateText: hijri + ' \u00A0الموافق\u00A0 ' + miladi + ' م',
+        colCount: 6,
+        headers: '<th class="col-header" style="width:5%">م</th><th class="col-header" style="width:28%">اسم الطالب</th><th class="col-header" style="width:10%">الصف</th><th class="col-header" style="width:15%">المسجّل</th><th class="col-header" style="width:15%">العذر</th><th class="col-header" style="width:7%">التواصل</th>',
+        rows: rows,
+        total: toArShared_(sorted.length) + ' طالب'
+    }));
+    win.document.close(); setTimeout(function(){ win.print(); }, 300);
+}
+
+
+// =================================================================
+// 10. تبويب المعتمد (السجل التراكمي)
+// =================================================================
+function renderAbsenceApprovedTab() {
+    const content = document.getElementById('abs-tab-content');
+    content.innerHTML = `
+        <!-- شريط الأدوات -->
+        <div class="flex items-center gap-2 mb-4">
+            <button onclick="openPrintModal()" class="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs font-bold shadow-sm">
+                <span class="material-symbols-outlined text-[16px]">print</span> طباعة القوائم
+            </button>
+            <button onclick="sendApprovedAbsence()" class="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs font-bold shadow-sm">
+                <span class="material-symbols-outlined text-[16px]">send</span> إرسال
+            </button>
+            <button onclick="importNoorFile()" class="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-xs font-bold shadow-sm">
+                <span class="material-symbols-outlined text-[16px]">upload_file</span> استيراد ملف نور
+            </button>
+            <button onclick="printAbsContactReport()" class="flex items-center gap-1.5 px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-xs font-bold shadow-sm">
+                <span class="material-symbols-outlined text-[16px]">contact_phone</span> تقرير التواصل
+            </button>
+        </div>
+
+        <!-- الفلاتر - سطر واحد مدمج -->
+        <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-200 mb-4 sticky top-0 z-20">
+            <div class="flex flex-wrap items-center gap-2">
+                <div class="relative flex-shrink-0">
+                    <span class="material-symbols-outlined text-[18px] absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">search</span>
+                    <input type="text" id="abs-search" onkeyup="filterAbsence()" placeholder="ابحث بالاسم..." 
+                        class="w-48 pr-9 pl-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400">
+                </div>
+                <select id="abs-grade-filter" onchange="filterAbsence()" class="px-2 py-1.5 rounded-lg border border-gray-300 text-xs bg-gray-50 flex-shrink-0"><option value="">كل الصفوف</option></select>
+                <select id="abs-class-filter" onchange="filterAbsence()" class="px-2 py-1.5 rounded-lg border border-gray-300 text-xs bg-gray-50 flex-shrink-0"><option value="">كل الفصول</option></select>
+                <select id="abs-sort-filter" onchange="changeSort(this.value)" class="px-2 py-1.5 rounded-lg border border-gray-300 text-xs bg-gray-50 flex-shrink-0">
+                    <option value="desc">الأكثر غياباً (تنازلي)</option><option value="asc">الأقل غياباً</option><option value="alpha">أبجدياً</option>
+                </select>
+                <div class="flex bg-gray-100 rounded-lg p-0.5 flex-shrink-0">
+                    <button onclick="toggleView('cards')" id="view-cards" class="p-1 rounded text-indigo-600 bg-white"><span class="material-symbols-outlined text-[18px]">grid_view</span></button>
+                    <button onclick="toggleView('table')" id="view-table" class="p-1 rounded text-gray-400"><span class="material-symbols-outlined text-[18px]">table_rows</span></button>
+                </div>
+            </div>
+            
+            <!-- فلاتر الحالة -->
+            <div class="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-gray-100">
+                <button onclick="setFilter('all')" id="btn-filter-all" class="abs-filter-btn active px-3 py-1 rounded-lg text-[11px] font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 border border-gray-200">الكل</button>
+                <button onclick="setFilter('zero')" id="btn-filter-zero" class="abs-filter-btn px-3 py-1 rounded-lg text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100">⭐ المنضبطين</button>
+                <span class="w-px h-5 bg-gray-300"></span>
+                <span class="text-[9px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded border border-red-100">بدون عذر:</span>
+                <button onclick="setFilter('warning')" id="btn-filter-warning" class="abs-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold text-yellow-800 bg-yellow-50 border border-yellow-200">إنذار (3-4)</button>
+                <button onclick="setFilter('danger')" id="btn-filter-danger" class="abs-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold text-orange-800 bg-orange-50 border border-orange-200">لجنة (5-9)</button>
+                <button onclick="setFilter('critical')" id="btn-filter-critical" class="abs-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold text-red-800 bg-red-50 border border-red-200">حماية (10+)</button>
+                <span class="w-px h-5 bg-gray-300"></span>
+                <span class="text-[9px] font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">بعذر:</span>
+                <button onclick="setFilter('mo_ref')" id="btn-filter-mo_ref" class="abs-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold text-sky-800 bg-sky-50 border border-sky-200">إحالة موجه (3-4)</button>
+                <button onclick="setFilter('mo_com')" id="btn-filter-mo_com" class="abs-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold text-blue-800 bg-blue-50 border border-blue-200">لجنة توجيه (5-9)</button>
+                <button onclick="setFilter('mo_risk')" id="btn-filter-mo_risk" class="abs-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold text-indigo-800 bg-indigo-50 border border-indigo-200">اشتباه إهمال (10+)</button>
+            </div>
+        </div>
+
+        <div id="absence-container" class="min-h-[400px]">
+            <div class="text-center py-16"><div class="loading-bar mx-auto"><div class="loading-bar-progress"></div></div><p class="text-gray-500 mt-4">جاري تحميل البيانات...</p></div>
+        </div>
+
+        <!-- شريط الإجراءات الجماعية (يظهر عند التحديد) -->
+        <div id="abs-bulk-bar" class="hidden fixed bottom-0 left-0 right-0 bg-gray-900 text-white py-3 px-6 z-50 shadow-2xl">
+            <div class="max-w-full flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <span id="abs-selected-count" class="text-lg font-bold text-orange-400">0</span>
+                    <span class="text-sm text-gray-300">طالب محدد</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-400">تاريخ النماذج (اختياري):</span>
+                    <input type="date" id="abs-form-date" class="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white text-xs">
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="printGroupCommitment()" class="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-xs font-bold">
+                        <span class="material-symbols-outlined text-[14px]">checklist</span> كشف تعهد
+                    </button>
+                    <button onclick="printGroupReferral()" class="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-xs font-bold">
+                        <span class="material-symbols-outlined text-[14px]">forward_to_inbox</span> كشف إحالة
+                    </button>
+                    <button onclick="printIndividualCommitment()" class="flex items-center gap-1 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 rounded-lg text-xs font-bold">
+                        <span class="material-symbols-outlined text-[14px]">person</span> تعهد فردي
+                    </button>
+                    <button onclick="printIndividualReferral()" class="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded-lg text-xs font-bold">
+                        <span class="material-symbols-outlined text-[14px]">assignment_ind</span> إحالة غياب
+                    </button>
+                    <button onclick="clearAbsSelection()" class="px-2 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs">
+                        <span class="material-symbols-outlined text-[14px]">close</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    loadAbsenceData();
+}
+
+function clearDateFilters() {
+    var f = document.getElementById('abs-date-from');
+    var t = document.getElementById('abs-date-to');
+    if (f) f.value = '';
+    if (t) t.value = '';
+    filterAbsence();
+}
+
+function sendApprovedAbsence() {
+    showEnhancedToast('info', 'جاري فتح نافذة الإرسال...');
+    // يمكن فتح modal لاختيار الطلاب للإرسال
+}
+
+// =================================================================
+// 11. تبويب الأعذار
+// =================================================================
+var excuseDateFilter = 'all'; // all, week, month
+
+function renderAbsenceExcusesTab() {
+    const content = document.getElementById('abs-tab-content');
+    content.innerHTML = `
+        <!-- فلاتر الحالة -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-5">
+            <div class="flex flex-wrap justify-between items-center gap-3">
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="filterExcuses('all')" id="exc-filter-all" class="exc-filter-btn active px-4 py-2 rounded-lg text-sm font-bold bg-gray-100 text-gray-700 hover:bg-gray-200">
+                        الكل <span class="text-xs bg-gray-200 px-2 py-0.5 rounded-full ml-1" id="exc-count-all">0</span>
+                    </button>
+                    <button onclick="filterExcuses('pending')" id="exc-filter-pending" class="exc-filter-btn px-4 py-2 rounded-lg text-sm font-bold bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200">
+                        معلق <span class="text-xs bg-amber-200 px-2 py-0.5 rounded-full ml-1" id="exc-count-pending">0</span>
+                    </button>
+                    <button onclick="filterExcuses('approved')" id="exc-filter-approved" class="exc-filter-btn px-4 py-2 rounded-lg text-sm font-bold bg-green-50 text-green-700 hover:bg-green-100 border border-green-200">
+                        مقبول <span class="text-xs bg-green-200 px-2 py-0.5 rounded-full ml-1" id="exc-count-approved">0</span>
+                    </button>
+                    <button onclick="filterExcuses('rejected')" id="exc-filter-rejected" class="exc-filter-btn px-4 py-2 rounded-lg text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 border border-red-200">
+                        مرفوض <span class="text-xs bg-red-200 px-2 py-0.5 rounded-full ml-1" id="exc-count-rejected">0</span>
+                    </button>
+                </div>
+                <div class="flex gap-2">
+                    <!-- فلتر الفترة الزمنية -->
+                    <select id="exc-date-filter" onchange="excuseDateFilter=this.value;displayExcusesList(document.querySelector('.exc-filter-btn.active')?.id?.replace('exc-filter-','')||'all')" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                        <option value="all">كل الفترات</option>
+                        <option value="week">هذا الأسبوع</option>
+                        <option value="month">هذا الشهر</option>
+                    </select>
+                    <button onclick="printExcusesReport()" class="flex items-center gap-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-bold">
+                        <span class="material-symbols-outlined text-[16px]">print</span> طباعة
+                    </button>
+                    <button onclick="loadExcusesData()" class="flex items-center gap-1 px-3 py-2 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-100 text-sm font-semibold border border-gray-200 transition-all">
+                        <span class="material-symbols-outlined text-[16px]">refresh</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- قائمة الأعذار -->
+        <div id="excuses-container">
+            <div class="text-center py-16">
+                <div class="loading-bar mx-auto"><div class="loading-bar-progress"></div></div>
+                <p class="text-gray-500 mt-4">جاري تحميل الأعذار...</p>
+            </div>
+        </div>
+    `;
+
+    loadExcusesData();
+}
+
+function loadExcusesData() {
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                    absenceExcusesRecords = result.excuses || [];
+                    displayExcusesList('all');
+                    updateExcusesCounts();
+                } else {
+                    displayEmptyExcuses();
+                }
+            })
+            .withFailureHandler(function(err) {
+                console.error('خطأ:', err);
+                displayEmptyExcuses();
+            })
+            .getExcusesList(currentStage);
+    } else {
+        // وضع تجريبي
+        absenceExcusesRecords = [];
+        displayEmptyExcuses();
+    }
+}
+
+function displayEmptyExcuses() {
+    const container = document.getElementById('excuses-container');
+    container.innerHTML = `
+        <div class="text-center py-16 bg-white rounded-xl border border-gray-200">
+            <span class="material-symbols-outlined text-gray-300 text-7xl">assignment_late</span>
+            <p class="text-gray-500 mt-4 text-lg">لا توجد أعذار</p>
+            <p class="text-gray-400 text-sm mt-2">ستظهر هنا الأعذار المقدمة من أولياء الأمور</p>
+        </div>
+    `;
+}
+
+function getExcuseDaysBadge(excuse) {
+    if (!excuse.miladiDate) return '';
+    try {
+        var submitted = new Date(excuse.miladiDate);
+        if (isNaN(submitted.getTime())) return '';
+        var now = new Date();
+        now.setHours(0,0,0,0);
+        submitted.setHours(0,0,0,0);
+        var diff = Math.floor((now - submitted) / (1000 * 60 * 60 * 24));
+        if (diff < 0) diff = 0;
+        if (diff > 5) return '';
+        var color = diff <= 1 ? 'green' : (diff <= 3 ? 'amber' : 'red');
+        var text = diff === 0 ? 'اليوم' : (diff === 1 ? 'مضى يوم' : 'مضى ' + diff + ' أيام');
+        return '<span class="px-2 py-0.5 text-xs rounded-full bg-' + color + '-100 text-' + color + '-700 font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">timer</span>' + text + '</span>';
+    } catch(e) { return ''; }
+}
+
+function filterExcusesByDate(excuses) {
+    if (excuseDateFilter === 'all') return excuses;
+    var now = new Date();
+    var startDate = new Date();
+    if (excuseDateFilter === 'week') {
+        var day = now.getDay();
+        startDate.setDate(now.getDate() - day);
+    } else if (excuseDateFilter === 'month') {
+        startDate.setDate(1);
+    }
+    startDate.setHours(0,0,0,0);
+    return excuses.filter(function(e) {
+        try {
+            // ★ استخدام التاريخ الميلادي (miladiDate) بدلاً من الهجري
+            var dateStr = e.miladiDate || '';
+            if (!dateStr) return true; // إذا لا يوجد تاريخ ميلادي، أظهره
+            var d = new Date(dateStr);
+            return !isNaN(d.getTime()) && d >= startDate;
+        } catch(err) { return true; }
+    });
+}
+
+function groupExcusesByDay(excuses) {
+    var days = {};
+    var dayOrder = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس'];
+    excuses.forEach(function(e) {
+        var dayName = e.day || '';
+        if (!dayName) {
+            try {
+                // ★ استخدام التاريخ الميلادي
+                var d = new Date(e.miladiDate || '');
+                if (!isNaN(d.getTime())) {
+                    dayName = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'][d.getDay()] || 'غير محدد';
+                } else {
+                    dayName = 'غير محدد';
+                }
+            } catch(err) { dayName = 'غير محدد'; }
+        }
+        if (!days[dayName]) days[dayName] = [];
+        days[dayName].push(e);
+    });
+    var sorted = [];
+    dayOrder.forEach(function(d) { if (days[d]) sorted.push({day: d, items: days[d]}); });
+    for (var k in days) { if (dayOrder.indexOf(k) < 0) sorted.push({day: k, items: days[k]}); }
+    return sorted;
+}
+
+function displayExcusesList(filter) {
+    const container = document.getElementById('excuses-container');
+
+    let filtered = absenceExcusesRecords;
+    if (filter !== 'all') {
+        filtered = absenceExcusesRecords.filter(e => e.status === filter);
+    }
+    filtered = filterExcusesByDate(filtered);
+
+    // ★ ترتيب: الأحدث أولاً (بالتاريخ الميلادي)
+    filtered.sort(function(a, b) {
+        var dateA = a.miladiDate || '0000-00-00';
+        var dateB = b.miladiDate || '0000-00-00';
+        if (dateA !== dateB) return dateB.localeCompare(dateA);
+        // إذا نفس التاريخ، أعذار أولياء الأمور أولاً
+        if (a.source === 'parent' && b.source !== 'parent') return -1;
+        if (b.source === 'parent' && a.source !== 'parent') return 1;
+        return (parseInt(b.id.replace('pe_','')) || 0) - (parseInt(a.id.replace('pe_','')) || 0);
+    });
+
+    if (filtered.length === 0) {
+        displayEmptyExcuses();
+        return;
+    }
+
+    let html = '';
+
+    if (excuseDateFilter === 'week') {
+        var groups = groupExcusesByDay(filtered);
+        groups.forEach(function(group) {
+            html += '<div class="mb-5"><div class="flex items-center gap-2 mb-3 px-1"><span class="material-symbols-outlined text-purple-500 text-[18px]">calendar_today</span><h3 class="font-bold text-purple-700 text-sm">' + group.day + ' <span class="text-gray-400 font-normal">(' + group.items.length + ')</span></h3><div class="flex-1 h-px bg-purple-100"></div></div><div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">';
+            group.items.forEach(function(excuse) { html += buildExcuseCard(excuse); });
+            html += '</div></div>';
+        });
+    } else {
+        html = '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">';
+        filtered.forEach(function(excuse) { html += buildExcuseCard(excuse); });
+        html += '</div>';
+    }
+
+    container.innerHTML = html;
+}
+
+function buildExcuseCard(excuse) {
+    const statusClass = excuse.status === 'pending' ? 'amber' : (excuse.status === 'approved' ? 'green' : 'red');
+    const statusText = excuse.status === 'pending' ? 'معلق' : (excuse.status === 'approved' ? 'مقبول' : 'مرفوض');
+    const statusIcon = excuse.status === 'pending' ? 'schedule' : (excuse.status === 'approved' ? 'check_circle' : 'cancel');
+    const isParent = excuse.source === 'parent';
+    const daysBadge = isParent && excuse.status === 'pending' ? getExcuseDaysBadge(excuse) : '';
+
+    // لون الحدود حسب الحالة (مثل بطاقة المعتمد)
+    var border = 'border-gray-200';
+    if (excuse.status === 'pending') border = isParent ? 'border-purple-400' : 'border-amber-400';
+    else if (excuse.status === 'approved') border = 'border-green-400';
+    else border = 'border-red-400';
+
+    // شارة المصدر
+    var sourceTag = isParent
+        ? '<span class="text-[10px] font-bold text-purple-800 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-300">ولي أمر</span>'
+        : '<span class="text-[10px] font-bold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full border border-gray-300">يومي</span>';
+
+    // شارة المرفقات
+    var attachTag = excuse.hasAttachment
+        ? '<span class="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full border border-blue-300">📎 مرفق</span>'
+        : '';
+
+    // ★ شارة "جديد" للأعذار المقدمة اليوم
+    var newTag = '';
+    if (excuse.source === 'parent' && excuse.miladiDate) {
+        try {
+            var today = new Date(); today.setHours(0,0,0,0);
+            var excDate = new Date(excuse.miladiDate); excDate.setHours(0,0,0,0);
+            var diffDays = Math.floor((today - excDate) / (1000*60*60*24));
+            if (diffDays === 0) {
+                newTag = '<span class="text-[10px] font-bold text-white bg-red-500 px-2 py-0.5 rounded-full animate-pulse">🆕 جديد</span>';
+            } else if (diffDays === 1) {
+                newTag = '<span class="text-[10px] font-bold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full border border-orange-300">أمس</span>';
+            }
+        } catch(e) {}
+    }
+
+    // أزرار الإجراءات (مثل نمط المعتمد)
+    var actions = '';
+    if (excuse.status === 'pending') {
+        actions += '<button onclick="event.stopPropagation();approveExcuse(\'' + excuse.id + '\')" class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 text-[11px] font-bold border border-green-200"><span class="material-symbols-outlined text-[14px]">check_circle</span> قبول</button>';
+        actions += '<button onclick="event.stopPropagation();rejectExcuse(\'' + excuse.id + '\')" class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 text-[11px] font-bold border border-red-200"><span class="material-symbols-outlined text-[14px]">cancel</span> رفض</button>';
+        actions += '<button onclick="event.stopPropagation();openExcuseMessageModal(\'' + excuse.id + '\')" class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 text-[11px] font-bold border border-blue-200"><span class="material-symbols-outlined text-[14px]">message</span> رسالة</button>';
+    }
+
+    return '<div class="bg-white rounded-xl border-2 ' + border + ' p-4 hover:shadow-md transition-all relative cursor-pointer" onclick="openExcuseDetailsModal(\'' + excuse.id + '\')">'
+        // ★ أيقونة الحالة (أعلى يسار) - مثل نسبة المواظبة في المعتمد
+        + '<div class="absolute top-3 left-3 flex items-center gap-1">'
+        + '<div class="w-8 h-8 bg-' + statusClass + '-100 rounded-full flex items-center justify-center">'
+        + '<span class="material-symbols-outlined text-' + statusClass + '-600 text-[18px]">' + statusIcon + '</span>'
+        + '</div>'
+        + '<span class="text-[11px] font-bold text-' + statusClass + '-700">' + statusText + '</span>'
+        + '</div>'
+        // ★ شارات (أعلى يمين) - مثل badge الحالة في المعتمد
+        + '<div class="absolute top-3 right-3 flex gap-1">'
+        + newTag + sourceTag + attachTag + daysBadge
+        + '</div>'
+        // ★ اسم الطالب + الصف (وسط)
+        + '<div class="mt-10 mb-3">'
+        + '<h3 class="font-bold text-gray-800 text-sm leading-tight">' + escapeHtml(excuse.studentName || '-') + '</h3>'
+        + '<p class="text-xs text-gray-500 mt-0.5">' + escapeHtml(excuse.className || '-') + '</p>'
+        + '</div>'
+        // ★ معلومات العذر (3 أعمدة مثل المعتمد)
+        + '<div class="grid grid-cols-3 gap-2 text-center mb-3">'
+        + '<div class="rounded-lg py-1.5 bg-gray-50"><p class="text-[11px] font-bold text-gray-800 leading-tight truncate px-1">' + escapeHtml(excuse.absenceDate || '-') + '</p><p class="text-[9px] text-gray-500">التاريخ</p></div>'
+        + '<div class="rounded-lg py-1.5 bg-gray-50"><p class="text-[11px] font-bold text-gray-800 leading-tight truncate px-1">' + escapeHtml(excuse.day || '-') + '</p><p class="text-[9px] text-gray-500">اليوم</p></div>'
+        + '<div class="rounded-lg py-1.5 bg-gray-50"><p class="text-[11px] font-bold text-gray-800 leading-tight truncate px-1">' + escapeHtml(excuse.reason || '-') + '</p><p class="text-[9px] text-gray-500">العذر</p></div>'
+        + '</div>'
+        // ★ أزرار الإجراءات (أسفل) - مثل المعتمد
+        + (actions ? '<div class="flex gap-1.5 flex-wrap" onclick="event.stopPropagation()">' + actions + '</div>' : '')
+        + '</div>';
+}
+
+function updateExcusesCounts() {
+    const all = absenceExcusesRecords.length;
+    const pending = absenceExcusesRecords.filter(e => e.status === 'pending').length;
+    const approved = absenceExcusesRecords.filter(e => e.status === 'approved').length;
+    const rejected = absenceExcusesRecords.filter(e => e.status === 'rejected').length;
+    
+    document.getElementById('exc-count-all').textContent = all;
+    document.getElementById('exc-count-pending').textContent = pending;
+    document.getElementById('exc-count-approved').textContent = approved;
+    document.getElementById('exc-count-rejected').textContent = rejected;
+    document.getElementById('abs-excuses-count').textContent = pending;
+}
+
+function filterExcuses(filter) {
+    // تحديث الأزرار
+    document.querySelectorAll('.exc-filter-btn').forEach(btn => {
+        btn.classList.remove('active', 'ring-2', 'ring-offset-1');
+    });
+    document.getElementById('exc-filter-' + filter).classList.add('active', 'ring-2', 'ring-offset-1');
+    
+    displayExcusesList(filter);
+}
+
+// ★ نافذة منبثقة لعرض تفاصيل العذر
+function openExcuseDetailsModal(excuseId) {
+    const excuse = absenceExcusesRecords.find(e => e.id === excuseId);
+    if (!excuse) return;
+
+    const statusClass = excuse.status === 'pending' ? 'amber' : (excuse.status === 'approved' ? 'green' : 'red');
+    const statusText = excuse.status === 'pending' ? 'معلق' : (excuse.status === 'approved' ? 'مقبول' : 'مرفوض');
+    const isParent = excuse.source === 'parent';
+
+    const modal = document.createElement('div');
+    modal.id = 'excuse-details-modal';
+    modal.className = 'fixed inset-0 bg-gray-900 bg-opacity-50 z-50 flex justify-center items-center backdrop-blur-sm';
+
+    modal.innerHTML = `
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden max-h-[90vh] flex flex-col">
+            <div class="px-6 py-4 border-b border-gray-100 bg-purple-50 flex justify-between items-center flex-shrink-0">
+                <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-purple-600">description</span>
+                    تفاصيل العذر
+                </h3>
+                <button onclick="closeExcuseDetailsModal()" class="text-gray-400 hover:text-gray-600">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="p-6 space-y-4 overflow-y-auto">
+                <!-- بيانات الطالب -->
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                            <span class="material-symbols-outlined text-purple-600">person</span>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-gray-800 text-lg">${escapeHtml(excuse.studentName || '-')}</h4>
+                            <p class="text-sm text-gray-500">${escapeHtml(excuse.className || '-')}</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 text-sm">
+                        <div class="bg-white rounded-lg p-2 text-center">
+                            <span class="text-gray-500">تاريخ الغياب</span><br>
+                            <strong class="text-gray-800">${escapeHtml(excuse.absenceDate || '-')}</strong>
+                        </div>
+                        <div class="bg-white rounded-lg p-2 text-center">
+                            <span class="text-gray-500">الحالة</span><br>
+                            <span class="font-bold text-${statusClass}-600">${statusText}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- المصدر -->
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-gray-400 text-[18px]">source</span>
+                    <span class="text-sm text-gray-500">المصدر:</span>
+                    <span class="text-sm font-bold ${isParent ? 'text-purple-600' : 'text-gray-600'}">${isParent ? 'ولي الأمر عبر الرابط' : 'سجل الغياب اليومي'}</span>
+                </div>
+
+                <!-- نص العذر -->
+                <div>
+                    <label class="text-sm font-bold text-gray-700 flex items-center gap-1 mb-2">
+                        <span class="material-symbols-outlined text-[18px]">edit_note</span> سبب الغياب / العذر
+                    </label>
+                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-gray-800 leading-relaxed">
+                        ${escapeHtml(excuse.reason || 'لم يُحدد')}
+                    </div>
+                </div>
+
+                <!-- الملاحظات -->
+                ${excuse.details ? `
+                <div>
+                    <label class="text-sm font-bold text-gray-700 flex items-center gap-1 mb-2">
+                        <span class="material-symbols-outlined text-[18px]">notes</span> ملاحظات
+                    </label>
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-600">
+                        ${escapeHtml(excuse.details)}
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- المرفقات -->
+                ${excuse.hasAttachment ? `
+                <div class="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <span class="material-symbols-outlined text-blue-600">attach_file</span>
+                    <div>
+                        <p class="text-sm font-bold text-blue-800">يوجد مرفقات</p>
+                        <p class="text-xs text-blue-600">ستُسلم ورقياً مع الطالب عند حضوره</p>
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- تاريخ التقديم -->
+                <p class="text-xs text-gray-400">تاريخ التقديم: ${escapeHtml(excuse.submittedAt || '-')}</p>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 flex-shrink-0">
+                ${excuse.status === 'pending' ? `
+                    <button onclick="closeExcuseDetailsModal();approveExcuse('${excuse.id}')" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[18px]">check</span> قبول
+                    </button>
+                    <button onclick="closeExcuseDetailsModal();rejectExcuse('${excuse.id}')" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-bold flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[18px]">close</span> رفض
+                    </button>
+                ` : ''}
+                <button onclick="closeExcuseDetailsModal()" class="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">إغلاق</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+}
+
+function closeExcuseDetailsModal() {
+    const modal = document.getElementById('excuse-details-modal');
+    if (modal) modal.remove();
+}
+
+function approveExcuse(excuseId) {
+    showStyledConfirm_({title: 'قبول العذر', message: 'هل تريد قبول هذا العذر؟', icon: 'check_circle', color: 'green', onConfirm: function() {
+        showEnhancedToast('info', 'جاري القبول...');
+
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                    showEnhancedToast('success', 'تم قبول العذر');
+                    loadExcusesData();
+                    // ★★★ إرسال تلقائي عند القبول - معطّل حالياً ★★★
+                    // لتفعيله: أزل التعليق من الأسطر التالية
+                    // google.script.run
+                    //     .withSuccessHandler(function(r) { if (r && r.success) showEnhancedToast('success', 'تم إبلاغ ولي الأمر بالقبول'); })
+                    //     .sendExcuseCustomMessage(excuseId, 'نفيدكم بأنه تم قبول عذر غياب ابنكم. شكراً لتواصلكم مع المدرسة.');
+                } else {
+                    showEnhancedToast('error', result.error || 'فشل القبول');
+                }
+            })
+            .updateExcuseStatus(excuseId, 'approved');
+    }
+    }});
+}
+
+function rejectExcuse(excuseId) {
+    openExcuseRejectModal(excuseId);
+}
+
+function openExcuseRejectModal(excuseId) {
+    const modal = document.createElement('div');
+    modal.id = 'reject-modal';
+    modal.className = 'fixed inset-0 bg-gray-900 bg-opacity-50 z-50 flex justify-center items-center backdrop-blur-sm';
+    
+    modal.innerHTML = `
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100 bg-red-50 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-gray-800">رفض العذر</h3>
+                <button onclick="closeRejectModal()" class="text-gray-400 hover:text-gray-600">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">سبب الرفض (اختياري)</label>
+                    <textarea id="reject-reason" rows="3" class="w-full border-gray-300 rounded-lg" placeholder="أدخل سبب الرفض ليُرسل لولي الأمر..."></textarea>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="send-reject-message" class="rounded text-red-600">
+                    <label for="send-reject-message" class="text-sm text-gray-600">إرسال رسالة لولي الأمر</label>
+                </div>
+                <input type="hidden" id="reject-excuse-id" value="${excuseId}">
+            </div>
+            <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
+                <button onclick="closeRejectModal()" class="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">إلغاء</button>
+                <button onclick="confirmRejectExcuse()" class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-bold">رفض</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+function closeRejectModal() {
+    const modal = document.getElementById('reject-modal');
+    if (modal) modal.remove();
+}
+
+function confirmRejectExcuse() {
+    const excuseId = document.getElementById('reject-excuse-id').value;
+    const reason = document.getElementById('reject-reason').value;
+    const sendMessage = document.getElementById('send-reject-message').checked;
+
+    closeRejectModal();
+    showEnhancedToast('info', 'جاري الرفض...');
+
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                    showEnhancedToast('success', 'تم رفض العذر');
+                    loadExcusesData();
+                    // ★★★ إرسال تلقائي عند الرفض - معطّل حالياً ★★★
+                    // لتفعيله: أزل التعليق من الأسطر التالية
+                    // var rejectMsg = 'نفيدكم بأنه تم رفض عذر غياب ابنكم.';
+                    // if (reason) rejectMsg += ' السبب: ' + reason;
+                    // rejectMsg += ' للاستفسار يرجى التواصل مع إدارة المدرسة.';
+                    // google.script.run
+                    //     .withSuccessHandler(function(r) { if (r && r.success) showEnhancedToast('success', 'تم إبلاغ ولي الأمر بالرفض'); })
+                    //     .sendExcuseCustomMessage(excuseId, rejectMsg);
+                } else {
+                    showEnhancedToast('error', result.error || 'فشل الرفض');
+                }
+            })
+            .updateExcuseStatus(excuseId, 'rejected', reason, sendMessage);
+    }
+}
+
+function openExcuseMessageModal(excuseId) {
+    const excuse = absenceExcusesRecords.find(e => e.id === excuseId);
+    if (!excuse) return;
+    
+    const modal = document.createElement('div');
+    modal.id = 'message-modal';
+    modal.className = 'fixed inset-0 bg-gray-900 bg-opacity-50 z-50 flex justify-center items-center backdrop-blur-sm';
+    
+    modal.innerHTML = `
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100 bg-blue-50 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-gray-800">إرسال رسالة لولي الأمر</h3>
+                <button onclick="closeMessageModal()" class="text-gray-400 hover:text-gray-600">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="bg-gray-50 p-3 rounded-lg">
+                    <p class="font-bold text-gray-800">${escapeHtml(excuse.studentName || '-')}</p>
+                    <p class="text-sm text-gray-500">ولي الأمر: ${escapeHtml(excuse.parentName || '-')}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">الرسالة</label>
+                    <textarea id="custom-message" rows="4" class="w-full border-gray-300 rounded-lg" placeholder="اكتب رسالتك هنا..."></textarea>
+                </div>
+                <input type="hidden" id="message-excuse-id" value="${excuseId}">
+            </div>
+            <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
+                <button onclick="closeMessageModal()" class="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">إلغاء</button>
+                <button onclick="sendCustomMessage()" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[18px]">send</span> إرسال
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+function closeMessageModal() {
+    const modal = document.getElementById('message-modal');
+    if (modal) modal.remove();
+}
+
+function sendCustomMessage() {
+    const excuseId = document.getElementById('message-excuse-id').value;
+    const message = document.getElementById('custom-message').value;
+    
+    if (!message.trim()) {
+        showEnhancedToast('warning', 'يرجى كتابة الرسالة');
+        return;
+    }
+    
+    closeMessageModal();
+    showEnhancedToast('info', 'جاري الإرسال...');
+    
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                    showEnhancedToast('success', 'تم إرسال الرسالة');
+                } else {
+                    showEnhancedToast('error', result.error || 'فشل الإرسال');
+                }
+            })
+            .sendExcuseCustomMessage(excuseId, message);
+    }
+}
+
+// =================================================================
+// ★ طباعة تقرير الأعذار (قائمتين: مع عذر + بدون عذر)
+// =================================================================
+function printExcusesReport() {
+    if (absenceExcusesRecords.length === 0) { showEnhancedToast('warning', 'لا يوجد أعذار للطباعة'); return; }
+
+    var today = new Date();
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var miladi = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
+    var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
+    var stageName = getStageName_(currentStage);
+
+    // فلترة حسب الفترة المحددة
+    var filtered = filterExcusesByDate(absenceExcusesRecords);
+
+    // تقسيم: أعذار مقدمة (معلق + مقبول) و بدون عذر (مرفوض)
+    var withExcuse = filtered.filter(function(e) { return e.status === 'pending' || e.status === 'approved'; });
+    var withoutExcuse = filtered.filter(function(e) { return e.status === 'rejected'; });
+
+    // ترتيب حسب الفصل
+    withExcuse.sort(function(a,b) {
+        var ka = (a.className||'') + (a.studentName||'');
+        var kb = (b.className||'') + (b.studentName||'');
+        return ka.localeCompare(kb, 'ar');
+    });
+    withoutExcuse.sort(function(a,b) {
+        var ka = (a.className||'') + (a.studentName||'');
+        var kb = (b.className||'') + (b.studentName||'');
+        return ka.localeCompare(kb, 'ar');
+    });
+
+    // بناء صفوف أعذار مقدمة
+    var rowsWithExcuse = '';
+    withExcuse.forEach(function(e, i) {
+        var statusText = e.status === 'pending' ? 'معلق' : 'مقبول';
+        var statusColor = e.status === 'pending' ? '#d97706' : '#16a34a';
+        var source = e.source === 'parent' ? 'ولي أمر' : 'يومي';
+        rowsWithExcuse += '<tr>'
+            + '<td class="data-cell">' + toArShared_(i+1) + '</td>'
+            + '<td class="name-cell">' + escapeHtml(e.studentName || '-') + '</td>'
+            + '<td class="data-cell">' + escapeHtml(e.className || '-') + '</td>'
+            + '<td class="detail-cell">' + escapeHtml(e.reason || '-') + '</td>'
+            + '<td class="data-cell">' + escapeHtml(e.absenceDate || '-') + '</td>'
+            + '<td class="data-cell" style="color:' + statusColor + ';font-weight:bold">' + statusText + '</td>'
+            + '<td class="data-cell">' + source + '</td>'
+            + '</tr>';
+    });
+
+    // بناء صفوف بدون عذر (مرفوض)
+    var rowsWithoutExcuse = '';
+    withoutExcuse.forEach(function(e, i) {
+        rowsWithoutExcuse += '<tr>'
+            + '<td class="data-cell">' + toArShared_(i+1) + '</td>'
+            + '<td class="name-cell">' + escapeHtml(e.studentName || '-') + '</td>'
+            + '<td class="data-cell">' + escapeHtml(e.className || '-') + '</td>'
+            + '<td class="detail-cell">' + escapeHtml(e.reason || '-') + '</td>'
+            + '<td class="data-cell">' + escapeHtml(e.absenceDate || '-') + '</td>'
+            + '<td class="data-cell">' + escapeHtml(e.details || '-') + '</td>'
+            + '</tr>';
+    });
+
+    var filterLabel = excuseDateFilter === 'week' ? ' (هذا الأسبوع)' : (excuseDateFilter === 'month' ? ' (هذا الشهر)' : '');
+
+    // صفحة طباعة أولى: أعذار مقدمة
+    var page1 = buildSharedPrintPage_({
+        title: 'كشف الأعذار المقدمة' + filterLabel,
+        subtitle: stageName,
+        dateText: hijri + ' \u00A0الموافق\u00A0 ' + miladi + ' م',
+        colCount: 7,
+        headers: '<th class="col-header" style="width:5%">م</th><th class="col-header" style="width:22%">اسم الطالب</th><th class="col-header" style="width:10%">الفصل</th><th class="col-header" style="width:25%">العذر</th><th class="col-header" style="width:13%">تاريخ الغياب</th><th class="col-header" style="width:10%">الحالة</th><th class="col-header" style="width:8%">المصدر</th>',
+        rows: rowsWithExcuse || '<tr><td colspan="7" class="data-cell" style="padding:20px;color:#999">لا توجد أعذار مقدمة</td></tr>',
+        total: toArShared_(withExcuse.length) + ' طالب'
+    });
+
+    // صفحة طباعة ثانية: مرفوض / بدون عذر
+    var page2 = buildSharedPrintPage_({
+        title: 'كشف الأعذار المرفوضة' + filterLabel,
+        subtitle: stageName,
+        dateText: hijri + ' \u00A0الموافق\u00A0 ' + miladi + ' م',
+        colCount: 6,
+        headers: '<th class="col-header" style="width:5%">م</th><th class="col-header" style="width:24%">اسم الطالب</th><th class="col-header" style="width:10%">الفصل</th><th class="col-header" style="width:25%">العذر المقدم</th><th class="col-header" style="width:13%">تاريخ الغياب</th><th class="col-header" style="width:18%">سبب الرفض</th>',
+        rows: rowsWithoutExcuse || '<tr><td colspan="6" class="data-cell" style="padding:20px;color:#999">لا توجد أعذار مرفوضة</td></tr>',
+        total: toArShared_(withoutExcuse.length) + ' طالب'
+    });
+
+    // فتح نافذتين
+    var win1 = window.open('', '_blank');
+    win1.document.write(page1); win1.document.close();
+    setTimeout(function(){ win1.print(); }, 300);
+
+    if (withoutExcuse.length > 0) {
+        setTimeout(function() {
+            var win2 = window.open('', '_blank');
+            win2.document.write(page2); win2.document.close();
+            setTimeout(function(){ win2.print(); }, 300);
+        }, 500);
+    }
+}
+
+// =================================================================
+// 12. تبويب التقارير
+// =================================================================
+function renderAbsenceReportsTab() {
+    const content = document.getElementById('abs-tab-content');
+    content.innerHTML = `
+        <!-- فلاتر التقارير -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-5">
+            <div class="flex flex-wrap gap-4 items-end">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">الصف</label>
+                    <select id="rep-grade" class="w-40 border-gray-300 rounded-lg text-sm h-10">
+                        <option value="">كل الصفوف</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">الفصل</label>
+                    <select id="rep-class" class="w-40 border-gray-300 rounded-lg text-sm h-10">
+                        <option value="">كل الفصول</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">من تاريخ</label>
+                    <input type="date" id="rep-from" class="border-gray-300 rounded-lg text-sm h-10">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">إلى تاريخ</label>
+                    <input type="date" id="rep-to" class="border-gray-300 rounded-lg text-sm h-10">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">نوع الغياب</label>
+                    <select id="rep-type" class="w-36 border-gray-300 rounded-lg text-sm h-10">
+                        <option value="">الكل</option>
+                        <option value="بعذر">بعذر</option>
+                        <option value="بدون عذر">بدون عذر</option>
+                    </select>
+                </div>
+                <button onclick="loadReportsData()" class="mb-0.5 bg-emerald-600 text-white px-6 h-10 rounded-lg text-sm font-bold hover:bg-emerald-700 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[18px]">refresh</span> تحديث
+                </button>
+                <button onclick="printReports()" class="mb-0.5 bg-purple-600 text-white px-4 h-10 rounded-lg text-sm font-bold hover:bg-purple-700 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[18px]">print</span> طباعة
+                </button>
+            </div>
+        </div>
+        
+        <!-- بطاقات الإحصائيات -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-r-4 border-r-orange-500">
+                <div class="text-3xl font-bold text-orange-600 mb-1" id="stat-total">٠</div>
+                <div class="text-sm text-gray-500">إجمالي الغياب</div>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-r-4 border-r-red-500">
+                <div class="text-3xl font-bold text-red-600 mb-1" id="stat-unexcused">٠</div>
+                <div class="text-sm text-gray-500">بدون عذر</div>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-r-4 border-r-blue-500">
+                <div class="text-3xl font-bold text-blue-600 mb-1" id="stat-excused">٠</div>
+                <div class="text-sm text-gray-500">بعذر</div>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-r-4 border-r-amber-500">
+                <div class="text-3xl font-bold text-amber-600 mb-1" id="stat-late">٠</div>
+                <div class="text-sm text-gray-500">تأخير</div>
+            </div>
+        </div>
+
+        <!-- محتوى التقارير -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- أكثر الطلاب غياباً -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="px-5 py-4 border-b border-gray-100 bg-red-50">
+                    <h3 class="font-bold text-gray-800 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-red-600">trending_up</span>
+                        أكثر الطلاب غياباً
+                    </h3>
+                </div>
+                <div id="top-absent-students" class="p-4">
+                    <p class="text-gray-400 text-center py-8">اضغط "تحديث" لعرض البيانات</p>
+                </div>
+            </div>
+
+            <!-- الغياب حسب الفصل -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="px-5 py-4 border-b border-gray-100 bg-indigo-50">
+                    <h3 class="font-bold text-gray-800 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-indigo-600">school</span>
+                        الغياب حسب الفصل
+                    </h3>
+                </div>
+                <div id="absence-by-class" class="p-4">
+                    <p class="text-gray-400 text-center py-8">اضغط "تحديث" لعرض البيانات</p>
+                </div>
+            </div>
+
+            <!-- الغياب حسب اليوم -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden md:col-span-2">
+                <div class="px-5 py-4 border-b border-gray-100 bg-emerald-50">
+                    <h3 class="font-bold text-gray-800 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-emerald-600">calendar_month</span>
+                        الغياب حسب اليوم
+                    </h3>
+                </div>
+                <div id="absence-by-day" class="p-4">
+                    <p class="text-gray-400 text-center py-8">اضغط "تحديث" لعرض البيانات</p>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    populateReportsFilters();
+}
+
+function populateReportsFilters() {
+    const gradeSelect = document.getElementById('rep-grade');
+    const classSelect = document.getElementById('rep-class');
+    
+    if (APP_DATA && APP_DATA.students) {
+        const grades = [...new Set(APP_DATA.students.filter(s => s['المرحلة'] === currentStage).map(s => s['الصف']))];
+        grades.forEach(g => gradeSelect.add(new Option(g, g)));
+    }
+    
+    gradeSelect.addEventListener('change', function() {
+        classSelect.innerHTML = '<option value="">كل الفصول</option>';
+        if (this.value && APP_DATA && APP_DATA.students) {
+            const classes = [...new Set(APP_DATA.students.filter(s => s['المرحلة'] === currentStage && s['الصف'] === this.value).map(s => s['الفصل']))];
+            classes.forEach(c => classSelect.add(new Option(c, c)));
+        }
+    });
+}
+
+function loadReportsData() {
+    const grade = document.getElementById('rep-grade').value;
+    const cls = document.getElementById('rep-class').value;
+    const dateFrom = document.getElementById('rep-from').value;
+    const dateTo = document.getElementById('rep-to').value;
+    const type = document.getElementById('rep-type').value;
+    
+    showEnhancedToast('info', 'جاري تحميل التقارير...');
+    
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                    displayReportsData(result.stats);
+                    showEnhancedToast('success', 'تم تحميل التقارير');
+                } else {
+                    showEnhancedToast('error', result.error || 'فشل التحميل');
+                }
+            })
+            .getAbsenceStatistics(currentStage, dateFrom, dateTo, grade, cls, type);
+    } else {
+        // وضع تجريبي
+        displayReportsData({
+            total: 0, withExcuse: 0, withoutExcuse: 0, late: 0,
+            topStudents: [], byClass: {}, byDay: {}
+        });
+    }
+}
+
+function displayReportsData(stats) {
+    // تحديث الإحصائيات
+    document.getElementById('stat-total').textContent = stats.total || 0;
+    document.getElementById('stat-unexcused').textContent = stats.withoutExcuse || 0;
+    document.getElementById('stat-excused').textContent = stats.withExcuse || 0;
+    document.getElementById('stat-late').textContent = stats.late || 0;
+    
+    // أكثر الطلاب غياباً
+    const topContainer = document.getElementById('top-absent-students');
+    if (stats.topStudents && stats.topStudents.length > 0) {
+        let html = '<div class="space-y-2">';
+        stats.topStudents.forEach((s, i) => {
+            html += `
+                <div class="flex items-center justify-between p-2 rounded-lg ${i < 3 ? 'bg-red-50' : 'bg-gray-50'}">
+                    <div class="flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-full ${i < 3 ? 'bg-red-500 text-white' : 'bg-gray-300 text-gray-600'} flex items-center justify-center text-xs font-bold">${i + 1}</span>
+                        <span class="text-sm font-medium">${escapeHtml(s.name)}</span>
+                    </div>
+                    <span class="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold">${s.count} يوم</span>
+                </div>
+            `;
+        });
+        html += '</div>';
+        topContainer.innerHTML = html;
+    } else {
+        topContainer.innerHTML = '<p class="text-gray-400 text-center py-8">لا توجد بيانات</p>';
+    }
+    
+    // الغياب حسب الفصل
+    const classContainer = document.getElementById('absence-by-class');
+    if (stats.byClass && Object.keys(stats.byClass).length > 0) {
+        let html = '<div class="space-y-2">';
+        Object.entries(stats.byClass).sort((a, b) => b[1] - a[1]).forEach(([cls, count]) => {
+            const percent = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
+            html += `
+                <div class="flex items-center gap-3">
+                    <span class="text-sm font-medium w-32 truncate">${cls}</span>
+                    <div class="flex-1 bg-gray-200 rounded-full h-4">
+                        <div class="bg-indigo-500 h-4 rounded-full" style="width: ${percent}%"></div>
+                    </div>
+                    <span class="text-sm font-bold text-gray-600 w-12 text-left">${count}</span>
+                </div>
+            `;
+        });
+        html += '</div>';
+        classContainer.innerHTML = html;
+    } else {
+        classContainer.innerHTML = '<p class="text-gray-400 text-center py-8">لا توجد بيانات</p>';
+    }
+    
+    // الغياب حسب اليوم
+    const dayContainer = document.getElementById('absence-by-day');
+    if (stats.byDay && Object.keys(stats.byDay).length > 0) {
+        let html = '<div class="flex justify-center gap-4 flex-wrap">';
+        const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
+        days.forEach(day => {
+            const count = stats.byDay[day] || 0;
+            const percent = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
+            html += `
+                <div class="text-center p-4 bg-gray-50 rounded-xl w-24">
+                    <div class="text-2xl font-black text-emerald-600 mb-1">${count}</div>
+                    <div class="text-xs text-gray-500">${day}</div>
+                    <div class="text-[10px] text-gray-400 mt-1">${percent}%</div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        dayContainer.innerHTML = html;
+    } else {
+        dayContainer.innerHTML = '<p class="text-gray-400 text-center py-8">لا توجد بيانات</p>';
+    }
+}
+
+function printReports() {
+    showEnhancedToast('info', 'جاري إعداد الطباعة...');
+    // يمكن إضافة منطق طباعة التقارير
+}
+
+// =================================================================
+// 13. النوافذ المنبثقة الأساسية
+// =================================================================
+function getAbsenceModalsHTML() {
+    return `
+        <!-- نافذة التعديل -->
+        <div id="edit-modal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex justify-center items-center backdrop-blur-sm">
+            <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-md overflow-hidden transform transition-all scale-100">
+                <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2"><span class="material-symbols-outlined text-indigo-600">edit_note</span> تعديل سجل الغياب</h3>
+                    <button onclick="closeEditModal()" class="text-gray-400 hover:text-gray-600"><span class="material-symbols-outlined">close</span></button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div class="bg-indigo-50 p-3 rounded-lg border border-indigo-100 mb-4">
+                        <p class="text-sm text-indigo-800 font-bold" id="modal-student-name"></p>
+                        <p class="text-xs text-indigo-600" id="modal-student-grade"></p>
+                        <input type="hidden" id="modal-student-id">
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 text-center">
+                        <div><label class="block text-xs font-bold text-red-600 mb-2">بدون عذر</label><input type="number" id="edit-unexcused" min="0" class="w-full text-center border-gray-300 rounded-lg"></div>
+                        <div><label class="block text-xs font-bold text-green-600 mb-2">بعذر</label><input type="number" id="edit-excused" min="0" class="w-full text-center border-gray-300 rounded-lg"></div>
+                        <div><label class="block text-xs font-bold text-yellow-600 mb-2">تأخير</label><input type="number" id="edit-late" min="0" class="w-full text-center border-gray-300 rounded-lg"></div>
+                    </div>
+                </div>
+                <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+                    <button onclick="closeEditModal()" class="px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-200 rounded-lg">إلغاء</button>
+                    <button onclick="saveManualAbsence()" class="px-6 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-md flex items-center gap-2">حفظ</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- نافذة الطباعة -->
+        <div id="print-modal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex justify-center items-center backdrop-blur-sm">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
+                <div class="px-5 py-4 border-b border-gray-100 bg-gray-50"><h3 class="font-bold text-gray-800">طباعة التقارير</h3></div>
+                <div class="p-5 space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">نوع التقرير</label>
+                        <select id="print-type" class="w-full border-gray-300 rounded-lg text-sm">
+                            <option value="class_report">كشف متابعة غياب</option>
+                            <option value="discipline_report">كشف المتميزين بالانضباط</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">الصف والفصل</label>
+                        <select id="print-filter-class" class="w-full border-gray-300 rounded-lg text-sm"><option value="">الكل</option></select>
+                    </div>
+                </div>
+                <div class="px-5 py-3 bg-gray-50 flex justify-end gap-2">
+                    <button onclick="document.getElementById('print-modal').classList.add('hidden')" class="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-200 rounded-lg">إلغاء</button>
+                    <button onclick="executePrint()" class="px-4 py-1.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg flex items-center gap-2"><span class="material-symbols-outlined text-[16px]">print</span> طباعة</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- نافذة تسجيل غياب يدوي -->
+        <div id="abs-add-modal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex justify-center items-center backdrop-blur-sm">
+            <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-lg mx-4 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 bg-orange-50 flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-orange-600">event_busy</span> تسجيل غياب يدوي
+                    </h3>
+                    <button onclick="closeAbsenceAddModal()" class="text-gray-400 hover:text-gray-600">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">الصف</label>
+                            <select id="abs-add-grade" onchange="absPopulateClasses()" class="w-full border-gray-300 rounded-lg">
+                                <option value="">اختر الصف</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">الفصل</label>
+                            <select id="abs-add-class" onchange="absPopulateStudents()" class="w-full border-gray-300 rounded-lg" disabled>
+                                <option value="">اختر الفصل</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">الطلاب</label>
+                        <div id="abs-add-students" class="max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50">
+                            <p class="text-gray-400 text-sm">اختر الصف والفصل أولاً</p>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">نوع الغياب</label>
+                        <select id="abs-add-type" class="w-full border-gray-300 rounded-lg">
+                            <option value="يوم كامل">يوم كامل</option>
+                            <option value="حصة">حصة</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
+                    <button onclick="closeAbsenceAddModal()" class="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">إلغاء</button>
+                    <button onclick="saveAbsenceRecord()" class="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-bold">حفظ</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// =================================================================
+// 14. دوال النوافذ والإضافات
+// =================================================================
+function openPrintModal() {
+    document.getElementById('print-modal').classList.remove('hidden');
+}
+
+function openAbsenceAddModal() {
+    document.getElementById('abs-add-modal').classList.remove('hidden');
+    absPopulateGrades();
+}
+
+function closeAbsenceAddModal() {
+    document.getElementById('abs-add-modal').classList.add('hidden');
+}
+
+function closeEditModal() {
+    document.getElementById('edit-modal').classList.add('hidden');
+}
+
+function absPopulateGrades() {
+    const grades = [...new Set(APP_DATA.students.filter(s => s['المرحلة'] === currentStage).map(s => s['الصف']))];
+    const select = document.getElementById('abs-add-grade');
+    select.innerHTML = '<option value="">اختر الصف</option>';
+    grades.forEach(g => select.add(new Option(g, g)));
+}
+
+function absPopulateClasses() {
+    const grade = document.getElementById('abs-add-grade').value;
+    const classSelect = document.getElementById('abs-add-class');
+    classSelect.innerHTML = '<option value="">اختر الفصل</option>';
+    classSelect.disabled = !grade;
+    
+    if (grade) {
+        const classes = [...new Set(APP_DATA.students.filter(s => s['المرحلة'] === currentStage && s['الصف'] === grade).map(s => s['الفصل']))];
+        classes.forEach(c => classSelect.add(new Option(c, c)));
+    }
+    document.getElementById('abs-add-students').innerHTML = '<p class="text-gray-400 text-sm">اختر الفصل</p>';
+}
+
+function absPopulateStudents() {
+    const grade = document.getElementById('abs-add-grade').value;
+    const cls = document.getElementById('abs-add-class').value;
+    const container = document.getElementById('abs-add-students');
+    
+    if (!grade || !cls) {
+        container.innerHTML = '<p class="text-gray-400 text-sm">اختر الصف والفصل</p>';
+        return;
+    }
+    
+    const students = APP_DATA.students.filter(s => s['المرحلة'] === currentStage && s['الصف'] === grade && String(s['الفصل']) === cls);
+    
+    let html = '<div class="space-y-2">';
+    students.forEach(s => {
+        html += `
+            <label class="flex items-center gap-2 p-2 hover:bg-gray-100 rounded cursor-pointer">
+                <input type="checkbox" class="abs-student-cb w-4 h-4 rounded border-gray-300 text-orange-600"
+                    data-id="${escapeHtml(s['رقم الطالب'])}" data-name="${escapeHtml(s['اسم الطالب'])}" data-grade="${escapeHtml(s['الصف'])}" data-class="${escapeHtml(s['الفصل'])}" data-phone="${escapeHtml(s['رقم_الجوال'] || '')}">
+                <span class="text-sm">${escapeHtml(s['اسم الطالب'])}</span>
+            </label>
+        `;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function saveAbsenceRecord() {
+    const selected = document.querySelectorAll('.abs-student-cb:checked');
+    if (selected.length === 0) {
+        showEnhancedToast('warning', 'يرجى اختيار طالب واحد على الأقل');
+        return;
+    }
+    
+    const absenceType = document.getElementById('abs-add-type').value;
+    const students = [];
+    
+    selected.forEach(cb => {
+        students.push({
+            id: cb.dataset.id,
+            name: cb.dataset.name,
+            grade: cb.dataset.grade,
+            class: cb.dataset.class,
+            phone: cb.dataset.phone
+        });
+    });
+    
+    closeAbsenceAddModal();
+    showEnhancedToast('info', 'جاري الحفظ...');
+    
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                    showEnhancedToast('success', result.message || 'تم الحفظ بنجاح');
+                    loadAbsenceTodayRecords();
+                } else {
+                    showEnhancedToast('error', result.error || 'فشل الحفظ');
+                }
+            })
+            .saveDailyAbsenceRecord({
+                stage: currentStage,
+                students: students,
+                absenceType: absenceType,
+                recorder: 'يدوي'
+            });
+    } else {
+        showEnhancedToast('success', 'تم حفظ ' + selected.length + ' سجل (وضع تجريبي)');
+    }
+}
+
+// =================================================================
+// ★★★ استيراد غياب المنصة من Excel (مؤقت) — لإزالته: احذف هذه الدالة + الزر ★★★
+// =================================================================
+function handlePlatformExcelImport(input) {
+    if (!input.files || !input.files[0]) return;
+    window._platformImportMode = true;
+    handleExcelImport(input);
+}
+// ★★★ نهاية كتلة غياب المنصة ★★★
+
+function executePrint() {
+    document.getElementById('print-modal').classList.add('hidden');
+    var printType = document.getElementById('print-type') ? document.getElementById('print-type').value : 'class_report';
+    var filterClass = document.getElementById('print-filter-class') ? document.getElementById('print-filter-class').value : '';
+    var records = allAbsenceData || [];
+    if (filterClass) {
+        records = records.filter(function(r) {
+            return (r.grade + ' / ' + r.class) === filterClass || (r.grade + '/' + r.class) === filterClass;
+        });
+    }
+    if (records.length === 0) { showEnhancedToast('warning', 'لا توجد بيانات'); return; }
+    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var stageName = getStageName_(currentStage);
+    
+    if (printType === 'discipline_report') {
+        // كشف المتميزين بالانضباط (صفر غياب)
+        var disciplined = records.filter(function(r) { return (r.unexcused || 0) === 0 && (r.excused || 0) === 0; });
+        if (disciplined.length === 0) { showEnhancedToast('warning', 'لا يوجد طلاب بصفر غياب'); return; }
+        var rows = '';
+        disciplined.forEach(function(rec, i) {
+            rows += '<tr>'
+                + '<td class="data-cell">' + toArShared_(i+1) + '</td>'
+                + '<td class="name-cell">' + escapeHtml(rec.name || '') + '</td>'
+                + '<td class="data-cell">' + formatClassShared_(rec.grade || '', rec.class || '') + '</td>'
+                + '</tr>';
+        });
+        var win = window.open('', '_blank');
+        win.document.write(buildSharedPrintPage_({
+            title: 'كشف المتميزين بالانضباط',
+            subtitle: stageName + (filterClass ? ' - ' + filterClass : ''),
+            dateText: hijri,
+            colCount: 3,
+            headers: '<th class="col-header" style="width:8%">م</th><th class="col-header" style="width:55%">اسم الطالب</th><th class="col-header" style="width:20%">الصف</th>',
+            rows: rows,
+            total: toArShared_(disciplined.length) + ' طالب'
+        }));
+        win.document.close(); setTimeout(function(){ win.print(); }, 300);
+    } else {
+        // كشف متابعة غياب
+        records.sort(function(a, b) {
+            var gA = a.grade || '', gB = b.grade || '';
+            if (gA !== gB) return gA.localeCompare(gB, 'ar');
+            var cA = String(a.class || ''), cB = String(b.class || '');
+            if (cA !== cB) return cA.localeCompare(cB, 'ar');
+            return (a.name || '').localeCompare(b.name || '', 'ar');
+        });
+        var rows = '', lastKey = '';
+        records.forEach(function(rec, i) {
+            var key = (rec.grade || '') + (rec.class || '');
+            if (key !== lastKey && i > 0) rows += '<tr class="sep-row"><td colspan="7"></td></tr>';
+            lastKey = key;
+            var total = (rec.unexcused || 0) + (rec.excused || 0);
+            rows += '<tr>'
+                + '<td class="data-cell">' + toArShared_(i+1) + '</td>'
+                + '<td class="name-cell">' + escapeHtml(rec.name || '') + '</td>'
+                + '<td class="data-cell">' + formatClassShared_(rec.grade || '', rec.class || '') + '</td>'
+                + '<td class="data-cell">' + toArShared_(rec.unexcused || 0) + '</td>'
+                + '<td class="data-cell">' + toArShared_(rec.excused || 0) + '</td>'
+                + '<td class="data-cell" style="font-weight:bold">' + toArShared_(total) + '</td>'
+                + '<td class="data-cell">' + toArShared_(rec.sentCount || 0) + '</td>'
+                + '</tr>';
+        });
+        var win = window.open('', '_blank');
+        win.document.write(buildSharedPrintPage_({
+            title: 'كشف متابعة الغياب',
+            subtitle: stageName + (filterClass ? ' - ' + filterClass : ''),
+            dateText: hijri + ' | عدد الطلاب: ' + toArShared_(records.length),
+            colCount: 7,
+            headers: '<th class="col-header" style="width:5%">م</th><th class="col-header" style="width:26%">اسم الطالب</th><th class="col-header" style="width:10%">الصف</th><th class="col-header">بدون عذر</th><th class="col-header">بعذر</th><th class="col-header">الإجمالي</th><th class="col-header">الرسائل</th>',
+            rows: rows,
+            total: toArShared_(records.length) + ' طالب'
+        }));
+        win.document.close(); setTimeout(function(){ win.print(); }, 300);
+    }
+}
+
+// الدوال المطلوبة لتبويب المعتمد
+function loadAbsenceData() {
+    const container = document.getElementById('absence-container');
+    if (container) container.innerHTML = '<div class="text-center py-16"><div class="loading-bar mx-auto"><div class="loading-bar-progress"></div></div><p class="text-gray-500 mt-4">جاري تحميل البيانات...</p></div>';
+    
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                allAbsenceData = (result && result.success) ? (result.records || []) : [];
+                populateAbsenceFilters();
+                filterAbsence();
+            })
+            .withFailureHandler(function(err) {
+                console.error('خطأ:', err);
+                allAbsenceData = [];
+                const c = document.getElementById('absence-container');
+                if (c) c.innerHTML = '<div class="text-center py-16"><span class="material-symbols-outlined text-red-300 text-6xl">error</span><p class="text-red-500 mt-2">حدث خطأ في تحميل البيانات</p><button onclick="loadAbsenceData()" class="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">إعادة المحاولة</button></div>';
+            })
+            .getAbsenceDashboardData(currentStage);
+    } else {
+        allAbsenceData = [];
+        filterAbsence();
+    }
+}
+
+function populateAbsenceFilters() {
+    const grades = [...new Set(allAbsenceData.map(r => r.grade).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'ar'));
+    const classes = [...new Set(allAbsenceData.map(r => r.class).filter(Boolean))].sort((a,b) => String(a).localeCompare(String(b), 'ar'));
+    const gradeSelect = document.getElementById('abs-grade-filter');
+    const classSelect = document.getElementById('abs-class-filter');
+    if (gradeSelect) gradeSelect.innerHTML = '<option value="">كل الصفوف</option>' + grades.map(g => '<option value="'+escapeHtml(g)+'">'+escapeHtml(g)+'</option>').join('');
+    if (classSelect) classSelect.innerHTML = '<option value="">كل الفصول</option>' + classes.map(c => '<option value="'+escapeHtml(c)+'">'+escapeHtml(c)+'</option>').join('');
+}
+
+function setFilter(filter) {
+    currentFilter = filter;
+    document.querySelectorAll('.abs-filter-btn').forEach(btn => btn.classList.remove('active', 'ring-2', 'ring-offset-1', 'ring-indigo-400'));
+    document.getElementById('btn-filter-' + filter)?.classList.add('active', 'ring-2', 'ring-offset-1', 'ring-indigo-400');
+    filterAbsence();
+}
+
+function filterAbsence() {
+    const search = (document.getElementById('abs-search')?.value || '').trim();
+    const grade = document.getElementById('abs-grade-filter')?.value || '';
+    const cls = document.getElementById('abs-class-filter')?.value || '';
+    
+    let filtered = allAbsenceData.filter(r => {
+        if (search && !(r.name || '').includes(search)) return false;
+        if (grade && r.grade !== grade) return false;
+        if (cls && String(r.class) !== cls) return false;
+        const u = (r.unexcused || 0), e = (r.excused || 0);
+        switch(currentFilter) {
+            case 'zero': return u === 0 && e === 0;
+            case 'warning': return u >= 3 && u <= 4;
+            case 'danger': return u >= 5 && u <= 9;
+            case 'critical': return u >= 10;
+            case 'mo_ref': return e >= 3 && e <= 4;
+            case 'mo_com': return e >= 5 && e <= 9;
+            case 'mo_risk': return e >= 10;
+            default: return true;
+        }
+    });
+    filtered.sort((a, b) => {
+        if (currentSort === 'alpha') return (a.name || '').localeCompare(b.name || '', 'ar');
+        const tA = (a.unexcused || 0) + (a.excused || 0), tB = (b.unexcused || 0) + (b.excused || 0);
+        return currentSort === 'asc' ? tA - tB : tB - tA;
+    });
+    displayAbsenceApproved(filtered);
+}
+
+function displayAbsenceApproved(records) {
+    const container = document.getElementById('absence-container');
+    if (!container) return;
+    if (!records || records.length === 0) {
+        container.innerHTML = '<div class="text-center py-16 bg-white rounded-xl border border-gray-200"><span class="material-symbols-outlined text-gray-300 text-6xl">event_available</span><p class="text-gray-500 mt-4 text-lg">لا توجد سجلات غياب مطابقة</p></div>';
+        hideBulkBar();
+        return;
+    }
+    if (currentView === 'table') displayAbsenceTable(records);
+    else displayAbsenceCards(records);
+}
+
+// =================================================================
+// عرض البطاقات - بنمط النظام القديم مع نسبة المواظبة + أزرار الإجراءات
+// =================================================================
+function displayAbsenceCards(records) {
+    const container = document.getElementById('absence-container');
+    let html = '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">';
+    
+    records.forEach(r => {
+        const u = r.unexcused || 0, e = r.excused || 0, l = r.late || 0;
+        const totalDays = u + e;
+        const attendance = Math.max(0, Math.round(((SCHOOL_DAYS - totalDays) / SCHOOL_DAYS) * 100));
+        
+        // لون الحدود وبادج الحالة
+        let border = 'border-gray-200', badge = '', badgeColor = 'gray';
+        if (u >= 10) { border = 'border-red-400'; badge = 'حماية (10)'; badgeColor = 'red'; }
+        else if (u >= 5) { border = 'border-orange-400'; badge = 'لجنة (5)'; badgeColor = 'orange'; }
+        else if (u >= 3) { border = 'border-yellow-400'; badge = 'إنذار'; badgeColor = 'yellow'; }
+        
+        // أزرار الإجراءات حسب مستوى الغياب
+        let actions = '';
+        if (u >= 3 || e >= 3) {
+            actions += `<button onclick="printAbsReferral('${escapeHtml(r.id)}','${escapeHtml((r.name||'').replace(/'/g,"\\'"))}','${escapeHtml(r.grade||'')}','${escapeHtml(r.class||'')}',${u},${e})" class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 text-[11px] font-bold border border-blue-200"><span class="material-symbols-outlined text-[14px]">forward_to_inbox</span> تحويل للموجه</button>`;
+            if (u >= 3) {
+                actions += `<button onclick="printAbsRecord('${escapeHtml(r.id)}','${escapeHtml((r.name||'').replace(/'/g,"\\'"))}','${escapeHtml(r.grade||'')}','${escapeHtml(r.class||'')}',${u},${e})" class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-[11px] font-bold border border-gray-200"><span class="material-symbols-outlined text-[14px]">description</span> سجل بدون عذر</button>`;
+            }
+            if (e >= 3) {
+                actions += `<button onclick="printAbsRecordExcused('${escapeHtml(r.id)}','${escapeHtml((r.name||'').replace(/'/g,"\\'"))}','${escapeHtml(r.grade||'')}','${escapeHtml(r.class||'')}',${u},${e})" class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 text-[11px] font-bold border border-teal-200"><span class="material-symbols-outlined text-[14px]">description</span> سجل بعذر</button>`;
+            }
+        }
+        if (u >= 3) {
+            actions += `<button onclick="printAbsCommitment('${escapeHtml(r.id)}','${escapeHtml((r.name||'').replace(/'/g,"\\'"))}','${escapeHtml(r.grade||'')}','${escapeHtml(r.class||'')}',${u},${e})" class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 text-[11px] font-bold border border-emerald-200"><span class="material-symbols-outlined text-[14px]">verified</span> نموذج عذر</button>`;
+        }
+        if (u >= 5) {
+            actions += `<button onclick="printAbsCommittee('${escapeHtml(r.id)}','${escapeHtml((r.name||'').replace(/'/g,"\\'"))}','${escapeHtml(r.grade||'')}','${escapeHtml(r.class||'')}',${u},${e})" class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 text-[11px] font-bold border border-purple-200"><span class="material-symbols-outlined text-[14px]">groups</span> لجنة توجيه</button>`;
+        }
+        
+        html += `
+            <div class="bg-white rounded-xl border-2 ${border} p-4 hover:shadow-md transition-all relative">
+                <!-- نسبة المواظبة -->
+                <div class="absolute top-3 left-3 flex items-center gap-1">
+                    <span class="text-[22px] font-black ${attendance >= 95 ? 'text-emerald-600' : attendance >= 90 ? 'text-yellow-600' : 'text-red-600'}">%${attendance}</span>
+                </div>
+                ${badge ? `<span class="absolute top-3 right-3 text-[10px] font-bold text-${badgeColor}-800 bg-${badgeColor}-100 px-2 py-0.5 rounded-full border border-${badgeColor}-300">${badge}</span>` : ''}
+                
+                <div class="mt-8 mb-3">
+                    <h3 class="font-bold text-gray-800 text-sm leading-tight">${escapeHtml(r.name || '-')}</h3>
+                    <p class="text-xs text-gray-500 mt-0.5">${escapeHtml(r.grade || '')}/${escapeHtml(r.class || '')}</p>
+                </div>
+                
+                <div class="grid grid-cols-3 gap-2 text-center mb-3">
+                    <div class="rounded-lg py-1.5"><p class="text-lg font-black text-red-600">${u}</p><p class="text-[9px] text-gray-500">بدون عذر</p></div>
+                    <div class="rounded-lg py-1.5"><p class="text-lg font-black text-blue-600">${e}</p><p class="text-[9px] text-gray-500">بعذر</p></div>
+                    <div class="rounded-lg py-1.5"><p class="text-lg font-black text-amber-600">${l}</p><p class="text-[9px] text-gray-500">تأخر</p></div>
+                </div>
+                
+                ${actions ? `<div class="flex gap-1.5 flex-wrap">${actions}</div>` : ''}
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+// =================================================================
+// عرض الجدول - مع checkboxes وتحديد الكل (بنمط القديم)
+// =================================================================
+function displayAbsenceTable(records) {
+    const container = document.getElementById('absence-container');
+    let html = `
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 sticky top-0">
+                    <tr>
+                        <th class="px-2 py-2.5 w-8"><input type="checkbox" id="abs-select-all" onchange="toggleAbsSelectAll(this)" class="w-4 h-4 rounded border-gray-300 text-orange-600"></th>
+                        <th class="px-2 py-2.5 text-right font-bold text-gray-700">الطالب</th>
+                        <th class="px-2 py-2.5 text-right font-bold text-gray-700">الصف</th>
+                        <th class="px-2 py-2.5 text-center font-bold text-red-600 w-16">بدون عذر</th>
+                        <th class="px-2 py-2.5 text-center font-bold text-blue-600 w-16">بعذر</th>
+                        <th class="px-2 py-2.5 text-center font-bold text-gray-600 w-16">المواظبة</th>
+                        <th class="px-2 py-2.5 text-center font-bold text-gray-700 w-20">إجراء</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    records.forEach((r, idx) => {
+        const u = r.unexcused || 0, e = r.excused || 0, l = r.late || 0;
+        const totalDays = u + e;
+        const attendance = Math.max(0, Math.round(((SCHOOL_DAYS - totalDays) / SCHOOL_DAYS) * 100));
+        
+        let actionText = '', actionClass = 'text-gray-400';
+        if (u >= 10) { actionText = 'حماية'; actionClass = 'text-red-600 font-bold'; }
+        else if (u >= 5) { actionText = 'لجنة'; actionClass = 'text-orange-600 font-bold'; }
+        else if (u >= 3) { actionText = 'تعهد'; actionClass = 'text-yellow-700 font-bold'; }
+        else { actionText = '-'; }
+        
+        const dataAttrs = `data-id="${escapeHtml(r.id)}" data-name="${escapeHtml(r.name||'')}" data-grade="${escapeHtml(r.grade||'')}" data-class="${escapeHtml(r.class||'')}" data-unexcused="${u}" data-excused="${e}"`;
+
+        html += `
+            <tr class="border-b border-gray-100 hover:bg-gray-50">
+                <td class="px-2 py-2"><input type="checkbox" class="abs-row-cb w-4 h-4 rounded border-gray-300 text-orange-600" ${dataAttrs} onchange="updateAbsSelection()"></td>
+                <td class="px-2 py-2 font-bold text-gray-800 text-xs">${escapeHtml(r.name || '-')}</td>
+                <td class="px-2 py-2 text-gray-600 text-xs">${escapeHtml(r.grade || '')} / ${escapeHtml(r.class || '')}</td>
+                <td class="px-2 py-2 text-center font-bold ${u > 0 ? 'text-red-600' : 'text-gray-300'}">${u}</td>
+                <td class="px-2 py-2 text-center font-bold ${e > 0 ? 'text-blue-600' : 'text-gray-300'}">${e}</td>
+                <td class="px-2 py-2 text-center font-bold ${attendance >= 95 ? 'text-emerald-600' : attendance >= 90 ? 'text-yellow-600' : 'text-red-600'} text-xs">%${attendance}</td>
+                <td class="px-2 py-2 text-center ${actionClass} text-xs">${actionText}</td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+
+// =================================================================
+// إدارة التحديد الجماعي
+// =================================================================
+function toggleAbsSelectAll(master) {
+    document.querySelectorAll('.abs-row-cb').forEach(cb => cb.checked = master.checked);
+    updateAbsSelection();
+}
+
+function updateAbsSelection() {
+    const checked = document.querySelectorAll('.abs-row-cb:checked');
+    const count = checked.length;
+    const bar = document.getElementById('abs-bulk-bar');
+    const counter = document.getElementById('abs-selected-count');
+    
+    if (count > 0) {
+        bar?.classList.remove('hidden');
+        if (counter) counter.textContent = count;
+    } else {
+        hideBulkBar();
+    }
+}
+
+function hideBulkBar() {
+    document.getElementById('abs-bulk-bar')?.classList.add('hidden');
+}
+
+function clearAbsSelection() {
+    document.querySelectorAll('.abs-row-cb').forEach(cb => cb.checked = false);
+    const selectAll = document.getElementById('abs-select-all');
+    if (selectAll) selectAll.checked = false;
+    hideBulkBar();
+}
+
+function getSelectedAbsStudents() {
+    const checked = document.querySelectorAll('.abs-row-cb:checked');
+    return Array.from(checked).map(cb => ({
+        id: cb.dataset.id,
+        name: cb.dataset.name,
+        grade: cb.dataset.grade,
+        class: cb.dataset.class,
+        unexcused: parseInt(cb.dataset.unexcused) || 0,
+        excused: parseInt(cb.dataset.excused) || 0
+    }));
+}
+
+// =================================================================
+// دوال الطباعة الفردية (من البطاقات)
+// =================================================================
+function absPrint(formId, data) {
+    if (!data.managerName && APP_DATA && APP_DATA.settings) {
+        data.managerName = APP_DATA.settings.manager;
+        data.committeeMembers = APP_DATA.settings.committee;
+    }
+    printFormDirectly(formId, encodeURIComponent(JSON.stringify(data)));
+}
+
+function printAbsReferral(id, name, grade, cls, unexcused, excused) {
+    absPrint('ehalat_absence', {
+        studentName: name,
+        grade: grade + ' / ' + cls,
+        unexcusedDays: unexcused,
+        excusedDays: excused
+    });
+}
+
+function printAbsCommitment(id, name, grade, cls, unexcused, excused) {
+    absPrint('tahood_hodoor', {
+        studentName: name,
+        grade: grade + ' / ' + cls,
+        unexcusedDays: unexcused,
+        excusedDays: excused
+    });
+}
+
+function printAbsRecord(id, name, grade, cls, unexcused, excused) {
+    absPrint('ghiab_bidon_ozr', {
+        studentName: name,
+        grade: grade + ' / ' + cls,
+        unexcusedDays: unexcused,
+        excusedDays: excused,
+        deputyName: (APP_DATA.settings && APP_DATA.settings.deputies && APP_DATA.settings.deputies.length > 0) ? APP_DATA.settings.deputies[0].name : ''
+    });
+}
+
+// ===== نموذج 13: سجل غياب بعذر =====
+function printAbsRecordExcused(id, name, grade, cls, unexcused, excused) {
+    absPrint('ghiab_ozr', {
+        studentName: name,
+        grade: grade + ' / ' + cls,
+        unexcusedDays: unexcused,
+        excusedDays: excused,
+        deputyName: (APP_DATA.settings && APP_DATA.settings.deputies && APP_DATA.settings.deputies.length > 0) ? APP_DATA.settings.deputies[0].name : ''
+    });
+}
+
+function printAbsCommittee(id, name, grade, cls, unexcused, excused) {
+    absPrint('mahdar_lajnah_absence', {
+        studentName: name,
+        grade: grade + ' / ' + cls,
+        violationDay: new Date().toLocaleDateString('ar-SA', {weekday: 'long'}),
+        violationDate: new Date().toLocaleDateString('ar-SA-u-ca-islamic'),
+        unexcusedDays: unexcused,
+        excusedDays: excused
+    });
+}
+
+// =================================================================
+// دوال الطباعة الجماعية (من شريط الإجراءات السفلي)
+// =================================================================
+function printGroupCommitment() {
+    const students = getSelectedAbsStudents();
+    if (students.length === 0) { showEnhancedToast('warning', 'يرجى تحديد طلاب أولاً'); return; }
+    const formDate = document.getElementById('abs-form-date')?.value;
+    absPrint('group_tahood', {
+        violationDate: formDate || undefined,
+        deputyName: '',
+        studentsList: students.map(s => ({ name: s.name, grade: s.grade + '/' + s.class, unexcused: s.unexcused, excused: s.excused }))
+    });
+}
+
+function printGroupReferral() {
+    const students = getSelectedAbsStudents();
+    if (students.length === 0) { showEnhancedToast('warning', 'يرجى تحديد طلاب أولاً'); return; }
+    const formDate = document.getElementById('abs-form-date')?.value;
+    absPrint('group_ehala', {
+        violationDate: formDate || undefined,
+        deputyName: '',
+        studentsList: students.map(s => ({ name: s.name, grade: s.grade + '/' + s.class, unexcused: s.unexcused, excused: s.excused }))
+    });
+}
+
+function printIndividualCommitment() {
+    const students = getSelectedAbsStudents();
+    if (students.length === 0) { showEnhancedToast('warning', 'يرجى تحديد طلاب أولاً'); return; }
+    const s = students[0];
+    absPrint('tahood_hodoor', {
+        studentName: s.name,
+        grade: s.grade + ' / ' + s.class,
+        unexcusedDays: s.unexcused,
+        excusedDays: s.excused
+    });
+}
+
+function printIndividualReferral() {
+    const students = getSelectedAbsStudents();
+    if (students.length === 0) { showEnhancedToast('warning', 'يرجى تحديد طلاب أولاً'); return; }
+    const s = students[0];
+    absPrint('ehalat_absence', {
+        studentName: s.name,
+        grade: s.grade + ' / ' + s.class,
+        unexcusedDays: s.unexcused,
+        excusedDays: s.excused
+    });
+}
+
+function importNoorFile() {
+    showEnhancedToast('info', 'جاري فتح نافذة استيراد ملف نور...');
+}
+
+// =================================================================
+// طباعة نموذج من الغياب اليومي
+// =================================================================
+function printAbsTodayDoc(formId, idx) {
+    const rec = absenceTodayRecords[idx];
+    if (!rec) return;
+    const today = new Date();
+    const printData = {
+        studentName: getF_(rec, 'اسم_الطالب') || '',
+        grade: (getF_(rec, 'الصف') || '') + ' / ' + (getF_(rec, 'الفصل') || ''),
+        violationDate: today.toLocaleDateString('ar-SA-u-ca-islamic'),
+        violationDay: today.toLocaleDateString('ar-SA', {weekday: 'long'}),
+        unexcusedDays: 1,
+        excusedDays: 0,
+        contactType: 'غياب',
+        contactReason: 'غياب عن الحضور',
+        contactResult: 'تم التواصل بنجاح'
+    };
+    if (APP_DATA && APP_DATA.settings) {
+        if (APP_DATA.settings.manager) printData.managerName = APP_DATA.settings.manager;
+        if (APP_DATA.settings.committee) printData.committeeMembers = APP_DATA.settings.committee;
+    }
+    printFormDirectly(formId, encodeURIComponent(JSON.stringify(printData)));
+}
+
+function changeSort(sort) {
+    currentSort = sort;
+    filterAbsence();
+}
+
+function toggleView(view) {
+    currentView = view;
+    document.getElementById('view-cards')?.classList.toggle('text-indigo-600', view === 'cards');
+    document.getElementById('view-cards')?.classList.toggle('bg-white', view === 'cards');
+    document.getElementById('view-cards')?.classList.toggle('text-gray-400', view !== 'cards');
+    document.getElementById('view-table')?.classList.toggle('text-indigo-600', view === 'table');
+    document.getElementById('view-table')?.classList.toggle('bg-white', view === 'table');
+    document.getElementById('view-table')?.classList.toggle('text-gray-400', view !== 'table');
+    filterAbsence();
+}
+
+// تقرير التواصل الجماعي للغياب
+function printAbsContactReport() {
+    var records = absenceStudentData || [];
+    var sent = records.filter(function(r) { return (r.sentCount || 0) > 0; });
+    if (sent.length === 0) { showEnhancedToast('warning', 'لا يوجد سجلات تم إرسالها'); return; }
+    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var rows = '';
+    sent.forEach(function(rec, i) {
+        var total = (rec.unexcused || 0) + (rec.excused || 0);
+        rows += '<tr>'
+            + '<td class="data-cell">' + toArShared_(i+1) + '</td>'
+            + '<td class="name-cell">' + escapeHtml(rec.name || '') + '</td>'
+            + '<td class="data-cell">' + escapeHtml(formatClassShared_(rec.grade || '', rec.class || '')) + '</td>'
+            + '<td class="data-cell">' + toArShared_(total) + '</td>'
+            + '<td class="data-cell">' + toArShared_(rec.unexcused || 0) + '</td>'
+            + '<td class="data-cell">' + toArShared_(rec.excused || 0) + '</td>'
+            + '<td class="data-cell">' + toArShared_(rec.sentCount || 0) + '</td>'
+            + '<td class="data-cell" style="color:green;font-weight:bold">تم</td>'
+            + '</tr>';
+    });
+    var win = window.open('', '_blank');
+    win.document.write(buildSharedPrintPage_({
+        title: 'تقرير التواصل مع أولياء الأمور',
+        subtitle: 'الغياب - ' + currentStage,
+        dateText: hijri + ' | عدد الطلاب: ' + toArShared_(sent.length),
+        colCount: 8,
+        headers: '<th class="col-header">م</th><th class="col-header" style="width:24%">اسم الطالب</th><th class="col-header">الصف</th><th class="col-header">إجمالي</th><th class="col-header">بدون عذر</th><th class="col-header">بعذر</th><th class="col-header">الرسائل</th><th class="col-header">التواصل</th>',
+        rows: rows,
+        total: toArShared_(sent.length) + ' طالب'
+    }));
+    win.document.close(); setTimeout(function(){ win.focus(); win.print(); }, 300);
+}
+
+
+// =================================================================
+// ★ sortRecordsByClass_ معرّفة في JS_Core.html
+
+// =================================================================
+// ★ إرسال فردي لطالب غائب عبر واتساب
+// =================================================================
+function sendSingleAbsence(idx) {
+    var rec = absenceTodayRecords[idx];
+    if (!rec) return;
+    var phone = getStudentPhone(rec);
+    if (!phone) { showEnhancedToast('warning', 'لا يوجد رقم جوال لهذا الطالب'); return; }
+    var today = new Date();
+    var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var studentName = getF_(rec, 'اسم_الطالب') || '';
+    var grade = getF_(rec, 'الصف') || '';
+    var cls = getF_(rec, 'الفصل') || '';
+    var studentId = getF_(rec, 'رقم_الطالب') || getF_(rec, 'رقم_الهوية') || '';
+
+    // ★ جلب رابط ولي الأمر من السيرفر ثم فتح محرر الرسالة
+    showEnhancedToast('info', 'جاري تجهيز الرسالة...');
+    var buildAndShow = function(parentLink) {
+        var defaultMsg = '📋 *إشعار غياب*\n\nالسلام عليكم ورحمة الله وبركاته\nولي أمر الطالب: *' + studentName + '*\n\nنفيدكم بأن ابنكم *' + studentName + '* غائب اليوم\n📅 ' + dayName + ' - ' + hijri + '\nالصف: ' + grade + ' - الفصل: ' + cls;
+        if (parentLink) {
+            defaultMsg += '\n\n📝 لكتابة العذر:\n' + parentLink + '\n(صالح لمدة ٢٤ ساعة)';
+        }
+        defaultMsg += '\n\nمع تحيات إدارة مدرسة ' + (APP_DATA.settings.school_name || 'المدرسة');
+        showMessageEditor_({
+            phone: phone, studentName: studentName, type: 'غياب',
+            defaultMessage: defaultMsg,
+            data: { 'اسم_الطالب': studentName, 'الصف': grade, 'الفصل': cls, 'اليوم': dayName, 'التاريخ': hijri, 'رابط_العذر': parentLink || '' },
+            appendText: parentLink ? '\n\n📝 لكتابة العذر:\n' + parentLink + '\n(صالح لمدة ٢٤ ساعة)' : '',
+            onSend: function(editedMsg) {
+                showEnhancedToast('info', 'جاري الإرسال...');
+                google.script.run.withSuccessHandler(function(r) {
+                    if (r && r.success) {
+                        showEnhancedToast('success', 'تم الإرسال ✓');
+                        google.script.run.updateAbsenceSentStatus(currentStage, [rec.rowIndex]);
+                        loadAbsenceTodayRecords();
+                    }
+                    else showEnhancedToast('danger', r.error || 'فشل');
+                }).withFailureHandler(function(e) { showEnhancedToast('danger', e.message); })
+                .sendWhatsAppWithLog({ phone: phone, message: editedMsg, studentName: studentName, studentId: studentId, grade: grade, 'class': cls, messageType: 'غياب', messageTitle: 'إشعار غياب' }, currentStage);
+            }
+        });
+    };
+
+    // ★ جلب رابط عذر ولي الأمر - مع تشخيص في حال فشل
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(function(r) {
+            if (!r || !r.success || !r.link) {
+                showEnhancedToast('warning', 'الرابط لم يُولّد: ' + (r && r.error ? r.error : 'الرابط فارغ'));
+            }
+            buildAndShow((r && r.success && r.link) ? r.link : '');
+        }).withFailureHandler(function(err) {
+            showEnhancedToast('danger', 'فشل توليد الرابط: ' + err.message);
+            buildAndShow('');
+        }).getParentExcuseLinkForStudent(studentId, currentStage);
+    } else {
+        buildAndShow('');
+    }
+}
+
+
+</script>

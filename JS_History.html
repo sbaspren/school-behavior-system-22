@@ -1,0 +1,490 @@
+<script>
+    // =================================================================
+    // 1. رسم الصفحة (Rendering)
+    // =================================================================
+    
+    // متغير لتتبع حالة العرض (بطاقات أو جدول)
+    let historyViewMode = 'cards'; // 'cards' أو 'table'
+    
+    function renderHistoryPage() {
+        // إعادة تعيين حالة العرض للبطاقات عند فتح الصفحة
+        historyViewMode = 'cards';
+        
+        const main = document.getElementById('main-content');
+        main.innerHTML = `
+            <div class="max-w-full">
+                <div class="flex justify-between items-center mb-5">
+                    <h2 class="text-xl font-extrabold text-gray-900">سجل السلوك والمخالفات</h2>
+                    <p class="text-sm text-gray-400 font-medium">المرحلة: <span class="text-indigo-600 font-bold">${currentStage}</span></p>
+                </div>
+                
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-5">
+                    <div class="grid grid-cols-1 md:grid-cols-6 gap-3 mb-4">
+                        <select id="filter-grade" onchange="handleHistoryGradeChange()" class="border-gray-300 rounded-lg text-sm h-10 w-full"><option value="">كل الصفوف</option></select>
+                        <select id="filter-class" onchange="handleHistoryClassChange()" class="border-gray-300 rounded-lg text-sm h-10 w-full" disabled><option value="">كل الفصول</option></select>
+                        <div class="md:col-span-2">
+                            <select id="filter-student" onchange="filterHistory()" class="border-gray-300 rounded-lg text-sm h-10 w-full" disabled><option value="">اختر الصف والفصل أولاً</option></select>
+                        </div>
+                        <select id="filter-degree" onchange="filterHistory()" class="border-gray-300 rounded-lg text-sm h-10 w-full">
+                            <option value="">كل الدرجات</option>
+                            <option value="1">درجة 1</option><option value="2">درجة 2</option>
+                            <option value="3">درجة 3</option><option value="4">درجة 4</option><option value="5">درجة 5</option>
+                        </select>
+                        <button onclick="clearHistoryFilters()" class="bg-gray-100 text-gray-600 px-3 h-10 rounded-lg text-sm hover:bg-gray-200 font-bold w-full">مسح الفلاتر</button>
+                    </div>
+                    
+                    <div class="flex flex-wrap gap-3 border-t border-gray-100 pt-4">
+                        <button onclick="loadViolationsHistory()" class="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 text-sm font-medium">
+                            <span class="material-symbols-outlined">refresh</span> تحديث السجل
+                        </button>
+                        <button id="toggleViewBtn" onclick="toggleHistoryView()" class="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">
+                            <span class="material-symbols-outlined">table_rows</span> عرض الجدول
+                        </button>
+                        <button onclick="printHistoryList()" class="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 text-sm font-medium">
+                            <span class="material-symbols-outlined">print</span> طباعة القائمة
+                        </button>
+                    </div>
+                </div>
+
+                <div id="history-content" class="space-y-4">
+                    <div class="text-center py-16"><div class="loading-bar mx-auto"><div class="loading-bar-progress"></div></div><p class="text-gray-500 mt-4">جاري تحميل السجل...</p></div>
+                </div>
+            </div>
+        `;
+        
+        populateHistoryFilters();
+        loadViolationsHistory();
+    }
+
+    function loadViolationsHistory() {
+        google.script.run.withSuccessHandler(data => {
+            currentRecords = data;
+            filterHistory(); 
+        }).getCachedViolationRecords(currentStage);
+    }
+
+    // =================================================================
+    // 2. منطق الفلترة (محدث ليعمل مع البيانات الجديدة)
+    // =================================================================
+
+    function populateHistoryFilters() {
+        const grades = [...new Set(APP_DATA.students.filter(s => s['المرحلة'] === currentStage).map(s => s['الصف']))];
+        const gradeOrder = ["أول", "ثاني", "ثالث", "رابع", "خامس", "سادس"];
+        grades.sort((a, b) => {
+            const indexA = gradeOrder.findIndex(key => a.includes(key));
+            const indexB = gradeOrder.findIndex(key => b.includes(key));
+            if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+            return a.localeCompare(b, 'ar');
+        });
+
+        const select = document.getElementById('filter-grade');
+        select.innerHTML = '<option value="">كل الصفوف</option>';
+        grades.forEach(g => select.add(new Option(g, g)));
+    }
+
+    function handleHistoryGradeChange() {
+        const grade = document.getElementById('filter-grade').value;
+        const classSelect = document.getElementById('filter-class');
+        const studentSelect = document.getElementById('filter-student');
+        
+        classSelect.innerHTML = '<option value="">كل الفصول</option>';
+        studentSelect.innerHTML = '<option value="">الكل</option>';
+        classSelect.disabled = !grade;
+        studentSelect.disabled = true;
+
+        if (grade) {
+            const classes = [...new Set(APP_DATA.students
+                .filter(s => s['المرحلة'] === currentStage && s['الصف'] === grade)
+                .map(s => s['الفصل'])
+            )];
+            classes.sort((a, b) => a.toString().localeCompare(b.toString(), 'ar'));
+            classes.forEach(c => classSelect.add(new Option(c, c)));
+        }
+        filterHistory();
+    }
+
+    function handleHistoryClassChange() {
+        const grade = document.getElementById('filter-grade').value;
+        const cls = document.getElementById('filter-class').value;
+        const studentSelect = document.getElementById('filter-student');
+        
+        studentSelect.innerHTML = '<option value="">كل الطلاب</option>';
+        studentSelect.disabled = !cls;
+
+        if (grade && cls) {
+            const students = APP_DATA.students.filter(s => 
+                s['المرحلة'] === currentStage && 
+                s['الصف'] === grade && 
+                s['الفصل'] == cls 
+            );
+            students.sort((a, b) => a['اسم الطالب'].localeCompare(b['اسم الطالب'], 'ar'));
+            students.forEach(s => {
+                studentSelect.add(new Option(s['اسم الطالب'], s['رقم الطالب']));
+            });
+        }
+        filterHistory();
+    }
+
+    function filterHistory() {
+        if(!currentRecords) return;
+
+        const gradeFilter = document.getElementById('filter-grade').value;
+        const classFilter = document.getElementById('filter-class').value;
+        const studentId = document.getElementById('filter-student').value;
+        const degree = document.getElementById('filter-degree').value;
+
+        // الفلترة
+        let filtered = currentRecords.filter(r => {
+            return (!gradeFilter || r['الصف'] === gradeFilter) &&
+                   (!classFilter || r['الفصل'] == classFilter) &&
+                   (!studentId || String(r['رقم الطالب']) === String(studentId)) &&
+                   (!degree || String(r['الدرجة']) === String(degree));
+        });
+
+        // الترتيب الصارم (صف > فصل > اسم)
+        filtered.sort((a, b) => {
+            const gradeOrder = ["أول", "ثاني", "ثالث", "رابع", "خامس", "سادس"];
+            const gradeA = gradeOrder.findIndex(key => a['الصف'].includes(key));
+            const gradeB = gradeOrder.findIndex(key => b['الصف'].includes(key));
+            
+            if (gradeA !== gradeB) {
+                const idxA = gradeA === -1 ? 99 : gradeA;
+                const idxB = gradeB === -1 ? 99 : gradeB;
+                return idxA - idxB;
+            }
+            if (a['الصف'] === b['الصف']) {
+                if (a['الفصل'] !== b['الفصل']) {
+                    return a['الفصل'].localeCompare(b['الفصل'], 'ar');
+                }
+                return a['اسم الطالب'].localeCompare(b['اسم الطالب'], 'ar');
+            }
+            return 0;
+        });
+
+        displayHistoryRecords(filtered);
+    }
+
+    function clearHistoryFilters() {
+        document.getElementById('filter-grade').value = '';
+        handleHistoryGradeChange();
+        document.getElementById('filter-degree').value = '';
+        filterHistory();
+    }
+
+    // =================================================================
+    // 3. منطق العرض (تمت استعادة المنطق القديم للأزرار 100%)
+    // =================================================================
+
+    function displayHistoryRecords(records) {
+        const container = document.getElementById('history-content');
+        if(!records || records.length === 0) {
+            container.innerHTML = '<div class="text-center py-16 bg-white rounded-xl border border-gray-200 shadow-sm"><span class="material-symbols-outlined text-gray-300 text-6xl">search_off</span><p class="text-gray-500 mt-2">لا توجد مخالفات مطابقة</p></div>';
+            return;
+        }
+        
+        // استخدام المتغير لتحديد نوع العرض
+        if(historyViewMode === 'table') {
+            container.innerHTML = createHistoryTable(records);
+        } else {
+            container.innerHTML = createHistoryCards(records);
+        }
+    }
+
+    function toggleHistoryView() {
+        const btn = document.getElementById('toggleViewBtn');
+        
+        // تبديل حالة العرض
+        if(historyViewMode === 'cards') {
+            historyViewMode = 'table';
+            btn.innerHTML = '<span class="material-symbols-outlined">grid_view</span> عرض البطاقات';
+        } else {
+            historyViewMode = 'cards';
+            btn.innerHTML = '<span class="material-symbols-outlined">table_rows</span> عرض الجدول';
+        }
+        
+        // إعادة عرض البيانات
+        filterHistory();
+    }
+
+    // --- البطاقات ---
+    function createHistoryCards(records) {
+        const groups = {};
+        records.forEach(rec => {
+            if(!groups[rec['رقم الطالب']]) groups[rec['رقم الطالب']] = { info: rec, violations: [] };
+            groups[rec['رقم الطالب']].violations.push(rec);
+        });
+
+        // استخدام Set للحفاظ على الترتيب من filterHistory
+        let orderedIds = [...new Set(records.map(r => r['رقم الطالب']))];
+
+        let html = '<div class="grid gap-4">';
+        orderedIds.forEach(id => {
+            const group = groups[id];
+            const maxDegree = Math.max(...group.violations.map(v => v['الدرجة']));
+            const borderClass = maxDegree >= 4 ? 'border-l-4 border-l-red-500' : (maxDegree == 3 ? 'border-l-4 border-l-orange-500' : 'border-l-4 border-l-green-500');
+            
+            html += `
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden ${borderClass}">
+                    <div class="px-5 py-3 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                        <div>
+                            <h3 class="font-bold text-gray-800">${escapeHtml(group.info['اسم الطالب'])}</h3>
+                            <p class="text-xs text-gray-500">${escapeHtml(group.info['الصف'])} / ${escapeHtml(group.info['الفصل'])}</p>
+                        </div>
+                        <span class="bg-white px-2 py-1 rounded text-xs font-bold border border-gray-200">${group.violations.length} مخالفات</span>
+                    </div>
+                    <div class="p-4 space-y-4">
+            `;
+            group.violations.forEach(rec => {
+                let printButtons = '';
+                if(rec['الدرجة'] >= 2) printButtons += createCardPrintBtn('tahood_slooki', 'تعهد', rec, 'text-indigo-600');
+                if(rec['الدرجة'] >= 3) printButtons += createCardPrintBtn('ishar_wali_amr', 'إشعار', rec, 'text-blue-600');
+                if(rec['الدرجة'] >= 4) printButtons += createCardPrintBtn('mahdar_lajnah', 'محضر لجنة', rec, 'text-rose-700');
+
+                html += `
+                    <div class="border-b border-gray-100 last:border-0 pb-3 last:pb-0">
+                        <div class="flex justify-between items-start">
+                            <div class="w-full">
+                                <div class="flex justify-between items-center w-full">
+                                    <p class="font-medium text-sm text-gray-800">${escapeHtml(rec['نص المخالفة'])}</p>
+                                    <div class="flex items-center gap-2 mt-1 mb-2" style="flex-shrink: 0;">
+                                        <span class="text-xs text-gray-400">${toIndic(rec['التاريخ الهجري'])}</span>
+                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-degree-${rec['الدرجة']}">درجة ${toIndic(rec['الدرجة'])}</span>
+                                    </div>
+                                </div>
+                                <div class="flex gap-2 flex-wrap justify-start mt-2">
+                                    ${printButtons}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div></div>`;
+        });
+        html += '</div>';
+        return html;
+    }
+
+    function createCardPrintBtn(formId, label, record, colorClass) {
+        const printData = {
+            studentName: record['اسم الطالب'],
+            grade: record['الصف'],
+            class: record['الفصل'],
+            violationDate: record['التاريخ الهجري'],
+            violationDegree: record['الدرجة'],
+            violationText: record['نص المخالفة'],
+            procedures: record['الإجراءات'] ? record['الإجراءات'].split('\n') : []
+        };
+        const dataStr = encodeURIComponent(JSON.stringify(printData));
+        return `<button onclick="printFormDirectly('${formId}', '${dataStr}')" class="flex items-center gap-1 px-2 py-1 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 text-xs ${colorClass} transition-colors"><span class="material-symbols-outlined text-[14px]">print</span> ${label}</button>`;
+    }
+
+    // --- الجدول ---
+    function createHistoryTable(records) {
+        let html = `<div class="overflow-x-auto"><table class="min-w-full divide-y divide-gray-200 bg-white rounded-lg border border-gray-200">
+            <thead class="bg-gray-50"><tr>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">الطالب</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">الصف</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">المخالفة</th>
+                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">الدرجة</th>
+                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">التاريخ</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">الإجراءات</th>
+            </tr></thead><tbody class="divide-y divide-gray-200">`;
+        
+        records.forEach(rec => {
+            html += `<tr>
+                <td class="px-4 py-3 text-sm font-bold text-gray-900">${escapeHtml(rec['اسم الطالب'])}</td>
+                <td class="px-4 py-3 text-sm text-gray-500">${escapeHtml(rec['الصف'])} / ${escapeHtml(rec['الفصل'])}</td>
+                <td class="px-4 py-3 text-sm text-gray-900">${escapeHtml(rec['نص المخالفة'])}</td>
+                <td class="px-4 py-3 text-center"><span class="px-2 py-1 rounded text-xs font-bold bg-degree-${escapeHtml(rec['الدرجة'])}">${toIndic(rec['الدرجة'])}</span></td>
+                <td class="px-4 py-3 text-center text-sm text-gray-500">${toIndic(rec['التاريخ الهجري'])}</td>
+                <td class="px-4 py-3 text-sm text-gray-500 truncate max-w-xs" title="${escapeHtml(rec['الإجراءات'])}">${escapeHtml(rec['الإجراءات'])}</td>
+            </tr>`;
+        });
+        html += `</tbody></table></div>`;
+        return html;
+    }
+
+    // =================================================================
+    // 4. الطباعة (تمت استعادة الكود القديم حرفياً 100%)
+    // =================================================================
+
+    function formatClassName(gradeStr, classStr) {
+        let g = '';
+        if(gradeStr.includes('أول') || gradeStr.includes('اول')) g = '1';
+        else if(gradeStr.includes('ثاني')) g = '2';
+        else if(gradeStr.includes('ثالث')) g = '3';
+        
+        let stage = '';
+        if(currentStage.includes('متوسط')) stage = 'م';
+        else if(currentStage.includes('ثانوي')) stage = 'ت';
+        
+        let c = classStr.replace(/[0-9]/g, '').trim(); 
+        if(!c) c = classStr; 
+
+        return `${toIndic(g)}/${stage}/${c}`;
+    }
+
+    // === الدالة النهائية للطباعة (بالتنسيق القديم الأصلي) ===
+    function printHistoryList() {
+        const tools = {
+            toIndic: function(str) { return (str + "").replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]); },
+            normalizeName: function(name) { return name.replace(/[أإآ]/g, 'ا').trim(); },
+            getGradeWeight: function(gradeName) {
+                if (!gradeName) return 0;
+                if (gradeName.includes('أول') || gradeName.includes('اول')) return 1;
+                if (gradeName.includes('ثاني')) return 2;
+                if (gradeName.includes('ثالث')) return 3;
+                return 4;
+            }
+        };
+
+        const grade = document.getElementById('filter-grade').value;
+        const cls = document.getElementById('filter-class').value;
+        const title = `سجل السلوك والمواظبة - ${grade ? grade : 'الكل'} ${cls ? '/ '+cls : ''}`;
+        
+        // إعادة تطبيق الفلتر والترتيب
+        const studentId = document.getElementById('filter-student').value;
+        const degree = document.getElementById('filter-degree').value;
+
+        let filtered = currentRecords.filter(r => {
+            return (!grade || r['الصف'] === grade) &&
+                   (!cls || r['الفصل'] == cls) &&
+                   (!studentId || String(r['رقم الطالب']) === String(studentId)) &&
+                   (!degree || String(r['الدرجة']) === String(degree));
+        });
+
+        // الترتيب الصارم
+        filtered.sort((a, b) => {
+            const wA = tools.getGradeWeight(a['الصف']);
+            const wB = tools.getGradeWeight(b['الصف']);
+            if (wA !== wB) return wA - wB;
+            if (a['الفصل'] !== b['الفصل']) return a['الفصل'].localeCompare(b['الفصل'], 'ar');
+            return a['اسم الطالب'].localeCompare(b['اسم الطالب'], 'ar');
+        });
+
+        let rows = '';
+        let i = 0;
+        let studentCounter = 1;
+        while (i < filtered.length) {
+            const rec = filtered[i];
+            const studentName = rec['اسم الطالب'];
+            const normalizedName = tools.normalizeName(studentName);
+            const className = formatClassName(rec['الصف'], rec['الفصل']);
+            
+            let rowspan = 1;
+            for (let j = i + 1; j < filtered.length; j++) {
+                const nextName = tools.normalizeName(filtered[j]['اسم الطالب']);
+                if (nextName === normalizedName && 
+                    filtered[j]['الصف'] === rec['الصف'] && 
+                    filtered[j]['الفصل'] === rec['الفصل']) {
+                    rowspan++;
+                } else {
+                    break;
+                }
+            }
+
+            const seqNum = tools.toIndic(studentCounter);
+            const degreeNum = tools.toIndic(rec['الدرجة']);
+            const dateNum = tools.toIndic(rec['التاريخ الهجري']);
+            let proceduresFormatted = rec['الإجراءات'] ? tools.toIndic(rec['الإجراءات']).replace(/\n/g, '<br>').replace(/ - /g, '<br>- ') : '';
+            
+            rows += `<tr>
+                <td rowspan="${rowspan}" style="font-weight: bold;">${seqNum}</td>
+                <td rowspan="${rowspan}" style="text-align: right; font-weight: bold;">${escapeHtml(studentName)}</td>
+                <td rowspan="${rowspan}">${escapeHtml(className)}</td>
+                <td style="text-align: right;">${escapeHtml(rec['نص المخالفة'] || '')}</td>
+                <td>${degreeNum}</td>
+                <td style="white-space: nowrap;">${dateNum}</td>
+                <td style="text-align: right; font-size: 10pt; line-height: 1.3;">${proceduresFormatted}</td>
+            </tr>`;
+
+            for (let k = 1; k < rowspan; k++) {
+                const nextRec = filtered[i + k];
+                let nextProc = nextRec['الإجراءات'] ? tools.toIndic(nextRec['الإجراءات']).replace(/\n/g, '<br>').replace(/ - /g, '<br>- ') : '';
+                const nextDeg = tools.toIndic(nextRec['الدرجة']);
+                const nextDate = tools.toIndic(nextRec['التاريخ الهجري']);
+
+                rows += `<tr>
+                    <td style="text-align: right;">${escapeHtml(nextRec['نص المخالفة'] || '')}</td>
+                    <td>${nextDeg}</td>
+                    <td style="white-space: nowrap;">${nextDate}</td>
+                    <td style="text-align: right; font-size: 10pt; line-height: 1.3;">${nextProc}</td>
+                </tr>`;
+            }
+
+            i += rowspan;
+            studentCounter++;
+        }
+
+        const win = window.open('', '_blank');
+        const content = `
+            <!DOCTYPE html>
+            <html lang="ar" dir="rtl">
+            <head><title>سجل السلوك</title>
+            <style>
+                @page { size: A4 portrait; margin: 10mm; } 
+                body { 
+                    font-family: 'Traditional Arabic', serif;
+                    -webkit-print-color-adjust: exact; 
+                    print-color-adjust: exact; 
+                    margin: 0; padding: 0;
+                }
+                table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+                th, td { border: 1px solid #000; padding: 4px; font-size: 12pt; text-align: center; word-wrap: break-word; vertical-align: middle; }
+                th { background: #f0f0f0; font-weight: bold; font-size: 13pt; }
+                thead { display: table-header-group; }
+                tfoot { display: table-footer-group; }
+                .spacer-row td { border: none !important; height: 50px; }
+            </style>
+            </head>
+            <body>
+                <table>
+                    <colgroup>
+                        <col style="width: 5%;">  <col style="width: 18%;"> <col style="width: 7%;">  <col style="width: 25%;"> <col style="width: 5%;">  <col style="width: 12%;"> <col style="width: 28%;"> 
+                    </colgroup>
+
+                    <thead>
+                        <tr>
+                            <th colspan="7" style="border:none; padding-bottom:10px; background:none;">
+                                ${getLetterheadHtml_()}
+                                <div style="text-align:center; font-size:18pt; font-weight:bold; margin:5px 0;">${title}</div>
+                                <div style="text-align:center; font-size:12pt;">تاريخ الطباعة: ${tools.toIndic(new Date().toLocaleDateString('ar-SA-u-ca-islamic'))}</div>
+                            </th>
+                        </tr>
+                        <tr>
+                            <th>م</th>
+                            <th>اسم الطالب</th>
+                            <th>الصف</th>
+                            <th>المخالفة السلوكية</th>
+                            <th>د</th>
+                            <th>التاريخ</th>
+                            <th>الإجراءات المتخذة</th>
+                        </tr>
+                    </thead>
+                    
+                    <tbody>
+                        ${rows}
+                    </tbody>
+
+                    <tfoot>
+                        <tr class="spacer-row"><td colspan="7"></td></tr>
+                        <tr>
+                            <td colspan="7" style="border:none; text-align:left; padding-top:20px; padding-left:30px;">
+                                <div style="display:inline-block; text-align:center; font-size:14pt; font-weight:bold;">
+                                    وكيل شؤون الطلاب<br><br>
+                                    ....................................
+                                </div>
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </body>
+            </html>
+        `;
+        
+        win.document.write(content);
+        win.document.close();
+        setTimeout(() => { win.focus(); win.print(); }, 500);
+    }
+</script>

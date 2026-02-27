@@ -1,0 +1,85 @@
+<script>
+    // =================================================================
+    // محرك الطباعة المركزي
+    // =================================================================
+
+    function printFormDirectly(formId, dataEncoded) {
+        const printData = JSON.parse(decodeURIComponent(dataEncoded));
+
+        // محاولة تعبئة المدير واللجنة والوكيل والموجه إذا كانت ناقصة
+        if (APP_DATA && APP_DATA.settings) {
+            if (!printData.managerName) printData.managerName = APP_DATA.settings.manager;
+            if (!printData.committeeMembers) printData.committeeMembers = APP_DATA.settings.committee;
+            // ✅ الوكيل — أول وكيل في القائمة
+            if (!printData.deputyName && APP_DATA.settings.deputies && APP_DATA.settings.deputies.length > 0) {
+                printData.deputyName = APP_DATA.settings.deputies[0].name;
+            }
+            // ✅ الموجه الطلابي — أول موجه في القائمة
+            if (!printData.counselorName && APP_DATA.settings.counselors && APP_DATA.settings.counselors.length > 0) {
+                printData.counselorName = APP_DATA.settings.counselors[0].name;
+            }
+        }
+
+        // ★ حقن بيانات الكليشة من الإعدادات
+        printData._letterhead = getLetterheadSettingsForPrint_();
+
+        showEnhancedToast('info', 'جاري تحضير النموذج...');
+
+        google.script.run.withSuccessHandler(function (templateContent) {
+            if (!templateContent || templateContent.length < 10) {
+                showEnhancedToast('danger', 'خطأ: ملف القوالب (PrintTemplates) فارغ أو غير موجود!');
+                return;
+            }
+
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) {
+                showEnhancedToast('danger', 'تم حظر النافذة! اسمح بالنوافذ المنبثقة (Pop-ups) لهذا الموقع.');
+                return;
+            }
+
+            printWindow.document.open();
+            printWindow.document.write(templateContent);
+            printWindow.document.close();
+
+            // محاولة أولى بعد 500ms
+            setTimeout(function () {
+                if (printWindow.fillForm) {
+                    printWindow.fillForm(formId, printData);
+                } else {
+                    // محاولة ثانية بعد 1000ms
+                    setTimeout(function () {
+                        if (printWindow.fillForm) {
+                            printWindow.fillForm(formId, printData);
+                        } else {
+                            // محاولة ثالثة بعد 2000ms
+                            setTimeout(function () {
+                                if (printWindow.fillForm) {
+                                    printWindow.fillForm(formId, printData);
+                                } else {
+                                    console.error('Error: fillForm function not found after 3 attempts.');
+                                    printWindow.alert('حدث خطأ في تحميل كود النموذج. يرجى المحاولة مرة أخرى.');
+                                }
+                            }, 1000);
+                        }
+                    }, 500);
+                }
+            }, 500);
+
+        }).getPrintTemplateContent();
+    }
+
+    // ★ مساعدة لاسترجاع إعدادات الكليشة لطباعة النماذج الفردية
+    function getLetterheadSettingsForPrint_() {
+        if (typeof APP_DATA !== 'undefined' && APP_DATA.settings) {
+            return {
+                mode: APP_DATA.settings.letterhead_mode || 'image',
+                imageUrl: APP_DATA.settings.letterhead_image_url || '',
+                eduAdmin: APP_DATA.settings.edu_admin || '',
+                eduDept: APP_DATA.settings.edu_dept || '',
+                schoolName: APP_DATA.settings.school_name || '',
+                letterhead: APP_DATA.settings.letterhead || ''
+            };
+        }
+        return { mode: 'image', imageUrl: '' };
+    }
+</script>

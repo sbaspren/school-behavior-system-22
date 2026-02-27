@@ -1,0 +1,970 @@
+<script>
+// =================================================================
+// نظام الاستئذان - واجهة مستقلة (3 تبويبات)
+// =================================================================
+
+var permRecords = [];
+var permAllRecords = [];
+var permTodayRecords = [];
+var permCurrentTab = 'today';
+var permViewMode = 'cards';
+var permStudentGroups = [];
+
+var PERMISSION_REASONS = ['ظرف صحي', 'ظرف أسري', 'موعد حكومي', 'طلب ولي الأمر'];
+var PERMISSION_RECEIVERS = ['الأب', 'الأخ', 'الأم', 'الجد', 'العم', 'آخر'];
+var PERMISSION_RESPONSIBLES = ['الموجه الطلابي', 'الوكيل', 'المدير'];
+
+function permGetDayName(dateStr) {
+    if (!dateStr) return '';
+    try { var p = dateStr.split(' ')[0].split('/'); if (p.length < 3) return ''; var d = new Date(p[0], p[1]-1, p[2]); return ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'][d.getDay()] || ''; } catch(e) { return ''; }
+}
+function permGetTime(dateStr) { if (!dateStr) return '-'; try { return dateStr.split(' ')[1] || dateStr; } catch(e) { return dateStr; } }
+
+// =================================================================
+// 1. الصفحة الرئيسية
+// =================================================================
+function renderPermissionsPage() {
+    var main = document.getElementById('main-content');
+    var _hd = new Date();
+    var _hjri = _hd.toLocaleDateString('ar-SA-u-ca-islamic', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    main.innerHTML = `
+        <div class="sec-permissions">
+            <div class="page-hero">
+                <div class="hero-content">
+                    <div class="hero-info">
+                        <h1>الاستئذان — ${escapeHtml(getStageName_(currentStage))}</h1>
+                        <p>${_hjri}</p>
+                    </div>
+                    <div class="hero-stats">
+                        <div class="hero-stat"><div class="hero-stat-icon">🚪</div><div class="hero-stat-num" id="perm-today-count">٠</div><div class="hero-stat-label">مستأذنو اليوم</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon">📊</div><div class="hero-stat-num" id="perm-total-count">٠</div><div class="hero-stat-label">إجمالي الاستئذان</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon">📤</div><div class="hero-stat-num" id="perm-unsent-count">٠</div><div class="hero-stat-label">لم تُرسل</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tabs-bar">
+                <div class="tab-item active" onclick="switchPermTab('today')" id="perm-tab-today"><span class="material-symbols-outlined">today</span> اليومي</div>
+                <div class="tab-item" onclick="switchPermTab('approved')" id="perm-tab-approved"><span class="material-symbols-outlined">verified</span> المعتمد</div>
+                <div class="tab-item" onclick="switchPermTab('reports')" id="perm-tab-reports"><span class="material-symbols-outlined">bar_chart</span> التقارير</div>
+            </div>
+
+            <div id="perm-tab-content"></div>
+        </div>
+        ${getPermAddModalHTML()}
+        ${getPermSendModalHTML()}
+        <div id="perm-detail-modal" class="fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4"><div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-3xl overflow-hidden max-h-[90vh] flex flex-col"><div id="perm-detail-header" class="bg-gradient-to-r from-purple-500 to-purple-600 p-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white flex items-center gap-2"><span class="material-symbols-outlined">exit_to_app</span> <span id="perm-detail-title">تفاصيل الاستئذان</span></h3><button onclick="closePermDetailModal()" class="text-white/80 hover:text-white"><span class="material-symbols-outlined text-2xl">close</span></button></div><div id="perm-detail-body" class="p-6 overflow-y-auto flex-1"></div><div class="bg-gray-50 p-4 border-t flex justify-between"><div class="flex gap-2"><button onclick="printPermDetailDoc()" class="flex items-center gap-1 px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 text-sm"><span class="material-symbols-outlined text-[16px]">contact_phone</span> توثيق تواصل</button></div><button onclick="closePermDetailModal()" class="px-5 py-2 text-gray-600 font-bold hover:bg-gray-200 rounded-lg">إغلاق</button></div></div></div>
+    `;
+    switchPermTab('today');
+}
+
+// =================================================================
+// 2. تبديل التبويبات
+// =================================================================
+function switchPermTab(tab) {
+    permCurrentTab = tab;
+    document.querySelectorAll('.sec-permissions .tab-item').forEach(function(t) { t.classList.remove('active'); });
+    var activeBtn = document.getElementById('perm-tab-' + tab);
+    if (activeBtn) activeBtn.classList.add('active');
+
+    if (tab === 'today') renderPermTodayTab();
+    else if (tab === 'approved') renderPermApprovedTab();
+    else renderPermReportsTab();
+}
+
+// =================================================================
+// 3. تبويب اليومي
+// =================================================================
+function renderPermTodayTab() {
+    var today = new Date();
+    var hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var miladiDate = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
+    var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
+
+    document.getElementById('perm-tab-content').innerHTML = `
+        <div class="action-bar">
+            <div class="action-group">
+                <button onclick="openPermAddModal()" class="btn-hero btn-hero-primary">
+                    <span class="material-symbols-outlined" style="font-size:18px">add_circle</span> تسجيل استئذان
+                </button>
+                <button onclick="loadPermTodayRecords()" class="btn-hero btn-hero-outline">
+                    <span class="material-symbols-outlined" style="font-size:18px">refresh</span> تحديث
+                </button>
+            </div>
+            <div class="action-group">
+                <button onclick="sendAllTodayPerm()" id="btn-send-all-perm" class="btn-hero btn-hero-success" disabled>
+                    <span class="material-symbols-outlined" style="font-size:18px">send</span> إرسال للجميع
+                </button>
+                <button onclick="printTodayPerm()" class="btn-hero btn-hero-outline">
+                    <span class="material-symbols-outlined" style="font-size:18px">print</span> طباعة
+                </button>
+            </div>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div id="perm-today-table">
+                <div class="text-center py-16"><div class="loading-bar mx-auto"><div class="loading-bar-progress"></div></div><p class="text-gray-500 mt-4">جاري التحميل...</p></div>
+            </div>
+        </div>
+    `;
+    loadPermTodayRecords();
+}
+
+function loadPermTodayRecords() {
+    showEnhancedToast('info', 'جاري تحديث البيانات...');
+    google.script.run.withSuccessHandler(function(result) {
+        if (result && result.success) permTodayRecords = result.records || [];
+        else permTodayRecords = [];
+        displayPermTodayTable();
+        updatePermCounts();
+        showEnhancedToast('success', 'تم التحديث ✓ (' + permTodayRecords.length + ' استئذان اليوم)');
+    }).withFailureHandler(function(err) {
+        permTodayRecords = [];
+        displayPermTodayTable();
+        showEnhancedToast('error', 'خطأ في التحديث: ' + err.message);
+    }).getTodayPermissionRecords(currentStage);
+}
+
+function displayPermTodayTable() {
+    var container = document.getElementById('perm-today-table');
+    if (!permTodayRecords || permTodayRecords.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><span class="material-symbols-outlined">door_front</span></div><h3>لا يوجد مستأذنون اليوم</h3><p>لم يتم تسجيل أي استئذان حتى الآن</p><button onclick="openPermAddModal()" class="btn-hero btn-hero-primary" style="margin-top:16px;--sec-clr:#0891b2"><span class="material-symbols-outlined" style="font-size:18px">add_circle</span> تسجيل استئذان</button></div>';
+        var btn = document.getElementById('btn-send-all-perm'); if (btn) btn.disabled = true;
+        return;
+    }
+    var btn = document.getElementById('btn-send-all-perm'); if (btn) btn.disabled = false;
+    var el = document.getElementById('perm-today-total'); if (el) el.textContent = permTodayRecords.length;
+
+    var sorted = sortRecordsByClass_(permTodayRecords);
+    var groups = sheetGroupInfo_(sorted);
+
+    var html = '<table class="sht"><thead><tr style="background:#0891b2">';
+    html += '<th style="width:36px">#</th>';
+    html += '<th style="min-width:130px">اسم الطالب</th>';
+    html += '<th>وقت الخروج</th>';
+    html += '<th style="min-width:120px">السبب</th>';
+    html += '<th>المستلم</th>';
+    html += '<th>التأكيد</th>';
+    html += '<th style="width:80px">الإرسال</th>';
+    html += '<th style="width:50px">طباعة</th>';
+    html += '<th style="width:36px"></th>';
+    html += '</tr></thead><tbody>';
+
+    var cntConfirmed = 0, cntPending = 0;
+    sorted.forEach(function(rec, idx) {
+        var g = groups[idx];
+        var origIdx = permTodayRecords.indexOf(rec);
+        var isSent = getF_(rec, 'تم_الإرسال') === 'نعم';
+        var cls = (idx % 2 === 0) ? 'rw' : 'rg';
+
+        if (g.first) {
+            var classLabel = escapeHtml((getF_(rec, 'الصف') || '') + ' / ' + (getF_(rec, 'الفصل') || ''));
+            if (idx > 0) html += '<tr class="sht-sep"><td colspan="9"></td></tr>';
+            html += '<tr class="sht-gh"><td colspan="9"><span class="sht-gl">' + classLabel + '</span> <span class="sht-gc">(' + g.span + ')</span></td></tr>';
+        }
+
+        var confirmTime = rec['وقت_التأكيد'] || getF_(rec, 'وقت_التأكيد');
+        var confirmBadge = confirmTime && confirmTime !== ''
+            ? (cntConfirmed++, '<span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">خرج ' + escapeHtml(confirmTime) + '</span>')
+            : (cntPending++, '<span class="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-bold">معلق</span>');
+
+        html += '<tr class="' + cls + '">';
+        html += '<td>' + (idx + 1) + '</td>';
+        html += '<td class="nm">' + escapeHtml(getF_(rec, 'اسم_الطالب') || '-') + '</td>';
+        html += '<td><span class="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-bold">' + escapeHtml(getF_(rec, 'وقت_الخروج') || '-') + '</span></td>';
+        html += '<td style="text-align:right" class="text-sm text-gray-600">' + escapeHtml(getF_(rec, 'السبب') || '-') + '</td>';
+        html += '<td class="text-sm text-gray-600">' + escapeHtml(getF_(rec, 'المستلم') || '-') + '</td>';
+        html += '<td>' + confirmBadge + '</td>';
+        html += '<td>' + countBadge_(isSent, 'sendPermWhatsApp(' + origIdx + ')') + '</td>';
+        html += '<td><div class="flex gap-0.5 justify-center"><button onclick="printPermTodayDoc(\'tawtheeq_tawasol\',' + origIdx + ')" class="p-1 text-green-500 hover:bg-green-50 rounded" title="توثيق تواصل"><span class="material-symbols-outlined text-[15px]">contact_phone</span></button></div></td>';
+        html += '<td><button onclick="deletePermRecord(' + rec.rowIndex + ')" class="p-1 hover:bg-red-50 rounded text-red-400 hover:text-red-600"><span class="material-symbols-outlined text-[18px]">delete</span></button></td>';
+        html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    var cntSent = sorted.filter(function(r){return getF_(r,'تم_الإرسال')==='نعم';}).length;
+    html += '<div class="tbl-footer">';
+    html += '<div class="s"><div class="d" style="background:#dcfce7;border-color:#86efac"></div> مؤكد: ' + cntConfirmed + '</div>';
+    html += '<div class="s"><div class="d" style="background:#fef3c7;border-color:#fde68a"></div> معلق: ' + cntPending + '</div>';
+    html += '<div class="s" style="margin-right:auto"><div class="d" style="background:#d1fae5"></div> تم: ' + cntSent + '</div>';
+    html += '<div class="s"><div class="d" style="background:#fef3c7"></div> لم يُرسل: ' + (sorted.length - cntSent) + '</div>';
+    html += '</div>';
+
+    container.innerHTML = html;
+    injectCheckboxes_perm();
+}
+
+// ★ الدوال المشتركة (getF_, toArabicNum_, sortRecordsByClass_) معرّفة في JS_Core.html
+
+function updatePermCounts() {
+    var el1 = document.getElementById('perm-today-count'); if (el1) el1.textContent = permTodayRecords.length;
+    var el2 = document.getElementById('perm-today-total'); if (el2) el2.textContent = permTodayRecords.length;
+}
+
+// =================================================================
+// 4. إرسال واتساب
+// =================================================================
+function sendPermWhatsApp(idx) {
+    var rec = permTodayRecords[idx];
+    if (!rec) return;
+    var phone = getStudentPhone(rec);
+    if (!phone) { showEnhancedToast('warning', 'لا يوجد رقم جوال'); return; }
+    var today = new Date();
+    var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var defaultMsg = '🚪 *إشعار استئذان*\n\nالسلام عليكم ورحمة الله وبركاته\nولي أمر الطالب: *' + getF_(rec,'اسم_الطالب') + '*\nالصف: ' + getF_(rec,'الصف') + ' - ' + getF_(rec,'الفصل') + '\n\nنود إبلاغكم بأن ابنكم قد استأذن من المدرسة.\n📌 السبب: ' + (getF_(rec,'السبب')||'-') + '\n⏰ وقت الخروج: ' + (getF_(rec,'وقت_الخروج')||'-') + '\n📅 ' + dayName + ' - ' + hijri + '\n\nمع تحيات إدارة مدرسة ' + (APP_DATA.settings.school_name || 'المدرسة') + '';
+    showMessageEditor_({
+        phone: phone, studentName: getF_(rec,'اسم_الطالب'), type: 'استئذان',
+        defaultMessage: defaultMsg,
+        data: { 'اسم_الطالب': getF_(rec,'اسم_الطالب'), 'الصف': getF_(rec,'الصف'), 'الفصل': getF_(rec,'الفصل'), 'السبب': getF_(rec,'السبب')||'', 'وقت_الخروج': getF_(rec,'وقت_الخروج')||'', 'اليوم': dayName, 'التاريخ': hijri },
+        onSend: function(editedMsg) {
+            showEnhancedToast('info', 'جاري الإرسال...');
+            google.script.run.withSuccessHandler(function(r) {
+                if (r && r.success) {
+                    showEnhancedToast('success', 'تم الإرسال ✓');
+                    google.script.run.updatePermissionSentStatus(currentStage, rec.rowIndex);
+                    loadPermTodayRecords();
+                }
+                else showEnhancedToast('danger', r.error || 'فشل');
+            }).withFailureHandler(function(e) { showEnhancedToast('danger', e.message); })
+            .sendWhatsAppWithLog({ phone: phone, message: editedMsg, studentName: getF_(rec,'اسم_الطالب'), type: 'استئذان' }, currentStage);
+        }
+    });
+}
+
+function sendAllTodayPerm() {
+    var unsent = permTodayRecords.filter(function(r) { return r['تم_الإرسال'] !== 'نعم'; });
+    if (unsent.length === 0) { showEnhancedToast('info', 'تم إرسال الجميع سابقاً'); return; }
+    showStyledConfirm_({title: 'إرسال إشعارات', message: 'سيتم إرسال إشعارات لـ ' + unsent.length + ' ولي أمر. متابعة؟', icon: 'send', color: 'purple', onConfirm: function() {
+        showEnhancedToast('info', 'جاري إرسال ' + unsent.length + ' إشعار... (تقريباً ' + Math.ceil(unsent.length * 35 / 60) + ' دقائق)');
+        unsent.forEach(function(rec, i) {
+            var delay = i * 30000 + Math.floor(Math.random() * 10000);
+            setTimeout(function() { sendPermWhatsApp(permTodayRecords.indexOf(rec)); }, delay);
+        });
+    }});
+}
+
+function deletePermRecord(rowIndex) {
+    // حذف بمنبثقة مصممة - يتم التعامل معه في السياق
+    google.script.run.withSuccessHandler(function(res) {
+        if (res.success) { showEnhancedToast('success', 'تم الحذف'); loadPermTodayRecords(); }
+        else showEnhancedToast('danger', 'خطأ: ' + res.error);
+    }).deletePermissionRecord(currentStage, rowIndex);
+}
+
+// =================================================================
+// ★★★ نظام محرر الرسائل ★★★
+var _msgEditorCallback = null;
+var _msgEditorType = '';
+var _msgEditorData = {};
+var _templateCache = {};
+
+function showMessageEditor_(opts) {
+    if (!document.getElementById('msg-editor-modal')) {
+        var d = document.createElement('div');
+        d.innerHTML = '<div id="msg-editor-modal" class="fixed inset-0 bg-gray-900/50 hidden z-[999] flex items-center justify-center backdrop-blur-sm" onclick="if(event.target===this)_closeEditor()">'
+            + '<div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-lg mx-4 overflow-hidden">'
+            + '<div class="px-5 py-3 bg-green-600 text-white flex justify-between items-center">'
+            + '<h3 class="font-bold flex items-center gap-2"><span class="material-symbols-outlined">edit_note</span> تعديل الرسالة قبل الإرسال</h3>'
+            + '<button onclick="_closeEditor()" class="text-white/80 hover:text-white"><span class="material-symbols-outlined">close</span></button></div>'
+            + '<div class="px-5 py-3 bg-green-50 border-b flex justify-between items-center">'
+            + '<div><span class="text-sm font-bold text-gray-700" id="me-student"></span>'
+            + '<span class="text-xs text-gray-500 mr-2" id="me-type-badge"></span></div>'
+            + '<span class="text-xs text-gray-400" id="me-phone" style="direction:ltr"></span></div>'
+            + '<div class="p-5">'
+            + '<textarea id="me-text" rows="12" class="w-full border border-gray-300 rounded-lg p-3 text-sm leading-relaxed resize-y focus:ring-2 focus:ring-green-400" style="direction:rtl;font-family:Traditional Arabic,Tahoma,serif"></textarea>'
+            + '<div id="me-tmpl-note" class="hidden mt-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-600">'
+            + '<span class="material-symbols-outlined text-[14px] align-middle">info</span> يتم استخدام قالبك المحفوظ</div></div>'
+            + '<div class="px-5 py-3 bg-gray-50 flex justify-between items-center gap-2 flex-wrap">'
+            + '<div class="flex gap-2">'
+            + '<button onclick="_saveAsDefault()" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">bookmark</span> حفظ كقالب افتراضي</button>'
+            + '<button onclick="_resetTemplate()" class="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-300 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">restart_alt</span> استعادة</button></div>'
+            + '<div class="flex gap-2">'
+            + '<button onclick="_closeEditor()" class="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg text-sm font-bold">إلغاء</button>'
+            + '<button onclick="_confirmSend()" class="px-6 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 flex items-center gap-2 shadow-md"><span class="material-symbols-outlined text-[18px]">send</span> إرسال</button>'
+            + '</div></div></div></div>';
+        document.body.appendChild(d.firstElementChild);
+    }
+    _msgEditorType = opts.type || '';
+    _msgEditorData = opts.data || {};
+    _msgEditorCallback = opts.onSend || null;
+    document.getElementById('me-student').textContent = opts.studentName || '';
+    document.getElementById('me-type-badge').textContent = opts.type || '';
+    document.getElementById('me-phone').textContent = opts.phone || '';
+    var cached = _templateCache[_msgEditorType];
+    if (cached !== undefined) { _loadMsgEditor(cached, opts); }
+    else if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(function(r) {
+            var t = (r && r.template) ? r.template : '';
+            _templateCache[_msgEditorType] = t;
+            _loadMsgEditor(t, opts);
+        }).withFailureHandler(function() { _templateCache[_msgEditorType]=''; _loadMsgEditor('', opts); }).getMessageTemplate(_msgEditorType);
+    } else { _loadMsgEditor('', opts); }
+    document.getElementById('msg-editor-modal').classList.remove('hidden');
+}
+function _loadMsgEditor(saved, opts) {
+    var note = document.getElementById('me-tmpl-note');
+    var txt;
+    if (saved) {
+        txt = saved; for (var k in (opts.data||{})) { txt = txt.split('{'+k+'}').join(opts.data[k]||''); }
+        note.classList.remove('hidden');
+    } else { txt = opts.defaultMessage || ''; note.classList.add('hidden'); }
+    var el = document.getElementById('me-text');
+    el.value = txt; el.dataset.defaultMsg = opts.defaultMessage || '';
+}
+function _confirmSend() {
+    var msg = document.getElementById('me-text').value;
+    if (!msg.trim()) { showEnhancedToast('warning', 'الرسالة فارغة'); return; }
+    _closeEditor(); if (_msgEditorCallback) _msgEditorCallback(msg);
+}
+function _saveAsDefault() {
+    var msg = document.getElementById('me-text').value;
+    var tmpl = msg;
+    var entries = [];
+    for (var k in _msgEditorData) { if (_msgEditorData[k] && String(_msgEditorData[k]).trim()) entries.push({k:k,v:String(_msgEditorData[k])}); }
+    entries.sort(function(a,b){return b.v.length-a.v.length;});
+    entries.forEach(function(e){ tmpl = tmpl.split(e.v).join('{'+e.k+'}'); });
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(function(r) {
+            if (r && r.success) { _templateCache[_msgEditorType]=tmpl; showEnhancedToast('success','تم حفظ القالب كافتراضي ✓'); document.getElementById('me-tmpl-note').classList.remove('hidden'); }
+            else showEnhancedToast('danger','فشل الحفظ');
+        }).saveMessageTemplate(_msgEditorType, tmpl);
+    }
+}
+function _resetTemplate() {
+    document.getElementById('me-text').value = document.getElementById('me-text').dataset.defaultMsg || '';
+    document.getElementById('me-tmpl-note').classList.add('hidden');
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(function(){ _templateCache[_msgEditorType]=''; showEnhancedToast('info','تم استعادة القالب الافتراضي'); }).deleteMessageTemplate(_msgEditorType);
+    }
+}
+function _closeEditor() { document.getElementById('msg-editor-modal').classList.add('hidden'); }
+
+
+// ★★★ نظام التحديد - الاستئذان ★★★
+var selected_perm = new Set();
+function toggleSelect_perm(idx) {
+    if (selected_perm.has(idx)) selected_perm.delete(idx); else selected_perm.add(idx);
+    updateSelBar_perm();
+    var allChks = document.querySelectorAll('.sel-perm');
+    var sa = document.getElementById('sel-all-perm');
+    if (sa) sa.checked = selected_perm.size === allChks.length && allChks.length > 0;
+}
+function toggleSelectAll_perm(cb) {
+    document.querySelectorAll('.sel-perm').forEach(function(c) {
+        c.checked = cb.checked; var idx = parseInt(c.dataset.idx);
+        if (cb.checked) selected_perm.add(idx); else selected_perm.delete(idx);
+    }); updateSelBar_perm();
+}
+function updateSelBar_perm() {
+    var bar = document.getElementById('sel-bar-perm'); if (!bar) return;
+    if (selected_perm.size > 0) { bar.classList.remove('hidden'); document.getElementById('sel-cnt-perm').textContent = toArShared_(selected_perm.size); }
+    else bar.classList.add('hidden');
+}
+function clearSel_perm() {
+    selected_perm.clear();
+    document.querySelectorAll('.sel-perm').forEach(function(c){ c.checked=false; });
+    var sa = document.getElementById('sel-all-perm'); if(sa) sa.checked=false;
+    updateSelBar_perm();
+}
+function getSelectedRecords_perm() {
+    if (selected_perm.size === 0) return permTodayRecords.slice();
+    return Array.from(selected_perm).sort().map(function(i){ return permTodayRecords[i]; }).filter(Boolean);
+}
+function injectCheckboxes_perm() {
+    var table = document.querySelector('#perm-today-table table');
+    if (!table) return; selected_perm.clear();
+    var thead = table.querySelector('thead tr');
+    if (thead && !thead.querySelector('.sel-all-th')) {
+        var th = document.createElement('th'); th.className = 'px-2 py-3 w-8 sel-all-th';
+        th.innerHTML = '<input type="checkbox" id="sel-all-perm" onchange="toggleSelectAll_perm(this)" class="w-4 h-4 rounded accent-indigo-600 cursor-pointer">';
+        thead.insertBefore(th, thead.firstChild);
+    }
+    var rows = table.querySelectorAll('tbody tr'); var dataIdx = 0;
+    rows.forEach(function(row) {
+        if (row.querySelector('td[colspan]') || row.children.length <= 1) {
+            var td = row.querySelector('td[colspan]');
+            if (td) td.colSpan = parseInt(td.colSpan || row.children.length) + 1; return;
+        }
+        var td = document.createElement('td'); td.className = 'px-2 py-3';
+        td.innerHTML = '<input type="checkbox" class="sel-perm w-4 h-4 rounded accent-indigo-600 cursor-pointer" data-idx="' + dataIdx + '" onchange="toggleSelect_perm(' + dataIdx + ')">';
+        row.insertBefore(td, row.firstChild); dataIdx++;
+    });
+    if (!document.getElementById('sel-bar-perm')) {
+        var bar = document.createElement('div'); bar.id = 'sel-bar-perm';
+        bar.className = 'hidden fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-800/95 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-4 z-50 backdrop-blur-sm';
+        bar.innerHTML = '<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[18px]">check_circle</span> <span id="sel-cnt-perm" class="font-bold">٠</span> محدد</span>'
+            + '<span class="w-px h-6 bg-white/30"></span>'
+            + '<button onclick="printSelectedToday_perm()" class="flex items-center gap-1.5 text-sm hover:text-purple-300"><span class="material-symbols-outlined text-[16px]">print</span> طباعة</button>'
+            + '<button onclick="sendSelectedToday_perm()" class="flex items-center gap-1.5 text-sm hover:text-green-300"><span class="material-symbols-outlined text-[16px]">send</span> إرسال</button>'
+            + '<button onclick="clearSel_perm()" class="text-white/60 hover:text-white mr-2"><span class="material-symbols-outlined text-[16px]">close</span></button>';
+        document.body.appendChild(bar);
+    }
+}
+function printSelectedToday_perm() {
+    var recs = getSelectedRecords_perm();
+    if (recs.length === 0) { showEnhancedToast('warning', 'لا يوجد بيانات'); return; }
+    var bak = permTodayRecords; permTodayRecords = recs; printTodayPerm(); permTodayRecords = bak; clearSel_perm();
+}
+function sendSelectedToday_perm() {
+    var indices = Array.from(selected_perm).sort();
+    if (indices.length === 0) { showEnhancedToast('warning', 'حدد طلاب أولاً'); return; }
+    showStyledConfirm_({title: 'إرسال للمحددين', message: 'إرسال ' + indices.length + ' رسالة؟', icon: 'send', color: 'purple', onConfirm: function() {
+        indices.forEach(function(i) { sendPermWhatsApp(i); }); clearSel_perm();
+    }});
+}
+
+
+function printTodayPerm() {
+    var _printRecs = (typeof getSelectedRecords_perm==='function') ? getSelectedRecords_perm() : permTodayRecords;
+    if (_printRecs.length === 0) { showEnhancedToast('warning', 'لا يوجد بيانات'); return; }
+    var today = new Date();
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var miladi = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
+    var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
+    var stageName = getStageName_(currentStage);
+    var sorted = sortRecordsByClass_(permTodayRecords);
+    var rows = '', lastKey = '';
+    sorted.forEach(function(rec, i) {
+        var grade = getF_(rec, 'الصف'), cls = getF_(rec, 'الفصل');
+        var key = grade + cls;
+        if (key !== lastKey && i > 0) rows += '<tr class="sep-row"><td colspan="8"></td></tr>';
+        lastKey = key;
+        var isSent = getF_(rec, 'تم_الإرسال') === 'نعم';
+        rows += '<tr>'
+            + '<td class="data-cell">' + toArShared_(i+1) + '</td>'
+            + '<td class="name-cell">' + escapeHtml(getF_(rec, 'اسم_الطالب') || '-') + '</td>'
+            + '<td class="data-cell">' + formatClassShared_(grade, cls) + '</td>'
+            + '<td class="data-cell">' + toArShared_(getF_(rec, 'وقت_الخروج') || '-') + '</td>'
+            + '<td class="detail-cell">' + escapeHtml(getF_(rec, 'السبب') || '-') + '</td>'
+            + '<td class="data-cell">' + escapeHtml(getF_(rec, 'المستلم') || '-') + '</td>'
+            + '<td class="data-cell" style="font-size:11pt">' + (getF_(rec, 'وقت_التأكيد') ? 'خرج ' + toArShared_(getF_(rec, 'وقت_التأكيد')) : 'معلق') + '</td>'
+            + '<td class="data-cell" style="color:' + (isSent ? 'green' : '#999') + ';font-weight:bold">' + (isSent ? 'تم' : '-') + '</td>'
+            + '</tr>';
+    });
+    var win = window.open('', '_blank');
+    win.document.write(buildSharedPrintPage_({
+        title: 'سجل المستأذنين ليوم ' + dayName,
+        subtitle: stageName,
+        dateText: hijri + ' \u00A0الموافق\u00A0 ' + miladi + ' م',
+        colCount: 8,
+        headers: '<th class="col-header" style="width:5%">م</th><th class="col-header" style="width:25%">اسم الطالب</th><th class="col-header" style="width:10%">الصف</th><th class="col-header" style="width:10%">وقت الخروج</th><th class="col-header" style="width:18%">السبب</th><th class="col-header" style="width:12%">المستلم</th><th class="col-header" style="width:10%">التأكيد</th><th class="col-header" style="width:7%">التواصل</th>',
+        rows: rows,
+        total: toArShared_(_printRecs.length) + ' مستأذن'
+    }));
+    win.document.close(); setTimeout(function(){ win.print(); }, 300);
+}
+
+
+// =================================================================
+// 6. تبويب المعتمد (الأرشيف)
+// =================================================================
+function renderPermApprovedTab() {
+    document.getElementById('perm-tab-content').innerHTML = `
+        <!-- أزرار الأدوات -->
+        <div class="flex items-center gap-2 mb-4">
+            <button onclick="loadPermArchiveRecords()" class="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-xs font-bold">
+                <span class="material-symbols-outlined text-[16px]">refresh</span> تحديث
+            </button>
+            <button onclick="printPermArchive()" class="flex items-center gap-1.5 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-xs font-bold shadow-sm">
+                <span class="material-symbols-outlined text-[16px]">print</span> طباعة القائمة
+            </button>
+            <button onclick="printPermContactReport()" class="flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-bold shadow-sm">
+                <span class="material-symbols-outlined text-[16px]">contact_phone</span> تقرير التواصل
+            </button>
+        </div>
+
+        <!-- الفلاتر - سطر واحد مدمج -->
+        <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-200 mb-4 sticky top-0 z-20">
+            <div class="flex flex-wrap items-center gap-2">
+                <div class="relative flex-shrink-0">
+                    <span class="material-symbols-outlined text-[18px] absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">search</span>
+                    <input type="text" id="perm-search" onkeyup="filterPermApproved()" placeholder="ابحث بالاسم..."
+                        class="w-48 pr-9 pl-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-purple-400 focus:border-purple-400">
+                </div>
+                <select id="perm-grade-filter" onchange="permGradeChanged(); filterPermApproved()" class="px-2 py-1.5 rounded-lg border border-gray-300 text-xs bg-gray-50 flex-shrink-0"><option value="">كل الصفوف</option></select>
+                <select id="perm-class-filter" onchange="filterPermApproved()" class="px-2 py-1.5 rounded-lg border border-gray-300 text-xs bg-gray-50 flex-shrink-0"><option value="">كل الفصول</option></select>
+                <select id="perm-reason-filter" onchange="filterPermApproved()" class="px-2 py-1.5 rounded-lg border border-gray-300 text-xs bg-gray-50 flex-shrink-0">
+                    <option value="">كل الأسباب</option>
+                </select>
+                <div class="flex bg-gray-100 rounded-lg p-0.5 flex-shrink-0">
+                    <button onclick="togglePermView('cards')" id="perm-view-cards" class="p-1 rounded text-purple-600 bg-white"><span class="material-symbols-outlined text-[18px]">grid_view</span></button>
+                    <button onclick="togglePermView('table')" id="perm-view-table" class="p-1 rounded text-gray-400"><span class="material-symbols-outlined text-[18px]">table_rows</span></button>
+                </div>
+            </div>
+            
+            <!-- فلاتر التاريخ -->
+            <div class="flex flex-wrap items-center gap-2 mt-2 pt-2 border-t border-gray-100">
+                <span class="text-[11px] font-bold text-gray-400">فترة:</span>
+                <input type="date" id="perm-date-from" onchange="filterPermApproved()" class="px-2 py-1 rounded-lg border border-gray-300 text-xs">
+                <span class="text-gray-400 text-xs">إلى</span>
+                <input type="date" id="perm-date-to" onchange="filterPermApproved()" class="px-2 py-1 rounded-lg border border-gray-300 text-xs">
+                <button onclick="document.getElementById('perm-date-from').value='';document.getElementById('perm-date-to').value='';filterPermApproved()" class="px-2 py-1 text-gray-400 hover:bg-gray-100 rounded text-[11px]"><span class="material-symbols-outlined text-[14px] align-middle">clear</span> مسح</button>
+                <span class="w-px h-5 bg-gray-300 mx-1"></span>
+                <span class="text-[10px] text-gray-500" id="perm-results-count"></span>
+            </div>
+        </div>
+
+        <div id="perm-approved-container" class="min-h-[400px]"><div class="text-center py-16"><div class="loading-bar mx-auto"><div class="loading-bar-progress"></div></div><p class="text-gray-500 mt-4">جاري التحميل...</p></div></div>
+    `;
+    populatePermFilters();
+    loadPermArchiveRecords();
+}
+
+function populatePermFilters() {
+    var grades = []; var seen = {};
+    APP_DATA.students.filter(function(s) { return s['المرحلة'] === currentStage; }).forEach(function(s) {
+        if (!seen[s['الصف']]) { seen[s['الصف']] = true; grades.push(s['الصف']); }
+    });
+    var gradeOrder = ["أول", "ثاني", "ثالث", "رابع", "خامس", "سادس"];
+    grades.sort(function(a, b) { var iA = gradeOrder.findIndex(function(k){return a.includes(k)}); var iB = gradeOrder.findIndex(function(k){return b.includes(k)}); return (iA===-1?99:iA) - (iB===-1?99:iB); });
+    var sel = document.getElementById('perm-grade-filter');
+    sel.innerHTML = '<option value="">كل الصفوف</option>';
+    grades.forEach(function(g) { sel.add(new Option(g, g)); });
+    // أسباب
+    var rsel = document.getElementById('perm-reason-filter');
+    rsel.innerHTML = '<option value="">كل الأسباب</option>';
+    PERMISSION_REASONS.forEach(function(r) { rsel.add(new Option(r, r)); });
+}
+
+function permGradeChanged() {
+    var grade = document.getElementById('perm-grade-filter').value;
+    var classSel = document.getElementById('perm-class-filter');
+    classSel.innerHTML = '<option value="">كل الفصول</option>';
+    if (grade) {
+        var seen={}; APP_DATA.students.filter(function(s){return s['المرحلة']===currentStage&&s['الصف']===grade;}).forEach(function(s){
+            if(!seen[s['الفصل']]){seen[s['الفصل']]=true;classSel.add(new Option(s['الفصل'],s['الفصل']));}
+        });
+    }
+}
+
+function loadPermArchiveRecords() {
+    google.script.run.withSuccessHandler(function(result) {
+        if (result && result.success) permAllRecords = result.records || [];
+        else permAllRecords = [];
+        var el = document.getElementById('perm-total-count'); if (el) el.textContent = permAllRecords.length;
+        var el2 = document.getElementById('perm-unsent-count'); if (el2) el2.textContent = permAllRecords.filter(function(r){return r['تم_الإرسال'] !== 'نعم';}).length;
+        filterPermApproved();
+    }).withFailureHandler(function(err) {
+        permAllRecords = []; filterPermApproved();
+    }).getPermissionArchive(currentStage, '', '');
+}
+
+function filterPermApproved() {
+    var search = (document.getElementById('perm-search')?.value || '').trim();
+    var grade = document.getElementById('perm-grade-filter')?.value || '';
+    var cls = document.getElementById('perm-class-filter')?.value || '';
+    var reasonF = document.getElementById('perm-reason-filter')?.value || '';
+
+    var filtered = permAllRecords.filter(function(r) {
+        if (search && !(r['اسم_الطالب'] || '').includes(search)) return false;
+        if (grade && r['الصف'] !== grade) return false;
+        if (cls && r['الفصل'] != cls) return false;
+        if (reasonF && r['السبب'] !== reasonF) return false;
+        return true;
+    });
+
+    var container = document.getElementById('perm-approved-container');
+    if (!filtered || filtered.length === 0) {
+        container.innerHTML = '<div class="text-center py-16 bg-white rounded-xl border border-gray-200"><span class="material-symbols-outlined text-gray-300 text-6xl">search_off</span><p class="text-gray-500 mt-2">لا توجد سجلات مطابقة</p></div>';
+        return;
+    }
+
+    if (permViewMode === 'table') {
+        container.innerHTML = createPermApprovedTable(filtered);
+    } else {
+        container.innerHTML = createPermApprovedCards(filtered);
+    }
+    container.innerHTML += '<div class="mt-4 text-center text-sm text-gray-500">إجمالي: <span class="font-bold">' + filtered.length + '</span> سجل</div>';
+    var countEl = document.getElementById('perm-results-count');
+    if (countEl) countEl.textContent = filtered.length + ' سجل';
+}
+
+function togglePermView(view) {
+    permViewMode = view;
+    var cardsBtn = document.getElementById('perm-view-cards');
+    var tableBtn = document.getElementById('perm-view-table');
+    if (cardsBtn) { cardsBtn.className = 'p-1 rounded ' + (view === 'cards' ? 'text-purple-600 bg-white' : 'text-gray-400'); }
+    if (tableBtn) { tableBtn.className = 'p-1 rounded ' + (view === 'table' ? 'text-purple-600 bg-white' : 'text-gray-400'); }
+    filterPermApproved();
+}
+
+function createPermApprovedCards(records) {
+    var groups = {};
+    records.forEach(function(rec) {
+        var key = String(rec['رقم_الطالب'] || rec['اسم_الطالب']);
+        if (!groups[key]) groups[key] = { info: rec, records: [] };
+        groups[key].records.push(rec);
+    });
+    var orderedIds = [];
+    var seen = {};
+    records.forEach(function(r) { var k = String(r['رقم_الطالب'] || r['اسم_الطالب']); if (!seen[k]) { seen[k] = true; orderedIds.push(k); } });
+    permStudentGroups = orderedIds.map(function(id) { return groups[id]; });
+
+    var html = '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">';
+    permStudentGroups.forEach(function(g, gIdx) {
+        var recs = g.records;
+        var name = g.info['اسم_الطالب'];
+        var grade = g.info['الصف'];
+        var cls = g.info['الفصل'];
+        var total = recs.length;
+
+        // تصنيف حسب السبب
+        var reasons = {};
+        recs.forEach(function(r) { var s = r['السبب'] || 'غير محدد'; reasons[s] = (reasons[s] || 0) + 1; });
+
+        var border = 'border-gray-200', badge = '', badgeClass = '';
+        if (total >= 10) { border = 'border-red-500'; badge = 'متكرر جداً'; badgeClass = 'text-white bg-red-600'; }
+        else if (total >= 7) { border = 'border-purple-400'; badge = 'متكرر'; badgeClass = 'text-purple-800 bg-purple-100 border border-purple-300'; }
+        else if (total >= 5) { border = 'border-orange-400'; badge = 'ملاحظ'; badgeClass = 'text-orange-800 bg-orange-100 border border-orange-300'; }
+        else if (total >= 3) { border = 'border-yellow-400'; badge = 'تنبيه'; badgeClass = 'text-yellow-800 bg-yellow-100 border border-yellow-300'; }
+
+        html += '<div class="bg-white rounded-xl border-2 ' + border + ' p-4 hover:shadow-lg transition-all cursor-pointer group" onclick="openPermDetailModal(' + gIdx + ')">';
+        html += '<div class="flex justify-between items-start mb-3"><div class="flex items-center gap-1"><span class="text-[22px] font-black ' + (total >= 7 ? 'text-red-600' : total >= 4 ? 'text-purple-600' : 'text-gray-600') + '">' + total + '</span><span class="text-[10px] text-gray-400">استئذان</span></div>';
+        html += (badge ? '<span class="text-[10px] font-bold ' + badgeClass + ' px-2 py-0.5 rounded-full">' + badge + '</span>' : '') + '</div>';
+        html += '<h3 class="font-bold text-gray-800 text-sm leading-tight">' + escapeHtml(name) + '</h3>';
+        html += '<p class="text-xs text-gray-500 mt-0.5 mb-3">' + escapeHtml(grade) + ' / ' + escapeHtml(cls) + '</p>';
+
+        // عرض الأسباب
+        var reasonColors = { 'ظرف صحي': 'red', 'ظرف أسري': 'blue', 'موعد حكومي': 'amber', 'طلب ولي الأمر': 'purple' };
+        html += '<div class="flex gap-1.5 justify-center flex-wrap mb-3">';
+        Object.keys(reasons).forEach(function(r) {
+            var c = reasonColors[r] || 'gray';
+            html += '<div class="flex-1 min-w-[60px] text-center rounded-lg py-1.5 bg-' + c + '-50 border border-' + c + '-200"><p class="text-base font-black text-' + c + '-700">' + reasons[r] + '</p><p class="text-[8px] text-' + c + '-600 truncate px-1">' + escapeHtml(r) + '</p></div>';
+        });
+        html += '</div>';
+
+        html += '<div class="text-center text-[11px] text-purple-600 font-bold group-hover:text-purple-800 flex items-center justify-center gap-1"><span class="material-symbols-outlined text-[14px]">open_in_new</span> عرض التفاصيل</div>';
+        html += '</div>';
+    });
+    html += '</div>';
+    return html;
+}
+
+function createPermApprovedTable(records) {
+    var html = '<div class="overflow-x-auto"><table class="min-w-full divide-y divide-gray-200 bg-white rounded-lg border border-gray-200"><thead class="bg-purple-50"><tr>';
+    html += '<th class="px-4 py-3 text-right text-xs font-bold text-gray-600">الطالب</th>';
+    html += '<th class="px-4 py-3 text-center text-xs font-bold text-gray-600">الصف</th>';
+    html += '<th class="px-4 py-3 text-center text-xs font-bold text-gray-600">اليوم والتاريخ</th>';
+    html += '<th class="px-4 py-3 text-center text-xs font-bold text-gray-600">وقت الخروج</th>';
+    html += '<th class="px-4 py-3 text-right text-xs font-bold text-gray-600">السبب</th>';
+    html += '<th class="px-4 py-3 text-right text-xs font-bold text-gray-600">المستلم</th>';
+    html += '<th class="px-4 py-3 text-center text-xs font-bold text-gray-600">الإرسال</th>';
+    html += '</tr></thead><tbody class="divide-y divide-gray-200">';
+    records.forEach(function(rec) {
+        var sentBadge = getF_(rec, 'تم_الإرسال') === 'نعم' ? '<span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">تم ✓</span>' : '<span class="px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-bold">لم يُرسل</span>';
+        var dayName = permGetDayName(rec['وقت_الإدخال']);
+        var hijriDate = rec['التاريخ_هجري'] || '';
+        html += '<tr class="hover:bg-gray-50">';
+        html += '<td class="px-4 py-3 text-sm font-bold text-gray-900">' + escapeHtml(rec['اسم_الطالب']||'') + '</td>';
+        html += '<td class="px-4 py-3 text-center text-sm">' + escapeHtml(rec['الصف']||'') + ' / ' + escapeHtml(rec['الفصل']||'') + '</td>';
+        html += '<td class="px-4 py-3 text-center text-xs">' + escapeHtml(dayName) + ' ' + escapeHtml(hijriDate) + '</td>';
+        html += '<td class="px-4 py-3 text-center"><span class="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-bold">' + escapeHtml(rec['وقت_الخروج']||'-') + '</span></td>';
+        html += '<td class="px-4 py-3 text-sm text-gray-600">' + escapeHtml(rec['السبب']||'-') + '</td>';
+        html += '<td class="px-4 py-3 text-sm text-gray-600">' + escapeHtml(rec['المستلم']||'-') + '</td>';
+        html += '<td class="px-4 py-3 text-center">' + sentBadge + '</td>';
+        html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+}
+
+function openPermDetailModal(groupIndex) {
+    var group = permStudentGroups[groupIndex];
+    if (!group) return;
+    var name = group.info['اسم_الطالب'];
+    var grade = group.info['الصف'] + ' / ' + group.info['الفصل'];
+    document.getElementById('perm-detail-title').textContent = name + ' - ' + grade;
+    var recs = group.records;
+    var sentCount = recs.filter(function(r){return r['تم_الإرسال']==='نعم';}).length;
+
+    // تصنيف حسب السبب
+    var reasons = {};
+    recs.forEach(function(r) { var s = r['السبب'] || 'غير محدد'; reasons[s] = (reasons[s] || 0) + 1; });
+    var reasonColors = { 'ظرف صحي': 'red', 'ظرف أسري': 'blue', 'موعد حكومي': 'amber', 'طلب ولي الأمر': 'purple' };
+
+    var body = '<div class="grid grid-cols-3 gap-3 mb-4">';
+    body += '<div class="text-center p-3 bg-purple-50 rounded-xl border border-purple-200"><div class="text-xl font-black text-purple-600">' + recs.length + '</div><div class="text-[10px] text-purple-500">الإجمالي</div></div>';
+    body += '<div class="text-center p-3 bg-green-50 rounded-xl border border-green-200"><div class="text-xl font-black text-green-600">' + sentCount + '</div><div class="text-[10px] text-green-500">تم إرسالها</div></div>';
+    body += '<div class="text-center p-3 bg-orange-50 rounded-xl border border-orange-200"><div class="text-xl font-black text-orange-600">' + (recs.length - sentCount) + '</div><div class="text-[10px] text-orange-500">لم تُرسل</div></div>';
+    body += '</div>';
+
+    // أسباب الاستئذان
+    body += '<div class="flex gap-2 flex-wrap mb-4 justify-center">';
+    Object.keys(reasons).forEach(function(r) {
+        var c = reasonColors[r] || 'gray';
+        body += '<span class="px-3 py-1 bg-' + c + '-50 text-' + c + '-700 border border-' + c + '-200 rounded-full text-xs font-bold">' + escapeHtml(r) + ': ' + reasons[r] + '</span>';
+    });
+    body += '</div>';
+
+    body += '<table class="w-full text-sm border-collapse"><thead class="bg-gray-100"><tr>';
+    body += '<th class="px-3 py-2 text-center font-bold text-gray-700 w-10">#</th>';
+    body += '<th class="px-3 py-2 text-center font-bold text-gray-700">اليوم</th>';
+    body += '<th class="px-3 py-2 text-center font-bold text-gray-700">التاريخ</th>';
+    body += '<th class="px-3 py-2 text-center font-bold text-gray-700">وقت الخروج</th>';
+    body += '<th class="px-3 py-2 text-center font-bold text-gray-700">السبب</th>';
+    body += '<th class="px-3 py-2 text-center font-bold text-gray-700">المستلم</th>';
+    body += '<th class="px-3 py-2 text-center font-bold text-gray-700">الإرسال</th>';
+    body += '</tr></thead><tbody>';
+    recs.forEach(function(rec, i) {
+        var sent = getF_(rec, 'تم_الإرسال') === 'نعم' ? '<span class="text-green-600 font-bold">✓</span>' : '<span class="text-orange-500">✗</span>';
+        body += '<tr class="border-b border-gray-100">';
+        body += '<td class="px-3 py-2 text-center text-gray-500">' + (i+1) + '</td>';
+        body += '<td class="px-3 py-2 text-center text-xs">' + permGetDayName(rec['وقت_الإدخال']) + '</td>';
+        body += '<td class="px-3 py-2 text-center text-xs">' + escapeHtml(rec['التاريخ_هجري']||'') + '</td>';
+        body += '<td class="px-3 py-2 text-center"><span class="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-bold">' + escapeHtml(rec['وقت_الخروج']||'-') + '</span></td>';
+        body += '<td class="px-3 py-2 text-center text-xs">' + escapeHtml(rec['السبب']||'-') + '</td>';
+        body += '<td class="px-3 py-2 text-center text-xs">' + escapeHtml(rec['المستلم']||'-') + '</td>';
+        body += '<td class="px-3 py-2 text-center">' + sent + '</td>';
+        body += '</tr>';
+    });
+    body += '</tbody></table>';
+    document.getElementById('perm-detail-body').innerHTML = body;
+    document.getElementById('perm-detail-modal').classList.remove('hidden');
+}
+
+function closePermDetailModal() { document.getElementById('perm-detail-modal').classList.add('hidden'); }
+
+function printPermArchive() {
+    var records = permAllRecords || [];
+    if (records.length === 0) { showEnhancedToast('warning', 'لا توجد بيانات'); return; }
+    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var rows = '';
+    records.forEach(function(rec, i) {
+        rows += '<tr>'
+            + '<td class="data-cell">' + toArShared_(i+1) + '</td>'
+            + '<td class="name-cell">' + escapeHtml(getF_(rec, 'اسم_الطالب') || '') + '</td>'
+            + '<td class="data-cell">' + formatClassShared_(getF_(rec, 'الصف'), getF_(rec, 'الفصل')) + '</td>'
+            + '<td class="data-cell">' + toArShared_(getF_(rec, 'وقت_الخروج') || '-') + '</td>'
+            + '<td class="detail-cell">' + escapeHtml(getF_(rec, 'السبب') || '-') + '</td>'
+            + '<td class="data-cell">' + escapeHtml(getF_(rec, 'التاريخ_هجري') || '') + '</td>'
+            + '</tr>';
+    });
+    var win = window.open('', '_blank');
+    win.document.write(buildSharedPrintPage_({
+        title: 'أرشيف الاستئذان',
+        subtitle: currentStage,
+        dateText: hijri,
+        colCount: 6,
+        headers: '<th class="col-header">م</th><th class="col-header" style="width:28%">اسم الطالب</th><th class="col-header">الصف</th><th class="col-header">وقت الخروج</th><th class="col-header">السبب</th><th class="col-header">التاريخ</th>',
+        rows: rows,
+        total: toArShared_(records.length) + ' سجل'
+    }));
+    win.document.close(); setTimeout(function(){ win.print(); }, 300);
+}
+
+
+// =================================================================
+// 7. تبويب التقارير
+// =================================================================
+function renderPermReportsTab() {
+    document.getElementById('perm-tab-content').innerHTML = `
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-5">
+            <div class="flex flex-wrap gap-4 items-end">
+                <div><label class="block text-xs font-bold text-gray-500 mb-1">الصف</label><select id="prep-grade" onchange="prepPopClasses()" class="w-40 border-gray-300 rounded-lg text-sm h-10"><option value="">كل الصفوف</option></select></div>
+                <div><label class="block text-xs font-bold text-gray-500 mb-1">الفصل</label><select id="prep-class" class="w-32 border-gray-300 rounded-lg text-sm h-10 disabled:bg-gray-50" disabled><option value="">كل الفصول</option></select></div>
+                <button onclick="generatePermCharts()" class="mb-0.5 bg-indigo-600 text-white px-6 h-10 rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">refresh</span> تحديث</button>
+            </div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-r-4 border-r-purple-500"><div class="text-3xl font-bold text-purple-600 mb-1" id="prep-total">٠</div><div class="text-sm text-gray-500">إجمالي الاستئذان</div></div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-r-4 border-r-blue-500"><div class="text-3xl font-bold text-blue-600 mb-1" id="prep-students">٠</div><div class="text-sm text-gray-500">عدد الطلاب</div></div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-r-4 border-r-green-500"><div class="text-3xl font-bold text-green-600 mb-1" id="prep-sent">٠</div><div class="text-sm text-gray-500">تم إرسالها</div></div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-r-4 border-r-orange-500"><div class="text-3xl font-bold text-orange-600 mb-1" id="prep-unsent">٠</div><div class="text-sm text-gray-500">لم تُرسل</div></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"><div class="px-5 py-4 border-b border-gray-100 bg-purple-50"><h3 class="font-bold text-gray-800 flex items-center gap-2"><span class="material-symbols-outlined text-purple-600">trending_up</span> أكثر الطلاب استئذاناً</h3></div><div id="prep-top" class="p-4"><p class="text-gray-400 text-center py-8">اضغط "تحديث"</p></div></div>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"><div class="px-5 py-4 border-b border-gray-100 bg-amber-50"><h3 class="font-bold text-gray-800 flex items-center gap-2"><span class="material-symbols-outlined text-amber-600">pie_chart</span> حسب السبب</h3></div><div id="prep-by-reason" class="p-4"><p class="text-gray-400 text-center py-8">اضغط "تحديث"</p></div></div>
+        </div>
+    `;
+    var grades=[]; var seen={};
+    APP_DATA.students.filter(function(s){return s['المرحلة']===currentStage;}).forEach(function(s){if(!seen[s['الصف']]){seen[s['الصف']]=true;grades.push(s['الصف']);}});
+    var sel=document.getElementById('prep-grade'); sel.innerHTML='<option value="">كل الصفوف</option>'; grades.forEach(function(g){sel.add(new Option(g,g));});
+}
+
+function prepPopClasses() {
+    var grade=document.getElementById('prep-grade').value; var sel=document.getElementById('prep-class'); sel.innerHTML='<option value="">كل الفصول</option>'; sel.disabled=!grade;
+    if(grade){var seen={}; APP_DATA.students.filter(function(s){return s['المرحلة']===currentStage&&s['الصف']===grade;}).forEach(function(s){if(!seen[s['الفصل']]){seen[s['الفصل']]=true;sel.add(new Option(s['الفصل'],s['الفصل']));}}); }
+}
+
+function generatePermCharts() {
+    var grade=document.getElementById('prep-grade').value;
+    var cls=document.getElementById('prep-class').value;
+    var filtered = permAllRecords.filter(function(r) {
+        if (grade && r['الصف'] !== grade) return false;
+        if (cls && r['الفصل'] != cls) return false;
+        return true;
+    });
+    var total=filtered.length;
+    var uniqueStudents = new Set(filtered.map(function(r){return r['رقم_الطالب'];})).size;
+    var sentCount = filtered.filter(function(r){return r['تم_الإرسال']==='نعم';}).length;
+
+    document.getElementById('prep-total').textContent = total;
+    document.getElementById('prep-students').textContent = uniqueStudents;
+    document.getElementById('prep-sent').textContent = sentCount;
+    document.getElementById('prep-unsent').textContent = total - sentCount;
+
+    // أكثر الطلاب
+    var sc={};
+    filtered.forEach(function(r){var k=r['رقم_الطالب'];if(!sc[k])sc[k]={name:r['اسم_الطالب'],cls:r['الصف']+' '+r['الفصل'],count:0};sc[k].count++;});
+    var top=Object.values(sc).sort(function(a,b){return b.count-a.count;}).slice(0,10);
+    var topHtml='<div class="space-y-2">';
+    top.forEach(function(s,i){
+        topHtml+='<div class="flex items-center justify-between p-2 rounded-lg '+(i<3?'bg-purple-50':'bg-gray-50')+'"><div class="flex items-center gap-2"><span class="w-6 h-6 rounded-full '+(i<3?'bg-purple-500 text-white':'bg-gray-300 text-gray-600')+' flex items-center justify-center text-xs font-bold">'+(i+1)+'</span><div><span class="text-sm font-medium">'+escapeHtml(s.name)+'</span><span class="text-xs text-gray-400 mr-2">'+escapeHtml(s.cls)+'</span></div></div><span class="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold">'+s.count+' مرة</span></div>';
+    });
+    topHtml+='</div>';
+    document.getElementById('prep-top').innerHTML = top.length ? topHtml : '<p class="text-gray-400 text-center py-8">لا توجد بيانات</p>';
+
+    // حسب السبب
+    var rc={};
+    filtered.forEach(function(r){var k=r['السبب']||'غير محدد';rc[k]=(rc[k]||0)+1;});
+    var reasonColors=['purple','blue','amber','rose','teal','indigo'];
+    var rHtml='<div class="flex justify-center gap-4 flex-wrap">';
+    Object.entries(rc).sort(function(a,b){return b[1]-a[1];}).forEach(function(e,i){
+        var color=reasonColors[i%reasonColors.length];
+        var pct=total>0?Math.round((e[1]/total)*100):0;
+        rHtml+='<div class="text-center p-4 bg-gray-50 rounded-xl min-w-[100px]"><div class="text-2xl font-bold text-'+color+'-600 mb-1">'+e[1]+'</div><div class="text-xs text-gray-600 font-medium">'+escapeHtml(e[0])+'</div><div class="text-[10px] text-gray-400 mt-1">'+pct+'%</div></div>';
+    });
+    rHtml+='</div>';
+    document.getElementById('prep-by-reason').innerHTML = Object.keys(rc).length ? rHtml : '<p class="text-gray-400 text-center py-8">لا توجد بيانات</p>';
+}
+
+// =================================================================
+// 8. نافذة تسجيل استئذان
+// =================================================================
+function getPermAddModalHTML() {
+    var reasonOptions = PERMISSION_REASONS.map(function(r){return '<option value="'+r+'">'+r+'</option>';}).join('');
+    var receiverOptions = PERMISSION_RECEIVERS.map(function(r){return '<option value="'+r+'">'+r+'</option>';}).join('');
+    var responsibleOptions = PERMISSION_RESPONSIBLES.map(function(r){return '<option value="'+r+'">'+r+'</option>';}).join('');
+
+    return '<div id="perm-add-modal" class="fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4"><div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col"><div class="bg-gradient-to-r from-purple-500 to-purple-600 p-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white flex items-center gap-2"><span class="material-symbols-outlined">exit_to_app</span> تسجيل استئذان</h3><button onclick="closePermAddModal()" class="text-white/80 hover:text-white"><span class="material-symbols-outlined text-2xl">close</span></button></div><div class="p-6 space-y-4 overflow-y-auto flex-1"><div class="grid grid-cols-2 gap-4"><div><label class="block text-sm font-bold text-gray-700 mb-1">الصف *</label><select id="perm-add-grade" onchange="handlePermAddGradeChange()" class="w-full h-11 px-3 border border-gray-300 rounded-lg"><option value="">اختر الصف</option></select></div><div><label class="block text-sm font-bold text-gray-700 mb-1">الفصل *</label><select id="perm-add-class" onchange="handlePermAddClassChange()" class="w-full h-11 px-3 border border-gray-300 rounded-lg" disabled><option value="">اختر الفصل</option></select></div></div><div><label class="block text-sm font-bold text-gray-700 mb-1">الطلاب * <span class="text-gray-400 font-normal">(يمكنك اختيار أكثر من طالب)</span></label><select id="perm-add-students" multiple class="w-full h-48 px-3 py-2 border border-gray-300 rounded-lg" disabled><option value="">اختر الطلاب</option></select><p class="text-xs text-gray-400 mt-1">اضغط Ctrl للاختيار المتعدد</p></div><div class="grid grid-cols-2 gap-4"><div><label class="block text-sm font-bold text-gray-700 mb-1">وقت الخروج</label><input type="time" id="perm-add-exit-time" class="w-full h-11 px-3 border border-gray-300 rounded-lg"></div><div><label class="block text-sm font-bold text-gray-700 mb-1">السبب *</label><select id="perm-add-reason" class="w-full h-11 px-3 border border-gray-300 rounded-lg"><option value="">اختر السبب</option>' + reasonOptions + '</select></div></div><div class="grid grid-cols-2 gap-4"><div><label class="block text-sm font-bold text-gray-700 mb-1">المستلم *</label><select id="perm-add-receiver" class="w-full h-11 px-3 border border-gray-300 rounded-lg"><option value="">اختر المستلم</option>' + receiverOptions + '</select></div><div><label class="block text-sm font-bold text-gray-700 mb-1">المسؤول *</label><select id="perm-add-responsible" class="w-full h-11 px-3 border border-gray-300 rounded-lg"><option value="">اختر المسؤول</option>' + responsibleOptions + '</select></div></div></div><div class="bg-gray-50 p-4 border-t flex gap-3 justify-end"><button onclick="closePermAddModal()" class="px-5 py-2 text-gray-600 font-bold hover:bg-gray-200 rounded-lg">إلغاء</button><button onclick="savePermMultiple()" class="px-6 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700">حفظ</button></div></div></div>';
+}
+
+function getPermSendModalHTML() {
+    return '<div id="perm-send-modal" class="fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4"><div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-2xl overflow-hidden"><div class="bg-gradient-to-r from-green-500 to-green-600 p-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white flex items-center gap-2"><span class="material-symbols-outlined">send</span> إرسال إشعار</h3><button onclick="closePermSendModal()" class="text-white/80 hover:text-white"><span class="material-symbols-outlined text-2xl">close</span></button></div><div class="p-6"><textarea id="perm-send-message" rows="6" class="w-full p-4 border border-gray-300 rounded-xl resize-none text-sm"></textarea></div><div class="bg-gray-50 p-4 border-t flex gap-3 justify-end"><button onclick="closePermSendModal()" class="px-5 py-2 text-gray-600 font-bold hover:bg-gray-200 rounded-lg">إلغاء</button><button onclick="sendPermMessages()" class="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700">إرسال</button></div></div></div>';
+}
+
+// =================================================================
+// 9. دوال النوافذ
+// =================================================================
+function openPermAddModal() {
+    document.getElementById('perm-add-modal').classList.remove('hidden');
+    populatePermAddGrades();
+    var now = new Date(); document.getElementById('perm-add-exit-time').value = now.toTimeString().slice(0,5);
+}
+function closePermAddModal() { document.getElementById('perm-add-modal').classList.add('hidden'); }
+function closePermSendModal() { document.getElementById('perm-send-modal').classList.add('hidden'); }
+
+function populatePermAddGrades() {
+    var grades=[]; var seen={};
+    APP_DATA.students.filter(function(s){return s['المرحلة']===currentStage;}).forEach(function(s){if(!seen[s['الصف']]){seen[s['الصف']]=true;grades.push(s['الصف']);}});
+    var gradeOrder=["أول","ثاني","ثالث"]; grades.sort(function(a,b){var iA=gradeOrder.findIndex(function(k){return a.includes(k)});var iB=gradeOrder.findIndex(function(k){return b.includes(k)});return iA-iB;});
+    var sel=document.getElementById('perm-add-grade'); sel.innerHTML='<option value="">اختر الصف</option>'; grades.forEach(function(g){sel.add(new Option(g,g));});
+}
+
+function handlePermAddGradeChange() {
+    var grade=document.getElementById('perm-add-grade').value; var cs=document.getElementById('perm-add-class'); var ss=document.getElementById('perm-add-students');
+    cs.innerHTML='<option value="">اختر الفصل</option>'; ss.innerHTML='<option value="">اختر الطلاب</option>'; cs.disabled=!grade; ss.disabled=true;
+    if(grade){var classes=[],seen={}; APP_DATA.students.filter(function(s){return s['المرحلة']===currentStage&&s['الصف']===grade;}).forEach(function(s){if(!seen[s['الفصل']]){seen[s['الفصل']]=true;classes.push(s['الفصل']);}}); classes.sort(); classes.forEach(function(c){cs.add(new Option(c,c));});}
+}
+
+function handlePermAddClassChange() {
+    var grade=document.getElementById('perm-add-grade').value; var cls=document.getElementById('perm-add-class').value; var ss=document.getElementById('perm-add-students');
+    ss.innerHTML=''; ss.disabled=!cls;
+    if(grade&&cls){var students=APP_DATA.students.filter(function(s){return s['المرحلة']===currentStage&&s['الصف']===grade&&s['الفصل']==cls;}); students.sort(function(a,b){return a['اسم الطالب'].localeCompare(b['اسم الطالب'],'ar');}); students.forEach(function(s){var opt=new Option(s['اسم الطالب'],s['رقم الطالب']); opt.dataset.name=s['اسم الطالب']; opt.dataset.grade=s['الصف']; opt.dataset.class=s['الفصل']; opt.dataset.phone=s['رقم الجوال']||''; ss.add(opt);});}
+}
+
+function savePermMultiple() {
+    var exitTime=document.getElementById('perm-add-exit-time').value;
+    var reason=document.getElementById('perm-add-reason').value;
+    var receiver=document.getElementById('perm-add-receiver').value;
+    var responsible=document.getElementById('perm-add-responsible').value;
+    var selectedOptions=Array.from(document.getElementById('perm-add-students').selectedOptions);
+
+    if(selectedOptions.length===0){showEnhancedToast('warning','يرجى اختيار طالب واحد على الأقل');return;}
+    if(!reason){showEnhancedToast('warning','يرجى اختيار السبب');return;}
+    if(!receiver){showEnhancedToast('warning','يرجى اختيار المستلم');return;}
+    if(!responsible){showEnhancedToast('warning','يرجى اختيار المسؤول');return;}
+
+    var students=selectedOptions.map(function(opt){return{studentId:opt.value,studentName:opt.dataset.name,grade:opt.dataset.grade,class:opt.dataset.class,phone:opt.dataset.phone};});
+    var data={stage:currentStage,exitTime:exitTime,reason:reason,receiver:receiver,responsible:responsible,students:students};
+
+    showEnhancedToast('info','جاري حفظ '+students.length+' طالب...');
+    google.script.run.withSuccessHandler(function(res){
+        if(res.success){showEnhancedToast('success',res.message);closePermAddModal();loadPermTodayRecords();}
+        else showEnhancedToast('danger','خطأ: '+res.error);
+    }).withFailureHandler(function(err){showEnhancedToast('danger','خطأ: '+err);}).savePermissionRecords(data);
+}
+
+// =================================================================
+// توثيق التواصل - الاستئذان
+// =================================================================
+function printPermTodayDoc(formId, idx) {
+    var rec = permTodayRecords[idx];
+    if (!rec) return;
+    var today = new Date();
+    var printData = {
+        studentName: rec['اسم_الطالب'] || '',
+        grade: (getF_(rec, 'الصف')) + ' / ' + (getF_(rec, 'الفصل')),
+        violationDate: today.toLocaleDateString('ar-SA-u-ca-islamic'),
+        violationDay: today.toLocaleDateString('ar-SA', {weekday: 'long'}),
+        contactType: 'استئذان',
+        contactReason: 'استئذان - ' + (rec['السبب'] || '') + ' | وقت الخروج: ' + (rec['وقت_الخروج'] || '') + ' | المستلم: ' + (rec['المستلم'] || ''),
+        contactResult: getF_(rec, 'تم_الإرسال') === 'نعم' ? 'تم التواصل عبر الواتساب' : 'لم يتم الإرسال بعد',
+        notes: ''
+    };
+    if (typeof APP_DATA !== 'undefined' && APP_DATA.settings && APP_DATA.settings.manager) printData.managerName = APP_DATA.settings.manager;
+    printFormDirectly(formId, encodeURIComponent(JSON.stringify(printData)));
+}
+
+function printPermDetailDoc() {
+    var modal = document.getElementById('perm-detail-modal');
+    if (modal.classList.contains('hidden')) return;
+    var title = document.getElementById('perm-detail-title').textContent;
+    var parts = title.split(' - ');
+    var name = parts[0] || '';
+    var grade = parts[1] || '';
+    var today = new Date();
+    var printData = {
+        studentName: name,
+        grade: grade,
+        violationDate: today.toLocaleDateString('ar-SA-u-ca-islamic'),
+        violationDay: today.toLocaleDateString('ar-SA', {weekday: 'long'}),
+        contactType: 'استئذان',
+        contactReason: 'استئذان متكرر',
+        contactResult: 'تم التواصل عبر الواتساب',
+        notes: ''
+    };
+    if (typeof APP_DATA !== 'undefined' && APP_DATA.settings && APP_DATA.settings.manager) printData.managerName = APP_DATA.settings.manager;
+    printFormDirectly('tawtheeq_tawasol', encodeURIComponent(JSON.stringify(printData)));
+}
+
+function printPermContactReport() {
+    var records = permAllRecords || [];
+    var sent = records.filter(function(r) { return getF_(r, 'تم_الإرسال') === 'نعم'; });
+    if (sent.length === 0) { showEnhancedToast('warning', 'لا يوجد سجلات تم إرسالها'); return; }
+    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var rows = '';
+    sent.forEach(function(rec, i) {
+        rows += '<tr>'
+            + '<td class="data-cell">' + toArShared_(i+1) + '</td>'
+            + '<td class="name-cell">' + escapeHtml(getF_(rec, 'اسم_الطالب') || '') + '</td>'
+            + '<td class="data-cell">' + formatClassShared_(getF_(rec, 'الصف'), getF_(rec, 'الفصل')) + '</td>'
+            + '<td class="detail-cell">' + escapeHtml(getF_(rec, 'السبب') || '-') + '</td>'
+            + '<td class="data-cell">' + escapeHtml(getF_(rec, 'التاريخ_هجري') || '') + '</td>'
+            + '<td class="data-cell" style="color:green;font-weight:bold">تم</td>'
+            + '</tr>';
+    });
+    var win = window.open('', '_blank');
+    win.document.write(buildSharedPrintPage_({
+        title: 'تقرير التواصل مع أولياء الأمور',
+        subtitle: 'الاستئذان - ' + currentStage,
+        dateText: hijri + ' | عدد الطلاب: ' + toArShared_(sent.length),
+        colCount: 6,
+        headers: '<th class="col-header">م</th><th class="col-header" style="width:28%">اسم الطالب</th><th class="col-header">الصف</th><th class="col-header">السبب</th><th class="col-header">التاريخ</th><th class="col-header">التواصل</th>',
+        rows: rows,
+        total: toArShared_(sent.length) + ' سجل'
+    }));
+    win.document.close(); setTimeout(function(){ win.focus(); win.print(); }, 300);
+}
+
+</script>

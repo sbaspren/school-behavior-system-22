@@ -1,0 +1,1141 @@
+<script>
+// =================================================================
+// لوحة المتابعة — JS_Dashboard.html (v2)
+// =================================================================
+
+var dashboardData = null;
+var dashLoading = false;
+
+// ★ فلترة البيانات حسب المرحلة المختارة
+function dashGetStage_() {
+  return (typeof currentStage !== 'undefined' && currentStage) ? currentStage : '';
+}
+function dashFilterByStage_(arr) {
+  var stage = dashGetStage_();
+  if (!arr || !Array.isArray(arr)) return [];
+  return arr.filter(function(item) { return item.stage === stage; });
+}
+
+// ═══════ المناسبات والإجازات — التقويم الدراسي ١٤٤٧/١٤٤٨ (فصلين) ═══════
+// ★ نسخة محلية للعرض الفوري — النسخة المرجعية على الخادم (getSchoolCalendarData)
+var EVENTS_DATA = [
+  // الفصل الأول
+  {d:24,m:8,  label:'بداية العام الدراسي 📚', type:'event'},
+  {d:23,m:9,  label:'إجازة اليوم الوطني 🇸🇦', type:'national', holiday:true},
+  {d:5, m:10, label:'يوم المعلم العالمي 👨‍🏫', type:'event'},
+  {d:12,m:10, label:'إجازة إضافية', type:'holiday', holiday:true},
+  {d:16,m:10, label:'يوم الغذاء العالمي 🍎', type:'event'},
+  {d:16,m:11, label:'اليوم العالمي للتسامح 🤝', type:'event'},
+  {d:20,m:11, label:'اليوم العالمي للطفل 👶', type:'event'},
+  {d:21,m:11, label:'بداية إجازة الخريف 🍂', type:'holiday', holiday:true},
+  {d:3, m:12, label:'اليوم العالمي لذوي الإعاقة ♿', type:'event'},
+  {d:11,m:12, label:'إجازة إضافية', type:'holiday', holiday:true},
+  {d:18,m:12, label:'اليوم العالمي للغة العربية 📖', type:'event'},
+  // إجازة منتصف العام
+  {d:9, m:1,  label:'بداية إجازة منتصف العام 🎉', type:'holiday', holiday:true},
+  // الفصل الثاني
+  {d:18,m:1,  label:'بداية الفصل الثاني 📚', type:'event'},
+  {d:24,m:1,  label:'اليوم الدولي للتعليم 🎓', type:'event'},
+  {d:22,m:2,  label:'يوم التأسيس السعودي 🇸🇦', type:'national', holiday:true},
+  {d:6, m:3,  label:'بداية إجازة عيد الفطر 🌙', type:'holiday', holiday:true},
+  {d:28,m:3,  label:'نهاية إجازة عيد الفطر', type:'event'},
+  {d:11,m:3,  label:'يوم العلم السعودي 🏴', type:'national'},
+  {d:7, m:4,  label:'اليوم العالمي للصحة 🏥', type:'event'},
+  {d:22,m:5,  label:'بداية إجازة عيد الأضحى 🐑', type:'holiday', holiday:true},
+  {d:1, m:6,  label:'نهاية إجازة عيد الأضحى', type:'event'},
+  {d:25,m:6,  label:'بداية إجازة نهاية العام 🎉', type:'holiday', holiday:true}
+];
+
+function getMonthEvents_(month) {
+  return EVENTS_DATA.filter(function(e) { return e.m === month + 1; });
+}
+function getHolidayDays_(month) {
+  return EVENTS_DATA.filter(function(e) { return e.m === month + 1 && e.holiday; }).map(function(e) { return e.d; });
+}
+function getNextEvent_() {
+  var now = new Date();
+  var best = null, bestDiff = 999;
+  for (var i = 0; i < EVENTS_DATA.length; i++) {
+    var e = EVENTS_DATA[i];
+    var evDate = new Date(now.getFullYear(), e.m - 1, e.d);
+    var diff = Math.ceil((evDate - now) / 86400000);
+    if (diff >= 0 && diff < bestDiff) { bestDiff = diff; best = {ev: e, days: diff}; }
+  }
+  return best;
+}
+
+// ★ المناسبات القادمة (أقرب N مناسبة)
+function getUpcomingEvents_(count) {
+  var now = new Date();
+  var all = [];
+  for (var i = 0; i < EVENTS_DATA.length; i++) {
+    var e = EVENTS_DATA[i];
+    var ed = new Date(now.getFullYear(), e.m - 1, e.d);
+    if (ed < now) ed = new Date(now.getFullYear() + 1, e.m - 1, e.d);
+    var diff = Math.ceil((ed - now) / 86400000);
+    all.push({ev: e, days: diff});
+  }
+  all.sort(function(a, b) { return a.days - b.days; });
+  return all.slice(0, count || 3);
+}
+
+
+// ═══════ جدول حصص المعلمين ═══════
+// ★ يُفضل نقل هذه البيانات لورقة إعدادات في الجدول مستقبلاً
+var SCHEDULE_DATA = {"0_1":[["إبراهيم العاصمي","1ث-أ","الكفايات اللغوية","ث"],["ابراهيم الدريمي","1م-أ","الإسلامية","م"],["احمد الهلالي","3ث-أ","الدراسات النفسية","ث"],["تركي العصيمي","2م-أ","البدنية","م"],["توفيق فايع","1ث-ب","التربية البدنية","ث"],["طارق الأحمري","2ث-أ","الإنجليزية","ث"],["عبدالعزيز رفدان","3ث-ب","الأرض والفضاء","ث"],["عبدالله الحيدي","1م-ب","الإنجليزية","م"],["محمد البشري","2م-ب","الإسلامية","م"],["محمد ابوطالب","3م-أ","الإنجليزية","م"],["محمد أبوحذيفة","2ث-ب","الكيمياء","ث"],["محمد الغرابي","3م-ب","العلوم","م"]],"0_2":[["إبراهيم العاصمي","3ث-أ","الدراسات الأدبية","ث"],["احمد الهلالي","3ث-ب","الدراسات النفسية","ث"],["تركي العصيمي","1م-ب","البدنية","م"],["توفيق فايع","1ث-أ","التربية البدنية","ث"],["خالد آل ماطر","2ث-ب","الرياضيات","ث"],["عامر آل مضواح","2م-ب","الرياضيات","م"],["عبدالله الحيدي","1م-أ","الإنجليزية","م"],["على فايع","3م-ب","العربية","م"],["محمد الأحمري","1ث-ب","المعرفة المالية","ث"],["محمد البشري","2م-أ","الإسلامية","م"],["محمد أبوحذيفة","2ث-أ","الكيمياء","ث"],["محمد الغرابي","3م-أ","العلوم","م"]],"1_3":[["إبراهيم العاصمي","1ث-ب","الكفايات اللغوية","ث"],["احمد حفاف","3ث-ب","رياضيات","ث"],["تركي العصيمي","3م-أ","البدنية","م"],["خالد آل ماطر","2ث-ب","الرياضيات","ث"],["سعد آل مداوي","1م-ب","الرياضيات","م"],["سعيد آل مبارك","2ث-أ","التوحيد","ث"],["سعيد آل فايع","2م-ب","الإنجليزية","م"],["على فايع","3م-ب","العربية","م"],["علي آل ماطر","3ث-أ","فيزياء","ث"],["محمد المالكي","1م-أ","الرقمية","م"],["محمد آل عيسى","1ث-أ","الإنجليزية","ث"],["موسى سعيد","2م-أ","الفنية","م"]],"1_4":[["إبراهيم العاصمي","1ث-أ","الكفايات اللغوية","ث"],["احمد حفاف","3م-أ","الرياضيات","م"],["حاتم سعد","3م-ب","الرقمية","م"],["خالد آل ماطر","2ث-أ","الرياضيات","ث"],["سعيد آل فايع","3ث-أ","انجليزي","ث"],["عامر آل مضواح","2م-ب","الرياضيات","م"],["عبدالله التيهاني","1م-أ","الاجتماعية","م"],["محمد آل فرحان","3ث-ب","المواطنة الرقمية","ث"],["محمد آل عيسى","1ث-ب","الإنجليزية","ث"],["محمد البشري","2م-أ","الإسلامية","م"],["محمد أبوحذيفة","2ث-ب","الكيمياء","ث"],["محمد ال مسلط","1م-ب","العلوم","م"]],"1_6":[["إبراهيم العاصمي","3ث-ب","الدراسات الأدبية","ث"],["ابراهيم الدريمي","1م-أ","الإسلامية","م"],["احمد الهلالي","3ث-أ","الدراسات النفسية","ث"],["خالد آل ماطر","3م-ب","الرياضيات","م"],["طارق الأحمري","2ث-ب","الإنجليزية","ث"],["عامر آل مضواح","1ث-أ","الرياضيات","ث"],["عبدالرحمن زامل","2م-أ","العلوم","م"],["عبدالله الحيدي","1م-ب","الإنجليزية","م"],["علي الشهري","2ث-أ","الأحياء","ث"],["محمد الأحمري","1ث-ب","التربية المهنية","ث"],["مسفر الوادعي","2م-ب","العربية","م"],["موسى سعيد","3م-أ","الفنية","م"]],"2_3":[["إبراهيم العاصمي","3ث-أ","الدراسات الأدبية","ث"],["احمد حفاف","3م-أ","الرياضيات","م"],["احمد الهلالي","3ث-ب","الدراسات النفسية","ث"],["حسن مسفر","1ث-أ","علم البيئة","ث"],["سعد آل مداوي","1م-ب","الرياضيات","م"],["عامر آل مضواح","1ث-ب","الرياضيات","ث"],["عبدالله مشبب","2م-ب","الاجتماعية","م"],["عبدالله التيهاني","1م-أ","الاجتماعية","م"],["عبدالله الحيدي","2م-أ","الإنجليزية","م"],["محمد أبوحذيفة","2ث-ب","الكيمياء","ث"],["محمد الغرابي","3م-ب","العلوم","م"],["موسى سعيد","2ث-أ","الفنون","ث"]],"2_4":[["إبراهيم العاصمي","1ث-ب","الكفايات اللغوية","ث"],["احمد حفاف","3م-أ","الرياضيات","م"],["خالد آل ماطر","3م-ب","الرياضيات","م"],["سعد آل مداوي","2م-أ","الرياضيات","م"],["عبدالله مشبب","3ث-أ","الحياتية","ث"],["عبدالله آل حموض","2ث-ب","التقنية الرقمية","ث"],["محمد آل فرحان","3ث-ب","المواطنة الرقمية","ث"],["محمد آل عيسى","1ث-أ","الإنجليزية","ث"],["محمد أبوحذيفة","2ث-أ","الكيمياء","ث"],["محمد ال مسلط","1م-ب","العلوم","م"],["مسفر الوادعي","1م-أ","العربية","م"],["موسى سعيد","2م-ب","الفنية","م"]],"3_5":[["إبراهيم العاصمي","3ث-ب","الدراسات الأدبية","ث"],["حسن مسفر","1ث-أ","علم البيئة","ث"],["خالد آل ماطر","2ث-أ","الرياضيات","ث"],["خالد الشهراني","3ث-أ","الجغرافيا","ث"],["طارق الأحمري","2ث-ب","الإنجليزية","ث"],["عامر آل مضواح","2م-ب","الرياضيات","م"],["عبدالله مشبب","2م-أ","حياتية","م"],["عبدالله الحيدي","1م-ب","الإنجليزية","م"],["على فايع","3م-ب","العربية","م"],["محمد ال شيبان","1ث-ب","الحديث","ث"],["محمد ابوطالب","3م-أ","الإنجليزية","م"],["مسفر الوادعي","1م-أ","العربية","م"]],"4_1":[["إبراهيم العاصمي","1ث-أ","الكفايات اللغوية","ث"],["ابراهيم الدريمي","1م-ب","الإسلامية","م"],["عبدالله آل حموض","2ث-أ","التقنية الرقمية","ث"],["عبدالله الحيدي","1م-أ","الإنجليزية","م"],["علي ابو فايده","3ث-ب","فيزياء","ث"],["محمد المالكي","2م-ب","الرقمية","م"],["محمد آل فرحان","3ث-أ","المواطنة الرقمية","ث"],["محمد الأحمري","1ث-ب","المعرفة المالية","ث"],["محمد البشري","2م-أ","الإسلامية","م"],["محمد ابوطالب","3م-ب","الإنجليزية","م"],["محمد أبوحذيفة","2ث-ب","الكيمياء","ث"],["موسى سعيد","3م-أ","الفنية","م"]],"4_2":[["إبراهيم العاصمي","1ث-ب","الكفايات اللغوية","ث"],["ابراهيم الدريمي","1م-أ","الإسلامية","م"],["احمد حسن","3ث-ب","مهارات إدارية","ث"],["خالد آل ماطر","2ث-ب","الرياضيات","ث"],["سعد آل مداوي","1م-ب","الرياضيات","م"],["عبدالله مشبب","2م-ب","حياتية","م"],["عبدالله الحيدي","2م-أ","الإنجليزية","م"],["على فايع","3م-ب","العربية","م"],["علي آل ماطر","3ث-أ","فيزياء","ث"],["محمد ال شيبان","1ث-أ","الحديث","ث"],["محمد آل فرحان","3م-أ","الاجتماعية","م"],["محمد أبوحذيفة","2ث-أ","الكيمياء","ث"]],"0_3":[["ابراهيم الدريمي","1م-ب","الإسلامية","م"],["تركي العصيمي","3م-ب","البدنية","م"],["سعد آل مداوي","2م-أ","الرياضيات","م"],["طارق الأحمري","2ث-ب","الإنجليزية","ث"],["عبدالرحمن زامل","2م-ب","العلوم","م"],["عبدالله التيهاني","3ث-ب","الحياتية","ث"],["على فايع","3م-أ","العربية","م"],["محمد ال شيبان","3ث-أ","الفقه","ث"],["محمد الأحمري","1ث-أ","المعرفة المالية","ث"],["محمد آل عيسى","1ث-ب","الإنجليزية","ث"],["مسفر الوادعي","1م-أ","العربية","م"],["موسى سعيد","2ث-أ","الفنون","ث"]],"1_7":[["ابراهيم الدريمي","1م-ب","الإسلامية","م"],["احمد حسن","3ث-أ","مهارات إدارية","ث"],["حاتم سعد","1ث-أ","التقنية الرقمية","ث"],["حسن مسفر","1ث-ب","علم البيئة","ث"],["طارق الأحمري","2ث-أ","الإنجليزية","ث"],["عبدالرحمن زامل","2م-ب","العلوم","م"],["عبدالعزيز رفدان","3ث-ب","الأرض والفضاء","ث"],["عبدالله الحيدي","2م-أ","الإنجليزية","م"],["علي الشهري","2ث-ب","الأحياء","ث"],["محمد زامل","3م-أ","الإسلامية","م"],["محمد الغرابي","3م-ب","العلوم","م"],["مسفر الوادعي","1م-أ","العربية","م"]],"2_1":[["ابراهيم الدريمي","1م-ب","الإسلامية","م"],["خالد الشهراني","1ث-ب","الدراسات الاجتماعية","ث"],["سعيد آل مبارك","3ث-ب","الفقه","ث"],["طارق الأحمري","2ث-ب","الإنجليزية","ث"],["عبدالله مشبب","2م-أ","الاجتماعية","م"],["عبدالله الحيدي","1م-أ","الإنجليزية","م"],["علي الشهري","2ث-أ","الأحياء","ث"],["محمد ال شيبان","3ث-أ","الفقه","ث"],["محمد الأحمري","1ث-أ","المعرفة المالية","ث"],["محمد زامل","3م-ب","الإسلامية","م"],["محمد البشري","2م-ب","الإسلامية","م"],["محمد الغرابي","3م-أ","العلوم","م"]],"2_2":[["ابراهيم الدريمي","1م-أ","الإسلامية","م"],["احمد حسن","3ث-أ","مهارات إدارية","ث"],["احمد الهلالي","3م-ب","التفكير الناقد","م"],["خالد الشهراني","1ث-أ","الدراسات الاجتماعية","ث"],["طارق الأحمري","2ث-أ","الإنجليزية","ث"],["عامر آل مضواح","2م-ب","الرياضيات","م"],["عايض الساكتي","1ث-ب","الفيزياء","ث"],["عبدالله الحيدي","1م-ب","الإنجليزية","م"],["علي ابو فايده","3ث-ب","فيزياء","ث"],["علي الشهري","2ث-ب","الأحياء","ث"],["محمد زامل","3م-أ","الإسلامية","م"],["محمد البشري","2م-أ","الإسلامية","م"]],"3_4":[["ابراهيم الدريمي","1م-ب","الإسلامية","م"],["احمد حسن","3ث-ب","مهارات إدارية","ث"],["احمد حفاف","3م-أ","الرياضيات","م"],["خالد آل ماطر","2ث-ب","الرياضيات","ث"],["سعد آل مداوي","1م-أ","الرياضيات","م"],["طارق الأحمري","2ث-أ","الإنجليزية","ث"],["عامر آل مضواح","1ث-ب","الرياضيات","ث"],["عبدالرحمن زامل","2م-ب","العلوم","م"],["عبدالله مشبب","3ث-أ","الحياتية","ث"],["محمد آل عيسى","1ث-أ","الإنجليزية","ث"],["مسفر الوادعي","2م-أ","العربية","م"],["موسى سعيد","3م-ب","الفنية","م"]],"3_6":[["ابراهيم الدريمي","1م-أ","الإسلامية","م"],["حاتم سعد","1ث-ب","التقنية الرقمية","ث"],["خالد الشهراني","1ث-أ","الدراسات الاجتماعية","ث"],["سعد آل مداوي","1م-ب","الرياضيات","م"],["عبدالله آل حموض","2ث-ب","النشاط","ث"],["عبدالله الحيدي","2م-أ","الإنجليزية","م"],["على فايع","3م-أ","العربية","م"],["علي ابو فايده","3ث-ب","النشاط","ث"],["علي الشهري","2ث-أ","النشاط","ث"],["علي آل ماطر","3ث-أ","النشاط","ث"],["محمد البشري","2م-ب","الإسلامية","م"],["محمد ابوطالب","3م-ب","الإنجليزية","م"]],"4_7":[["ابراهيم الدريمي","1م-ب","النشاط","م"],["حاتم سعد","3م-أ","النشاط","م"],["عبدالرحمن زامل","2م-ب","النشاط","م"],["محمد المالكي","2م-أ","النشاط","م"],["محمد ابوطالب","3م-ب","النشاط","م"],["محمد ال مسلط","1م-أ","النشاط","م"]],"0_4":[["احمد حفاف","3ث-ب","رياضيات","ث"],["خالد آل ماطر","3م-ب","الرياضيات","م"],["خالد الشهراني","1ث-ب","الدراسات الاجتماعية","ث"],["سعد آل مداوي","1م-أ","الرياضيات","م"],["سعيد آل فايع","3ث-أ","انجليزي","ث"],["عامر آل مضواح","1ث-أ","الرياضيات","ث"],["عبدالرحمن زامل","2م-أ","العلوم","م"],["على فايع","1م-ب","العربية","م"],["علي الشهري","2ث-أ","الأحياء","ث"],["محمد زامل","3م-أ","الإسلامية","م"],["مسفر الوادعي","2م-ب","العربية","م"],["موسى سعيد","2ث-ب","الفنون","ث"]],"0_5":[["احمد حفاف","3ث-أ","رياضيات","ث"],["خالد آل ماطر","2ث-أ","الرياضيات","ث"],["سعد آل مداوي","1م-ب","الرياضيات","م"],["سعيد آل فايع","3ث-ب","انجليزي","ث"],["عامر آل مضواح","1ث-ب","الرياضيات","ث"],["عبدالله مشبب","2م-ب","الاجتماعية","م"],["عبدالله التيهاني","1م-أ","الاجتماعية","م"],["علي الشهري","2ث-ب","الأحياء","ث"],["محمد آل فرحان","3م-أ","الاجتماعية","م"],["محمد آل عيسى","1ث-أ","الإنجليزية","ث"],["محمد ابوطالب","3م-ب","الإنجليزية","م"],["مسفر الوادعي","2م-أ","العربية","م"]],"0_6":[["احمد حفاف","3م-أ","الرياضيات","م"],["حاتم سعد","1ث-أ","التقنية الرقمية","ث"],["خالد الشهراني","3ث-ب","الجغرافيا","ث"],["سعيد آل مبارك","2ث-أ","التوحيد","ث"],["عبدالله مشبب","2م-أ","الاجتماعية","م"],["عبدالله التيهاني","1م-ب","الاجتماعية","م"],["عبدالله آل حموض","2ث-ب","التقنية الرقمية","ث"],["محمد ال شيبان","1ث-ب","الحديث","ث"],["محمد المالكي","2م-ب","الرقمية","م"],["محمد آل فرحان","3ث-أ","المواطنة الرقمية","ث"],["محمد ال مسلط","1م-أ","العلوم","م"],["موسى سعيد","3م-ب","الفنية","م"]],"1_2":[["احمد حفاف","3ث-أ","رياضيات","ث"],["تركي العصيمي","1م-أ","البدنية","م"],["توفيق فايع","2ث-ب","الصحية","ث"],["حاتم سعد","1ث-ب","التقنية الرقمية","ث"],["خالد آل ماطر","3م-ب","الرياضيات","م"],["خالد الشهراني","3ث-ب","الجغرافيا","ث"],["سعد آل مداوي","2م-أ","الرياضيات","م"],["عايض الساكتي","1ث-أ","الفيزياء","ث"],["عبدالله التيهاني","1م-ب","الاجتماعية","م"],["عبدالله آل حموض","2ث-أ","التقنية الرقمية","ث"],["على فايع","3م-أ","العربية","م"],["موسى سعيد","2م-ب","الفنية","م"]],"2_6":[["احمد حفاف","3ث-ب","رياضيات","ث"],["تركي العصيمي","3م-ب","البدنية","م"],["توفيق فايع","2ث-ب","الصحية","ث"],["حاتم سعد","1ث-أ","التقنية الرقمية","ث"],["خالد آل ماطر","2ث-أ","الرياضيات","ث"],["سعد آل مداوي","1م-أ","الرياضيات","م"],["سعيد آل فايع","3ث-أ","انجليزي","ث"],["عامر آل مضواح","2م-ب","الرياضيات","م"],["على فايع","3م-أ","العربية","م"],["محمد آل عيسى","1ث-ب","الإنجليزية","ث"],["مسفر الوادعي","2م-أ","العربية","م"],["موسى سعيد","1م-ب","الفنية","م"]],"3_2":[["احمد حفاف","3ث-أ","رياضيات","ث"],["تركي العصيمي","3م-أ","البدنية","م"],["توفيق فايع","2ث-أ","الصحية","ث"],["خالد آل ماطر","3م-ب","الرياضيات","م"],["سعيد آل فايع","2م-ب","الإنجليزية","م"],["عبدالرحمن زامل","2م-أ","العلوم","م"],["عبدالله التيهاني","3ث-ب","الحياتية","ث"],["محمد المالكي","1م-ب","الرقمية","م"],["محمد الأحمري","1ث-أ","التربية المهنية","ث"],["محمد آل عيسى","1ث-ب","الإنجليزية","ث"],["محمد أبوحذيفة","2ث-ب","الكيمياء","ث"],["محمد ال مسلط","1م-أ","العلوم","م"]],"4_3":[["احمد حفاف","3ث-ب","رياضيات","ث"],["توفيق فايع","2ث-ب","الصحية","ث"],["خالد آل ماطر","3م-ب","الرياضيات","م"],["خالد الشهراني","1ث-ب","الدراسات الاجتماعية","ث"],["سعد آل مداوي","1م-أ","الرياضيات","م"],["سعيد آل فايع","3ث-أ","انجليزي","ث"],["طارق الأحمري","2ث-أ","الإنجليزية","ث"],["عامر آل مضواح","1ث-أ","الرياضيات","ث"],["على فايع","1م-ب","العربية","م"],["محمد البشري","2م-ب","الإسلامية","م"],["محمد الغرابي","3م-أ","العلوم","م"],["موسى سعيد","2م-أ","الفنية","م"]],"4_4":[["احمد حفاف","3م-أ","الرياضيات","م"],["احمد الهلالي","3م-ب","التفكير الناقد","م"],["تركي العصيمي","1م-أ","البدنية","م"],["توفيق فايع","1ث-أ","التربية البدنية","ث"],["حسن مسفر","1ث-ب","علم البيئة","ث"],["خالد آل ماطر","2ث-أ","الرياضيات","ث"],["سعيد آل فايع","3ث-ب","انجليزي","ث"],["عامر آل مضواح","2م-ب","الرياضيات","م"],["عبدالعزيز رفدان","3ث-أ","الأرض والفضاء","ث"],["عبدالله آل حموض","2ث-ب","التقنية الرقمية","ث"],["محمد ال مسلط","1م-ب","العلوم","م"],["مسفر الوادعي","2م-أ","العربية","م"]],"4_5":[["احمد حفاف","3ث-أ","رياضيات","ث"],["احمد الهلالي","3م-أ","التفكير الناقد","م"],["تركي العصيمي","1م-ب","البدنية","م"],["سعد آل مداوي","2م-أ","الرياضيات","م"],["سعيد آل مبارك","3ث-ب","الفقه","ث"],["طارق الأحمري","2ث-ب","الإنجليزية","ث"],["عامر آل مضواح","1ث-ب","الرياضيات","ث"],["علي الشهري","2ث-أ","الأحياء","ث"],["محمد آل عيسى","1ث-أ","الإنجليزية","ث"],["محمد زامل","3م-ب","الإسلامية","م"],["محمد ال مسلط","1م-أ","العلوم","م"],["مسفر الوادعي","2م-ب","العربية","م"]],"3_1":[["احمد الهلالي","3م-أ","التفكير الناقد","م"],["تركي العصيمي","2م-ب","البدنية","م"],["توفيق فايع","1ث-ب","التربية البدنية","ث"],["سعيد آل مبارك","2ث-ب","التوحيد","ث"],["عايض الساكتي","1ث-أ","الفيزياء","ث"],["عبدالله التيهاني","1م-أ","حياتية","م"],["عبدالله آل حموض","2ث-أ","التقنية الرقمية","ث"],["علي ابو فايده","3ث-ب","فيزياء","ث"],["علي آل ماطر","3ث-أ","فيزياء","ث"],["محمد المالكي","2م-أ","الرقمية","م"],["محمد زامل","3م-ب","الإسلامية","م"],["موسى سعيد","1م-ب","الفنية","م"]],"1_1":[["تركي العصيمي","2م-ب","البدنية","م"],["توفيق فايع","2ث-أ","الصحية","ث"],["خالد الشهراني","3ث-أ","الجغرافيا","ث"],["سعد آل مداوي","1م-أ","الرياضيات","م"],["سعيد آل فايع","3ث-ب","انجليزي","ث"],["عايض الساكتي","1ث-ب","الفيزياء","ث"],["عبدالله مشبب","2م-أ","الاجتماعية","م"],["عبدالله آل حموض","2ث-ب","التقنية الرقمية","ث"],["محمد ال شيبان","1ث-أ","الحديث","ث"],["محمد المالكي","1م-ب","الرقمية","م"],["محمد آل فرحان","3م-ب","الاجتماعية","م"],["محمد ابوطالب","3م-أ","الإنجليزية","م"]],"2_7":[["تركي العصيمي","2م-أ","البدنية","م"],["سعد آل مداوي","1م-أ","الرياضيات","م"],["سعيد آل فايع","2م-ب","الإنجليزية","م"],["على فايع","1م-ب","العربية","م"],["محمد آل فرحان","3م-أ","حياتية","م"],["محمد ابوطالب","3م-ب","الإنجليزية","م"]],"2_5":[["توفيق فايع","2ث-أ","الصحية","ث"],["حاتم سعد","1ث-ب","التقنية الرقمية","ث"],["خالد آل ماطر","2ث-ب","الرياضيات","ث"],["عامر آل مضواح","1ث-أ","الرياضيات","ث"],["عبدالرحمن زامل","2م-أ","العلوم","م"],["عبدالعزيز رفدان","3ث-ب","الأرض والفضاء","ث"],["عبدالله التيهاني","1م-ب","الاجتماعية","م"],["علي آل ماطر","3ث-أ","فيزياء","ث"],["محمد المالكي","1م-أ","الرقمية","م"],["محمد آل فرحان","3م-ب","حياتية","م"],["محمد ابوطالب","3م-أ","الإنجليزية","م"],["مسفر الوادعي","2م-ب","العربية","م"]],"0_7":[["حاتم سعد","3م-أ","الرقمية","م"],["خالد الشهراني","1ث-أ","الدراسات الاجتماعية","ث"],["سعيد آل مبارك","2ث-ب","التوحيد","ث"],["سعيد آل فايع","2م-ب","الإنجليزية","م"],["عايض الساكتي","1ث-ب","الفيزياء","ث"],["عبدالله آل حموض","2ث-أ","التقنية الرقمية","ث"],["علي ابو فايده","3ث-ب","فيزياء","ث"],["علي آل ماطر","3ث-أ","فيزياء","ث"],["محمد المالكي","2م-أ","الرقمية","م"],["محمد زامل","3م-ب","الإسلامية","م"],["محمد ال مسلط","1م-ب","العلوم","م"],["موسى سعيد","1م-أ","الفنية","م"]],"3_7":[["حاتم سعد","3م-أ","الرقمية","م"],["سعد آل مداوي","1م-ب","الرياضيات","م"],["عبدالله مشبب","2م-ب","الاجتماعية","م"],["عبدالله الحيدي","1م-أ","الإنجليزية","م"],["محمد البشري","2م-أ","الإسلامية","م"],["محمد الغرابي","3م-ب","العلوم","م"]],"4_6":[["حاتم سعد","3م-ب","الرقمية","م"],["سعد آل مداوي","2م-أ","الرياضيات","م"],["عايض الساكتي","1ث-أ","الفيزياء","ث"],["عبدالرحمن زامل","2م-ب","العلوم","م"],["عبدالله التيهاني","1م-ب","حياتية","م"],["عبدالله آل حموض","2ث-ب","النشاط","ث"],["علي ابو فايده","3ث-ب","النشاط","ث"],["علي الشهري","2ث-أ","النشاط","ث"],["علي آل ماطر","3ث-أ","النشاط","ث"],["محمد آل عيسى","1ث-ب","الإنجليزية","ث"],["محمد زامل","3م-أ","الإسلامية","م"],["مسفر الوادعي","1م-أ","العربية","م"]],"3_3":[["سعد آل مداوي","2م-أ","الرياضيات","م"],["سعيد آل فايع","3ث-ب","انجليزي","ث"],["عامر آل مضواح","1ث-أ","الرياضيات","ث"],["عبدالعزيز رفدان","3ث-أ","الأرض والفضاء","ث"],["على فايع","1م-ب","العربية","م"],["علي الشهري","2ث-ب","الأحياء","ث"],["محمد آل فرحان","3م-ب","الاجتماعية","م"],["محمد الأحمري","1ث-ب","التربية المهنية","ث"],["محمد زامل","3م-أ","الإسلامية","م"],["محمد أبوحذيفة","2ث-أ","الكيمياء","ث"],["مسفر الوادعي","2م-ب","العربية","م"],["موسى سعيد","1م-أ","الفنية","م"]],"1_5":[["عامر آل مضواح","1ث-ب","الرياضيات","ث"],["عبدالعزيز رفدان","3ث-أ","الأرض والفضاء","ث"],["على فايع","1م-ب","العربية","م"],["علي ابو فايده","3ث-ب","فيزياء","ث"],["محمد الأحمري","1ث-أ","التربية المهنية","ث"],["محمد زامل","3م-ب","الإسلامية","م"],["محمد البشري","2م-ب","الإسلامية","م"],["محمد أبوحذيفة","2ث-أ","الكيمياء","ث"],["محمد ال مسلط","1م-أ","العلوم","م"],["محمد الغرابي","3م-أ","العلوم","م"],["مسفر الوادعي","2م-أ","العربية","م"],["موسى سعيد","2ث-ب","الفنون","ث"]]};
+
+
+// ═══════ جدول التوقيت ═══════
+var TIMING_REGULAR = {
+  م:[
+    {p:1,s:'7:30',e:'8:15'},{p:2,s:'8:15',e:'9:00'},{p:3,s:'9:00',e:'9:45'},
+    {p:4,s:'10:05',e:'10:50'},{p:5,s:'10:50',e:'11:35'},{p:6,s:'11:35',e:'12:20'},
+    {p:7,s:'12:30',e:'13:15'}
+  ],
+  ث:[
+    {p:1,s:'7:30',e:'8:15'},{p:2,s:'8:15',e:'9:00'},{p:3,s:'9:20',e:'10:05'},
+    {p:4,s:'10:05',e:'10:50'},{p:5,s:'10:50',e:'11:35'},{p:6,s:'11:35',e:'12:20'},
+    {p:7,s:'12:20',e:'13:05'}
+  ]
+};
+var TIMING_RAMADAN = {
+  م:[
+    {p:1,s:'9:30',e:'10:05'},{p:2,s:'10:05',e:'10:40'},{p:3,s:'10:40',e:'11:15'},
+    {p:4,s:'11:15',e:'11:50'},{p:5,s:'11:50',e:'12:25'},{p:6,s:'12:45',e:'13:20'},
+    {p:7,s:'13:20',e:'13:55'}
+  ],
+  ث:[
+    {p:1,s:'9:30',e:'10:05'},{p:2,s:'10:05',e:'10:40'},{p:3,s:'10:40',e:'11:15'},
+    {p:4,s:'11:15',e:'11:50'},{p:5,s:'11:50',e:'12:25'},{p:6,s:'12:25',e:'13:00'},
+    {p:7,s:'13:20',e:'13:55'}
+  ]
+};
+
+// كشف رمضان تلقائياً باستخدام التقويم الهجري (يعمل كل سنة)
+function isRamadan_() {
+  try {
+    var now = new Date();
+    // استخدام التقويم الهجري لكشف الشهر التاسع (رمضان)
+    var hijriStr = now.toLocaleDateString('en-u-ca-islamic-umalqura', {month:'numeric'});
+    var hijriMonth = parseInt(hijriStr.match(/\d+/)[0]);
+    return hijriMonth === 9; // رمضان = الشهر 9 هجري
+  } catch(e) {
+    // احتياطي: تواريخ رمضان التقريبية لعدة سنوات
+    var y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+    var ramadanDates = {
+      2026: [[1, 17], [2, 18]],  // فبراير 17 - مارس 18
+      2027: [[1, 6],  [2, 7]],   // فبراير 6 - مارس 7
+      2028: [[0, 26], [1, 24]],  // يناير 26 - فبراير 24
+      2029: [[0, 15], [1, 13]]   // يناير 15 - فبراير 13
+    };
+    var dates = ramadanDates[y];
+    if (!dates) return false;
+    if (m === dates[0][0] && d >= dates[0][1]) return true;
+    if (m === dates[1][0] && d <= dates[1][1]) return true;
+    return false;
+  }
+}
+
+function getCurrentTiming_() { return isRamadan_() ? TIMING_RAMADAN : TIMING_REGULAR; }
+
+function timeToMin_(t) {
+  var p = t.split(':'); return parseInt(p[0]) * 60 + parseInt(p[1]);
+}
+
+function getCurrentPeriod_(stage) {
+  var timing = getCurrentTiming_();
+  var stg = stage === 'ثانوي' ? 'ث' : 'م';
+  var periods = timing[stg];
+  if (!periods || periods.length === 0) return null;
+  var now = new Date();
+  var nowMin = now.getHours() * 60 + now.getMinutes();
+  // البحث عن الحصة الحالية
+  for (var i = 0; i < periods.length; i++) {
+    var s = timeToMin_(periods[i].s), e = timeToMin_(periods[i].e);
+    if (nowMin >= s && nowMin < e) return periods[i];
+  }
+  // بين حصتين (فسحة/انتقال) — اعرض الحصة القادمة
+  for (var j = 0; j < periods.length; j++) {
+    if (nowMin < timeToMin_(periods[j].s)) return periods[j];
+  }
+  // بعد آخر حصة — اعرض الأخيرة مع علامة انتهت
+  return periods[periods.length - 1];
+}
+
+function getTimeRemaining_(period) {
+  var now = new Date();
+  var nowMin = now.getHours() * 60 + now.getMinutes();
+  var startMin = timeToMin_(period.s);
+  var endMin = timeToMin_(period.e);
+  if (nowMin < startMin) {
+    var toStart = startMin - nowMin;
+    return 'تبدأ بعد ' + toStart + ' د';
+  }
+  var rem = endMin - nowMin;
+  if (rem <= 0) return 'انتهت';
+  return 'باقي ' + rem + ' د';
+}
+
+
+
+// ═══════ تحية ديناميكية حسب الوقت ═══════
+function getGreeting_() {
+  var h = new Date().getHours();
+  if (h < 12) return 'صباح الخير';
+  if (h < 18) return 'مساء الخير';
+  return 'مساء الخير';
+}
+
+// ═══════ تقدم الفصل الدراسي — فصلين ١٤٤٧/١٤٤٨ ═══════
+var SEMESTER_DATES = [
+  { name: 'الفصل الأول',  start: [2025, 7, 24], end: [2026, 0, 8], weeks: 18,
+    events: [
+      {week:5,  label:'اليوم الوطني 🇸🇦', type:'national'},
+      {week:5,  label:'يوم المعلم', type:'event'},
+      {week:8,  label:'إجازة إضافية', type:'holiday'},
+      {week:13, label:'إجازة الخريف 🍂', type:'holiday'},
+      {week:16, label:'إجازة إضافية', type:'holiday'},
+      {week:17, label:'اللغة العربية 📖', type:'event'}
+    ]
+  },
+  { name: 'الفصل الثاني', start: [2026, 0, 18], end: [2026, 5, 25], weeks: 18,
+    events: [
+      {week:1,  label:'يوم التعليم', type:'event'},
+      {week:5,  label:'يوم التأسيس 🇸🇦', type:'national'},
+      {week:7,  label:'عيد الفطر 🌙', type:'holiday'},
+      {week:8,  label:'يوم العلم 🏴', type:'national'},
+      {week:12, label:'يوم الصحة', type:'event'},
+      {week:17, label:'عيد الأضحى 🐑', type:'holiday'}
+    ]
+  }
+];
+
+function getSemesterProgress_() {
+  var now = new Date();
+  for (var i = 0; i < SEMESTER_DATES.length; i++) {
+    var s = SEMESTER_DATES[i];
+    var start = new Date(s.start[0], s.start[1], s.start[2]);
+    var end = new Date(s.end[0], s.end[1], s.end[2]);
+    if (now >= start && now <= end) {
+      var total = end - start, elapsed = now - start;
+      var pct = Math.min(100, Math.round((elapsed / total) * 100));
+      var remaining = Math.ceil((end - now) / 86400000);
+      var curWeek = Math.max(1, Math.min(s.weeks, Math.floor((now - start) / (7 * 86400000)) + 1));
+      return { name: s.name, pct: pct, remaining: remaining, semIdx: i, week: curWeek, weeks: s.weeks };
+    }
+  }
+  var nextSem = null;
+  for (var j = 0; j < SEMESTER_DATES.length; j++) {
+    var ns = new Date(SEMESTER_DATES[j].start[0], SEMESTER_DATES[j].start[1], SEMESTER_DATES[j].start[2]);
+    if (ns > now) { nextSem = { idx: j, name: SEMESTER_DATES[j].name, date: ns }; break; }
+  }
+  if (nextSem) {
+    var d2n = Math.ceil((nextSem.date - now) / 86400000);
+    return { name: 'إجازة — ' + nextSem.name + ' بعد ' + d2n + ' يوم', pct: 100, remaining: d2n, semIdx: nextSem.idx > 0 ? nextSem.idx - 1 : 0, week: 18, weeks: 18 };
+  }
+  return { name: 'انتهى العام', pct: 100, remaining: 0, semIdx: 1, week: 18, weeks: 18 };
+}
+
+// ═══════ الخط الزمني ═══════
+var dashTimelineSem = -1;
+
+function buildTimelineHTML_() {
+  var sp = getSemesterProgress_();
+  dashTimelineSem = sp.semIdx;
+  var h = '<div id="dash-timeline-card" style="background:var(--c-surface,#fff);border-radius:var(--r-lg,16px);padding:16px 20px;border:1px solid var(--c-border-light,#f0f2f7);box-shadow:var(--shadow-sm,0 1px 3px rgba(0,0,0,.05))">';
+  // هيدر
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">';
+  h += '<div style="font-size:13px;font-weight:800;color:var(--c-text,#1a1d2e);display:flex;align-items:center;gap:6px"><span class="material-symbols-outlined" style="font-size:18px;color:var(--c-primary,#4f46e5)">timeline</span> الخط الزمني</div>';
+  h += '<div style="display:flex;align-items:center;gap:10px">';
+  h += '<div style="display:flex;gap:8px;align-items:center">';
+  h += '<span style="display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:var(--c-text-muted,#9da3b8)"><span style="width:6px;height:6px;border-radius:50%;background:#10b981"></span>وطنية</span>';
+  h += '<span style="display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:var(--c-text-muted,#9da3b8)"><span style="width:6px;height:6px;border-radius:50%;background:#ef4444"></span>إجازة</span>';
+  h += '<span style="display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:var(--c-text-muted,#9da3b8)"><span style="width:6px;height:6px;border-radius:50%;background:#6366f1"></span>مناسبة</span>';
+  h += '</div>';
+  h += '<div style="display:flex;gap:3px;background:#f1f5f9;border-radius:8px;padding:3px">';
+  h += '<button onclick="dashSwitchTimeline(0)" id="dash-tl-tab-0" style="padding:4px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:none;font-family:inherit;transition:all .15s;' + (sp.semIdx === 0 ? 'background:var(--c-primary,#4f46e5);color:white;box-shadow:0 2px 6px rgba(79,70,229,.25)' : 'background:transparent;color:#64748b') + '">الأول</button>';
+  h += '<button onclick="dashSwitchTimeline(1)" id="dash-tl-tab-1" style="padding:4px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:none;font-family:inherit;transition:all .15s;' + (sp.semIdx === 1 ? 'background:var(--c-primary,#4f46e5);color:white;box-shadow:0 2px 6px rgba(79,70,229,.25)' : 'background:transparent;color:#64748b') + '">الثاني</button>';
+  h += '</div></div></div>';
+  // منطقة الخط الزمني
+  h += '<div style="position:relative;padding:40px 0 0"><div id="dash-tl-needle" style="position:absolute;top:-2px;z-index:10;display:flex;flex-direction:column;align-items:center;transition:right .6s ease"></div>';
+  h += '<div style="position:relative;height:30px;background:#f1f5f9;border-radius:15px;overflow:visible"><div id="dash-tl-progress" style="height:100%;background:linear-gradient(90deg,var(--c-primary,#4f46e5),#8b5cf6);border-radius:15px;position:absolute;top:0;right:0;transition:width .6s ease;z-index:1"></div>';
+  h += '<div id="dash-tl-weeks" style="display:flex;width:100%;position:relative;z-index:2"></div></div>';
+  h += '<div id="dash-tl-events" style="position:relative;height:24px;margin-top:4px"></div>';
+  h += '<div id="dash-tl-labels" style="display:flex;width:100%"></div></div>';
+  // ملخص
+  h += '<div id="dash-tl-summary" style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--c-border-light,#f0f2f7);flex-wrap:wrap;gap:6px"></div>';
+  h += '</div>';
+  return h;
+}
+
+function dashRenderTimeline_(semIdx) {
+  dashTimelineSem = semIdx;
+  var sem = SEMESTER_DATES[semIdx];
+  var now = new Date();
+  var start = new Date(sem.start[0], sem.start[1], sem.start[2]);
+  var end = new Date(sem.end[0], sem.end[1], sem.end[2]);
+  var isCurrent = (now >= start && now <= end);
+  var curWeek = isCurrent ? Math.max(1, Math.min(sem.weeks, Math.floor((now - start) / (7 * 86400000)) + 1)) : (now > end ? sem.weeks : 0);
+  var pct = isCurrent ? Math.min(100, Math.round(((now - start) / (end - start)) * 100)) : (now > end ? 100 : 0);
+  var dayNames = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  var holidayWeeks = {};
+  for (var e = 0; e < sem.events.length; e++) { if (sem.events[e].type === 'holiday') holidayWeeks[sem.events[e].week] = true; }
+
+  // الأسابيع
+  var wh = '', lh = '';
+  for (var w = 1; w <= sem.weeks; w++) {
+    var cls = 'passed';
+    if (isCurrent) { if (w > curWeek) cls = 'future'; else if (w === curWeek) cls = 'current'; }
+    else if (now < start) cls = 'future';
+    var isHol = holidayWeeks[w];
+    var bg = '', clr = '';
+    if (cls === 'current') { clr = 'color:white;font-weight:900;font-size:10px;'; }
+    else if (cls === 'passed') { clr = 'color:rgba(255,255,255,.7);'; }
+    else { clr = 'color:#94a3b8;'; }
+    if (isHol) bg = cls === 'future' ? 'background:rgba(239,68,68,.1);' : 'background:rgba(239,68,68,.2);';
+    var brd = w < sem.weeks ? (cls === 'future' ? 'border-left:1px solid #e2e8f0;' : 'border-left:1px solid rgba(255,255,255,.12);') : '';
+    var rad = w === 1 ? 'border-radius:0 15px 15px 0;' : (w === sem.weeks ? 'border-radius:15px 0 0 15px;' : '');
+    wh += '<div style="flex:1;height:30px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;' + clr + bg + brd + rad + '">' + w + '</div>';
+    lh += '<div style="flex:1;text-align:center;font-size:8px;font-weight:600;color:' + (w === curWeek && isCurrent ? 'var(--c-primary,#4f46e5);font-weight:800' : '#94a3b8') + '">س' + w + '</div>';
+  }
+  var weeksEl = document.getElementById('dash-tl-weeks'); if (weeksEl) weeksEl.innerHTML = wh;
+  var labelsEl = document.getElementById('dash-tl-labels'); if (labelsEl) labelsEl.innerHTML = lh;
+
+  // الإبرة
+  var needleEl = document.getElementById('dash-tl-needle');
+  if (needleEl) {
+    if (isCurrent) {
+      var nPct = ((curWeek - 0.5) / sem.weeks) * 100;
+      needleEl.style.right = nPct + '%';
+      needleEl.style.transform = 'translateX(50%)';
+      needleEl.style.display = 'flex';
+      needleEl.innerHTML = '<div style="background:var(--c-primary,#4f46e5);color:white;padding:3px 10px;border-radius:8px;font-size:10px;font-weight:800;white-space:nowrap;box-shadow:0 3px 10px rgba(79,70,229,.35);font-family:Noto Kufi Arabic,sans-serif;position:relative">الأسبوع ' + curWeek + ' · ' + dayNames[now.getDay()] + '<div style="position:absolute;bottom:-4px;left:50%;transform:translateX(-50%) rotate(45deg);width:8px;height:8px;background:var(--c-primary,#4f46e5);border-radius:1px"></div></div>' +
+        '<div style="width:2px;height:34px;background:var(--c-primary,#4f46e5);margin-top:2px;border-radius:1px;box-shadow:0 0 6px rgba(79,70,229,.3)"></div>' +
+        '<div style="width:8px;height:8px;background:var(--c-primary,#4f46e5);border:2px solid white;border-radius:50%;box-shadow:0 0 6px rgba(79,70,229,.4);margin-top:-1px"></div>';
+    } else { needleEl.style.display = 'none'; }
+  }
+
+  // التقدم
+  var progEl = document.getElementById('dash-tl-progress'); if (progEl) progEl.style.width = pct + '%';
+
+  // المناسبات
+  var evEl = document.getElementById('dash-tl-events');
+  if (evEl) {
+    var eh = '';
+    for (var e = 0; e < sem.events.length; e++) {
+      var ev = sem.events[e];
+      var ePct = ((ev.week - 0.5) / sem.weeks) * 100;
+      var ec = ev.type === 'national' ? '#10b981' : ev.type === 'holiday' ? '#ef4444' : '#6366f1';
+      var lbl = ev.label.replace(/[\u{1F1E6}-\u{1F1FF}]|[\u{1F600}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F300}-\u{1F5FF}]/gu, '').trim();
+      eh += '<div style="position:absolute;top:2px;right:' + ePct + '%;transform:translateX(50%);display:flex;flex-direction:column;align-items:center;z-index:3">';
+      eh += '<div style="width:6px;height:6px;border-radius:50%;background:' + ec + ';box-shadow:0 0 0 2px ' + ec + '33;flex-shrink:0"></div>';
+      eh += '<div style="font-size:7px;font-weight:600;color:#64748b;white-space:nowrap;margin-top:1px;max-width:60px;overflow:hidden;text-overflow:ellipsis">' + lbl + '</div></div>';
+    }
+    evEl.innerHTML = eh;
+  }
+
+  // الملخص
+  var sumEl = document.getElementById('dash-tl-summary');
+  if (sumEl) {
+    var remaining = isCurrent ? Math.ceil((end - now) / 86400000) : 0;
+    var nextEvt = null;
+    if (isCurrent) {
+      for (var ne = 0; ne < sem.events.length; ne++) {
+        if (sem.events[ne].week >= curWeek) { nextEvt = sem.events[ne]; break; }
+      }
+    }
+    var sh = '<div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#64748b"><span style="width:8px;height:8px;border-radius:50%;background:var(--c-primary,#4f46e5)"></span>الأسبوع: <span style="font-weight:800;color:var(--c-text,#1a1d2e)">' + curWeek + ' / ' + sem.weeks + '</span></div>';
+    sh += '<div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#64748b"><span style="width:8px;height:8px;border-radius:50%;background:#10b981"></span>مضى: <span style="font-weight:800;color:var(--c-text,#1a1d2e)">' + pct + '%</span></div>';
+    sh += '<div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#64748b"><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b"></span>باقي: <span style="font-weight:800;color:var(--c-text,#1a1d2e)">' + remaining + ' يوم</span></div>';
+    if (nextEvt) {
+      var nec = nextEvt.type === 'national' ? '#10b981' : nextEvt.type === 'holiday' ? '#ef4444' : '#6366f1';
+      sh += '<div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#64748b"><span style="width:8px;height:8px;border-radius:50%;background:' + nec + '"></span>القادم: <span style="font-weight:800;color:' + nec + '">' + nextEvt.label + '</span></div>';
+    }
+    sumEl.innerHTML = sh;
+  }
+
+  // تبويبات
+  for (var t = 0; t < 2; t++) {
+    var tab = document.getElementById('dash-tl-tab-' + t);
+    if (tab) {
+      tab.style.background = t === semIdx ? 'var(--c-primary,#4f46e5)' : 'transparent';
+      tab.style.color = t === semIdx ? 'white' : '#64748b';
+      tab.style.boxShadow = t === semIdx ? '0 2px 6px rgba(79,70,229,.25)' : 'none';
+    }
+  }
+}
+
+function dashSwitchTimeline(idx) { dashRenderTimeline_(idx); }
+
+// ═══════ Auto-refresh ═══════
+var dashRefreshTimer = null;
+
+function renderDashboardPage() {
+  var main = document.getElementById('main-content');
+  main.innerHTML = buildDashboardSkeleton_();
+  dashRenderTimeline_(getSemesterProgress_().semIdx);
+  loadDashboardData_();
+  // تحديث تلقائي كل دقيقتين
+  if (dashRefreshTimer) clearInterval(dashRefreshTimer);
+  dashRefreshTimer = setInterval(function() {
+    var activeSection = document.querySelector('.nav-item.active');
+    if (activeSection && activeSection.getAttribute('data-section') === 'dashboard') {
+      loadDashboardData_();
+    } else {
+      clearInterval(dashRefreshTimer);
+      dashRefreshTimer = null;
+    }
+  }, 120000);
+}
+
+// =================================================================
+// 1. الهيكل الأساسي
+// =================================================================
+function buildDashboardSkeleton_() {
+  var now = new Date();
+  var dayNames = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  var dayName = dayNames[now.getDay()];
+  var dateStr = '', dateStrM = '';
+  try { dateStr = now.toLocaleDateString('ar-SA-u-ca-islamic', {day:'numeric',month:'long',year:'numeric'}); } catch(e) {}
+  try { dateStrM = now.toLocaleDateString('ar-EG', {day:'numeric',month:'long',year:'numeric'}); } catch(e) {}
+
+  var semProg = getSemesterProgress_();
+  var stageName = getStageName_(dashGetStage_());
+
+  return '<div class="max-w-full">' +
+
+  // ═══════ الصف 1: التحية + التاريخ ═══════
+  '<div style="display:flex;align-items:stretch;gap:var(--sp-5);margin-bottom:var(--sp-5);flex-wrap:wrap">' +
+
+    // التحية (يمين)
+    '<div style="flex:1;min-width:260px;display:flex;flex-direction:column;justify-content:center">' +
+      '<h2 style="font-size:24px;font-weight:900;color:var(--c-text);line-height:1.4;margin:0;font-family:\'Noto Kufi Arabic\',sans-serif">' + getGreeting_() + '، <span style="background:linear-gradient(135deg,var(--c-primary),#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent">وكيل شؤون الطلاب</span> 👋</h2>' +
+      '<p style="font-size:13px;color:var(--c-text-muted);margin-top:4px;font-weight:500">' + stageName + '</p>' +
+    '</div>' +
+
+    // التاريخ (يسار) — بارز ومميز
+    '<div style="min-width:240px;background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);border-radius:var(--r-lg,16px);padding:20px 24px;display:flex;align-items:center;gap:16px;position:relative;overflow:hidden;box-shadow:0 4px 15px rgba(79,70,229,.2)">' +
+      '<div style="position:absolute;top:-20px;left:-20px;width:80px;height:80px;background:rgba(255,255,255,.08);border-radius:50%"></div>' +
+      '<div style="position:absolute;bottom:-15px;right:-15px;width:60px;height:60px;background:rgba(255,255,255,.05);border-radius:50%"></div>' +
+      // أيقونة التقويم
+      '<div style="width:48px;height:48px;background:rgba(255,255,255,.15);border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;backdrop-filter:blur(4px)">' +
+        '<span class="material-symbols-outlined" style="font-size:24px;color:white">calendar_today</span>' +
+      '</div>' +
+      '<div style="position:relative;z-index:1">' +
+        '<div style="font-size:18px;font-weight:900;color:white;font-family:\'Noto Kufi Arabic\',sans-serif;line-height:1.3" id="dash-hijri-date">' + dateStr + '</div>' +
+        '<div style="font-size:12px;font-weight:500;color:rgba(255,255,255,.75);margin-top:2px">' + dayName + ' — ' + dateStrM + '</div>' +
+      '</div>' +
+    '</div>' +
+
+  '</div>' +
+
+  // ═══════ الصف 2: الخط الزمني ═══════
+  '<div style="margin-bottom:var(--sp-5)" id="dash-timeline-wrap">' + buildTimelineHTML_() + '</div>' +
+
+  // ═══════ الصف 3: الإحصائيات ═══════
+  '<div id="dash-stats" class="dash-stats-grid" style="margin-bottom:var(--sp-5)">' + buildStatsPlaceholder_() + '</div>' +
+
+  // ═══════ الصف 4: الحصة الحالية + يحتاج انتباهك ═══════
+  '<div id="dash-main-row" style="margin-bottom:var(--sp-5)">' +
+    '<div>' + buildPeriodCard_() + '</div>' +
+    '<div>' +
+      '<div style="font-size:14px;font-weight:800;color:var(--c-text);margin-bottom:var(--sp-3);display:flex;align-items:center;gap:6px">' +
+        '<span class="material-symbols-outlined" style="font-size:18px;color:var(--c-danger)">notifications_active</span> يحتاج انتباهك</div>' +
+      '<div id="dash-actions" class="dash-actions-inner">' + buildActionsPlaceholder_() + '</div>' +
+    '</div>' +
+  '</div>' +
+
+  // ═══════ الصف 5: التقويم | التحويلات | متابعة الغياب ═══════
+  '<div id="dash-row4" style="margin-bottom:var(--sp-5)">' +
+    // عمود التقويم
+    '<div>' + buildCalendarCard_() + '</div>' +
+
+    // تحويلات المعلمين
+    '<div style="background:var(--c-surface);border-radius:var(--r-lg);padding:var(--sp-4);border:1px solid var(--c-border-light);box-shadow:var(--shadow-sm);overflow:hidden;display:flex;flex-direction:column">' +
+      '<div style="font-size:13px;font-weight:800;color:var(--c-text);margin-bottom:var(--sp-3);display:flex;align-items:center;gap:6px;flex-shrink:0">' +
+        '<span class="material-symbols-outlined" style="font-size:18px;color:var(--c-info)">swap_horiz</span> تحويلات المعلمين</div>' +
+      '<div id="dash-referrals" style="flex:1;overflow-y:auto"><div class="text-center text-gray-400 py-4 text-sm">جاري التحميل...</div></div>' +
+    '</div>' +
+
+    // متابعة إدخال الغياب
+    '<div id="dash-att-box">' + buildAttendancePlaceholder_() + '</div>' +
+  '</div>' +
+
+  // ═══════ الصف 6: يحتاج توثيق ═══════
+  '<div id="dash-printing-wrap" style="display:none">' +
+    '<div style="background:var(--c-surface);border-radius:var(--r-lg);border:1px solid var(--c-border-light);box-shadow:var(--shadow-sm);padding:var(--sp-4)">' +
+      '<div style="font-size:13px;font-weight:800;color:var(--c-text);margin-bottom:var(--sp-3);display:flex;align-items:center;gap:6px">' +
+        '<span class="material-symbols-outlined" style="font-size:18px;color:var(--c-danger)">print</span> يحتاج توثيق' +
+        '<span id="dash-print-count" style="font-size:11px;font-weight:800;color:white;background:var(--c-danger);padding:1px 8px;border-radius:100px"></span>' +
+      '</div>' +
+      '<div id="dash-printing-body" style="max-height:180px;overflow-y:auto"></div>' +
+    '</div>' +
+  '</div>' +
+
+  '</div>';
+}
+
+// =================================================================
+// 2. جلب البيانات
+// =================================================================
+function loadDashboardData_() {
+  if (dashLoading) return;
+  dashLoading = true;
+  google.script.run
+    .withSuccessHandler(function(data) {
+      dashLoading = false;
+      if (data && data.success) { dashboardData = data; populateDashboard_(data); }
+      else { populateDashboardEmpty_(); }
+    })
+    .withFailureHandler(function() {
+      dashLoading = false;
+      populateDashboardEmpty_();
+    })
+    .getDashboardData();
+}
+
+// =================================================================
+// 3. تعبئة البيانات
+// =================================================================
+function populateDashboard_(d) {
+  var el;
+  // تحديث التاريخ الهجري
+  if (d.hijriDate && d.hijriDate.hijriStr) {
+    var hijriEl = document.getElementById('dash-hijri-date');
+    if (hijriEl) hijriEl.textContent = d.hijriDate.hijriStr;
+  }
+  el = document.getElementById('dash-stats'); if (el) el.innerHTML = buildStatsCards_(d);
+  el = document.getElementById('dash-att-box'); if (el) el.innerHTML = buildAttendanceTable_(d);
+  el = document.getElementById('dash-actions'); if (el) el.innerHTML = buildActionCards_(d);
+  el = document.getElementById('dash-referrals'); if (el) el.innerHTML = buildReferrals_(d);
+  buildPrintingCard_(d);
+  // تحديث الخط الزمني
+  dashRenderTimeline_(dashTimelineSem >= 0 ? dashTimelineSem : getSemesterProgress_().semIdx);
+}
+
+function populateDashboardEmpty_() {
+  populateDashboard_({today:{absence:0,tardiness:0,permissions:0,permissionsOut:0,permissionsWaiting:0,violations:0,notes:0,pendingExcuses:0},stageStats:{'متوسط':{absence:0,tardiness:0,permissions:0,violations:0,notes:0},'ثانوي':{absence:0,tardiness:0,permissions:0,violations:0,notes:0}},pending:{violationsNoAction:[],notesPending:[],notSent:{absence:0,tardiness:0,violations:0},notSentByStage:{'متوسط':{absence:0,tardiness:0,violations:0},'ثانوي':{absence:0,tardiness:0,violations:0}}},absenceByClass:{},recentActivity:[],needsPrinting:[]});
+}
+
+// =================================================================
+// 4. الإحصائيات
+// =================================================================
+function buildStatsPlaceholder_() {
+  var items = [{icon:'event_busy',label:'غياب اليوم',color:'orange'},{icon:'timer_off',label:'تأخر صباحي',color:'red'},{icon:'exit_to_app',label:'استئذان',color:'purple'},{icon:'gavel',label:'مخالفات',color:'blue'},{icon:'menu_book',label:'ملاحظات',color:'green'},{icon:'family_restroom',label:'أعذار',color:'amber'}];
+  return items.map(function(it) { return buildStatCard_(it.icon, it.label, '—', '—', '—', it.color, '', '', ''); }).join('');
+}
+
+function buildStatsCards_(d) {
+  var ss = d.stageStats || {'متوسط':{absence:0,tardiness:0,permissions:0,violations:0,notes:0},'ثانوي':{absence:0,tardiness:0,permissions:0,violations:0,notes:0}};
+  // ★ عرض إحصاءات المرحلة المختارة فقط كرقم كبير
+  var stage = dashGetStage_();
+  var cur = ss[stage] || {};
+  var allStages = Object.keys(ss);
+  var otherStage = allStages.filter(function(s){return s !== stage;})[0] || '';
+  var oth = ss[otherStage] || {};
+  var ps = '';
+  // حساب الاستئذان حسب المرحلة (تقريبي من النسب)
+  if (cur.permissions > 0) ps = 'المرحلة الحالية فقط';
+  return buildStatCard_('event_busy', 'غياب اليوم', cur.absence||0, oth.absence||0, cur.absence||0, 'orange', '', stage, otherStage) +
+    buildStatCard_('timer_off', 'تأخر صباحي', cur.tardiness||0, oth.tardiness||0, cur.tardiness||0, 'red', '', stage, otherStage) +
+    buildStatCard_('exit_to_app', 'استئذان', cur.permissions||0, oth.permissions||0, cur.permissions||0, 'purple', ps, stage, otherStage) +
+    buildStatCard_('gavel', 'مخالفات', cur.violations||0, oth.violations||0, cur.violations||0, 'blue', '', stage, otherStage) +
+    buildStatCard_('menu_book', 'ملاحظات', cur.notes||0, oth.notes||0, cur.notes||0, 'green', '', stage, otherStage) +
+    buildStatCard_('family_restroom', 'أعذار', 0, 0, d.today.pendingExcuses||0, 'amber', '', stage, otherStage);
+}
+
+function buildStatCard_(icon, label, numCur, numOther, total, color, sub, curLabel, othLabel) {
+  var cm = {orange:{bg:'#fff7ed',fg:'#f97316',ln:'#f97316'},red:{bg:'#fef2f2',fg:'#ef4444',ln:'#ef4444'},purple:{bg:'#faf5ff',fg:'#8b5cf6',ln:'#8b5cf6'},blue:{bg:'#eff6ff',fg:'#3b82f6',ln:'#3b82f6'},green:{bg:'#f0fdf4',fg:'#22c55e',ln:'#22c55e'},amber:{bg:'#fffbeb',fg:'#f59e0b',ln:'#f59e0b'}};
+  var c = cm[color] || cm.blue;
+  var showStages = (numCur !== '—' && numOther !== '—' && (numCur > 0 || numOther > 0));
+  var STAGE_ABBR2 = {'متوسط':'مت','ثانوي':'ثا','ابتدائي':'بت','طفولة مبكرة':'طف'};
+  var curAbbr = STAGE_ABBR2[curLabel] || curLabel;
+  var othAbbr = STAGE_ABBR2[othLabel] || othLabel;
+  var h = '<div class="dash-stat-card" style="background:#fff;border-radius:var(--r-lg,16px);padding:12px 10px;border:1px solid var(--c-border-light,#f0f2f7);box-shadow:0 1px 4px rgba(0,0,0,.04);position:relative;overflow:hidden;cursor:default">' +
+    '<div style="position:absolute;top:0;right:0;width:3px;height:100%;background:' + c.ln + '"></div>' +
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">' +
+      '<div style="width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:' + c.bg + ';flex-shrink:0"><span class="material-symbols-outlined" style="font-size:15px;color:' + c.fg + '">' + icon + '</span></div>' +
+      '<span style="font-size:11px;font-weight:700;color:#64748b">' + label + '</span>' +
+    '</div>';
+  // ★ الرقم الكبير = المرحلة المختارة فقط
+  h += '<div style="text-align:center;padding:4px 0"><span style="font-size:28px;font-weight:900;color:var(--c-text,#1a1d2e)">' + total + '</span></div>';
+  // ★ شريط صغير يعرض المرحلة الأخرى كمرجع
+  if (showStages && numOther > 0) {
+    h += '<div style="border-top:1.5px solid #f1f5f9;padding-top:4px;text-align:center;font-size:9px;color:var(--c-text-muted,#9da3b8)">' + othAbbr + ': ' + numOther + '</div>';
+  }
+  if (sub) h += '<div style="font-size:9px;color:#a0aec0;text-align:center;margin-top:2px">' + sub + '</div>';
+  h += '</div>';
+  return h;
+}
+
+// =================================================================
+// 5. متابعة الغياب (بألوان)
+// =================================================================
+function buildAttendancePlaceholder_() {
+  return buildAttBox_('<div style="text-align:center;color:var(--c-text-muted,#9da3b8);font-size:12px;padding:16px 0">جاري التحميل...</div>');
+}
+
+function buildAttBox_(inner) {
+  return '<div style="background:#fff;border-radius:var(--r-lg,16px);padding:14px;border:1px solid var(--c-border-light,#f0f2f7);box-shadow:0 1px 4px rgba(0,0,0,.04);height:100%">' +
+    '<div style="font-size:13px;font-weight:800;color:var(--c-text,#1a1d2e);margin-bottom:10px;display:flex;align-items:center;gap:6px">' +
+    '<span class="material-symbols-outlined" style="font-size:18px;color:#f97316">fact_check</span> متابعة إدخال الغياب</div>' + inner + '</div>';
+}
+
+function buildAttendanceTable_(d) {
+  var classes = getClassesFromStudents_();
+  var sections = ['أ','ب','ج','د'], usedSections = {};
+  for (var stage in classes) for (var g in classes[stage]) for (var sc in classes[stage][g]) usedSections[sc] = true;
+  var activeSections = sections.filter(function(s) { return usedSections[s]; });
+  if (activeSections.length === 0) activeSections = ['أ','ب'];
+
+  var html = '<table style="width:100%;border-collapse:separate;border-spacing:0 3px">';
+  html += '<thead><tr><th style="font-size:10px;font-weight:800;color:var(--c-text-muted,#9da3b8);padding:2px 4px;text-align:right;width:30px"></th>';
+  for (var i = 0; i < activeSections.length; i++) html += '<th style="font-size:11px;font-weight:800;color:var(--c-text-muted,#9da3b8);padding:2px;text-align:center">' + activeSections[i] + '</th>';
+  html += '</tr></thead><tbody>';
+
+  // ★ فلترة حسب المرحلة المختارة
+  var selectedStage = dashGetStage_();
+  var stageOrder = [selectedStage], abbr = {'متوسط':'م','ثانوي':'ث'};
+  for (var si = 0; si < stageOrder.length; si++) {
+    var stg = stageOrder[si], stgColor = si === 0 ? '#6366f1' : '#8b5cf6';
+    html += '<tr><td colspan="' + (activeSections.length + 1) + '" style="font-size:10px;font-weight:800;color:' + stgColor + ';padding:8px 4px 3px;border-bottom:2px solid ' + stgColor + '22">' + stg + '</td></tr>';
+    var gradeNums = classes[stg] ? Object.keys(classes[stg]).sort() : ['1','2','3'];
+    for (var gi = 0; gi < gradeNums.length; gi++) {
+      var gn = gradeNums[gi];
+      html += '<tr><td style="font-size:12px;font-weight:800;color:#475569;text-align:right;padding:3px 4px">' + gn + '</td>';
+      for (var sci = 0; sci < activeSections.length; sci++) {
+        var sec = activeSections[sci], absData = d.absenceByClass[stg] || {}, found = false, count = 0;
+        for (var key in absData) { if (matchClassKey_(key, gn, sec, abbr[stg])) { found = true; count = absData[key]; break; } }
+        var classExists = classes[stg] && classes[stg][gn] && classes[stg][gn][sec];
+        var cellHtml, cellBg = 'transparent', cellBorder = 'transparent';
+        if (!classExists) { cellHtml = '<span style="color:#e2e8f0">—</span>'; }
+        else if (found && count > 0) { cellBg = '#fef2f2'; cellBorder = '#fecaca'; cellHtml = '<span style="font-size:14px;font-weight:900;color:#dc2626">' + count + '</span>'; }
+        else if (found) { cellBg = '#f0fdf4'; cellBorder = '#bbf7d0'; cellHtml = '<span style="font-size:12px;font-weight:800;color:#22c55e">0</span>'; }
+        else { cellBg = '#f8fafc'; cellBorder = '#e2e8f0'; cellHtml = '<span style="color:var(--c-text-muted,#9da3b8);font-size:9px;font-weight:700" class="dash-blink">انتظار</span>'; }
+        html += '<td style="text-align:center;padding:5px 2px"><div style="background:' + cellBg + ';border:1px solid ' + cellBorder + ';border-radius:6px;padding:4px 0">' + cellHtml + '</div></td>';
+      }
+      html += '</tr>';
+    }
+  }
+  html += '</tbody></table>';
+
+  // ★ نسبة الحضور حسب المرحلة المختارة
+  var stageStats = (d.stageStats && d.stageStats[selectedStage]) || {};
+  var totalAbs = stageStats.absence || 0;
+  var totalStudents = 0;
+  if (APP_DATA && APP_DATA.students) {
+    for (var si2 = 0; si2 < APP_DATA.students.length; si2++) {
+      if (APP_DATA.students[si2]['المرحلة'] === selectedStage) totalStudents++;
+    }
+  }
+  var attendPct = totalStudents > 0 ? Math.round(((totalStudents - totalAbs) / totalStudents) * 100) : 100;
+  var pctColor = attendPct >= 95 ? '#22c55e' : attendPct >= 90 ? '#f59e0b' : '#ef4444';
+  html += '<div style="margin-top:10px;padding-top:8px;border-top:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between">';
+  html += '<span style="font-size:10px;font-weight:600;color:var(--c-text-muted,#9da3b8)">نسبة الحضور</span>';
+  html += '<span style="font-size:16px;font-weight:900;color:' + pctColor + '">' + attendPct + '%</span></div>';
+  return buildAttBox_(html);
+}
+
+function getClassesFromStudents_() {
+  var result = {};
+  if (!APP_DATA || !APP_DATA.students) return result;
+  for (var i = 0; i < APP_DATA.students.length; i++) {
+    var st = APP_DATA.students[i], stage = st['المرحلة'] || '', grade = String(st['الصف'] || '').replace(/[^\d]/g, ''), cls = String(st['الفصل'] || '').trim(), section = '';
+    if (cls.indexOf('أ') > -1) section = 'أ'; else if (cls.indexOf('ب') > -1) section = 'ب'; else if (cls.indexOf('ج') > -1) section = 'ج'; else if (cls.indexOf('د') > -1) section = 'د';
+    if (!section) continue;
+    if (!grade) { if (cls.indexOf('1') > -1 || cls.indexOf('الأول') > -1) grade = '1'; else if (cls.indexOf('2') > -1 || cls.indexOf('الثاني') > -1) grade = '2'; else if (cls.indexOf('3') > -1 || cls.indexOf('الثالث') > -1) grade = '3'; }
+    if (!grade) continue;
+    if (!result[stage]) result[stage] = {}; if (!result[stage][grade]) result[stage][grade] = {}; result[stage][grade][section] = true;
+  }
+  return result;
+}
+
+function matchClassKey_(key, gradeNum, section, stageAbbr) {
+  var k = key.replace(/\s+/g, ''), gn = {'1':'الأول','2':'الثاني','3':'الثالث'};
+  var p = [gradeNum + '-' + section, gradeNum + section, stageAbbr + gradeNum + section];
+  if (gn[gradeNum]) { p.push(gn[gradeNum] + section); p.push(gn[gradeNum] + '-' + section); }
+  for (var i = 0; i < p.length; i++) { if (k.indexOf(p[i].replace(/\s+/g, '')) > -1) return true; }
+  return false;
+}
+
+// =================================================================
+// 6. بطاقات الانتباه
+// =================================================================
+function buildActionsPlaceholder_() {
+  return buildActionCard_('gavel','مخالفات بدون إجراء','—','#ef4444',[],'violations') +
+    buildActionCard_('edit_note','ملاحظات معلقة','—','#f97316',[],'educational-notes') +
+    buildActionCard_('sms_failed','لم يُبلّغ ولي الأمر','—','#3b82f6',[],'whatsapp') +
+    buildActionCard_('pending_actions','أعذار بانتظار','—','#8b5cf6',[],'absence');
+}
+
+function buildActionCards_(d) {
+  // ★ فلترة حسب المرحلة المختارة
+  var stage = dashGetStage_();
+  var na = dashFilterByStage_(d.pending.violationsNoAction);
+  var np = dashFilterByStage_(d.pending.notesPending);
+  
+  // ★ "لم يُبلّغ" حسب المرحلة
+  var ns = (d.pending.notSentByStage && d.pending.notSentByStage[stage]) || d.pending.notSent || {};
+  var tns = (ns.absence||0) + (ns.tardiness||0) + (ns.violations||0);
+  var stageStats = (d.stageStats && d.stageStats[stage]) || {};
+  var totalToday = (stageStats.absence||0) + (stageStats.tardiness||0) + (stageStats.violations||0);
+  var sentCount = totalToday - tns;
+  var nsi = [];
+  if (ns.absence > 0) nsi.push({text: ns.absence + ' غياب', tag: 'اليوم'});
+  if (ns.tardiness > 0) nsi.push({text: ns.tardiness + ' تأخر', tag: 'اليوم'});
+  if (ns.violations > 0) nsi.push({text: ns.violations + ' مخالفة', tag: 'اليوم'});
+  if (totalToday > 0 && sentCount > 0) nsi.push({text: '✓ تم إبلاغ ' + sentCount + ' من ' + totalToday, tag: ''});
+  return buildActionCard_('gavel','مخالفات بدون إجراء',na.length,'#ef4444',na.slice(0,3).map(function(v){return{text:v.name,tag:v.grade+' '+v.cls}}),'violations') +
+    buildActionCard_('edit_note','ملاحظات معلقة',np.length,'#f97316',np.slice(0,3).map(function(n){return{text:n.name+' — '+n.type,tag:n.cls}}),'educational-notes') +
+    buildActionCard_('sms_failed','لم يُبلّغ ولي الأمر',tns,'#3b82f6',nsi,'whatsapp') +
+    buildActionCard_('pending_actions','أعذار بانتظار',d.today.pendingExcuses,'#8b5cf6',[],'absence');
+}
+
+function buildActionCard_(icon, title, count, color, items, section) {
+  var h = '<div style="background:#fff;border-radius:var(--r-lg,16px);padding:14px;border:1px solid var(--c-border-light,#f0f2f7);box-shadow:0 1px 4px rgba(0,0,0,.04);cursor:pointer" onclick="switchSection(\'' + section + '\')">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
+  h += '<div style="font-size:12px;font-weight:800;color:var(--c-text,#1a1d2e);display:flex;align-items:center;gap:5px"><span class="material-symbols-outlined" style="font-size:18px;color:' + color + '">' + icon + '</span> ' + title + '</div>';
+  h += '<div style="font-size:14px;font-weight:900;padding:2px 10px;border-radius:100px;color:white;background:' + color + ';min-width:28px;text-align:center">' + count + '</div></div>';
+  if (items && items.length > 0) {
+    h += '<ul style="list-style:none;padding:0;margin:0">';
+    for (var i = 0; i < items.length; i++) {
+      h += '<li style="display:flex;align-items:center;gap:5px;padding:5px 0;border-bottom:1px solid #f8fafc;font-size:11px;color:#475569;font-weight:500">';
+      h += '<span style="width:5px;height:5px;border-radius:50%;background:' + color + ';flex-shrink:0"></span>';
+      h += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(items[i].text) + '</span>';
+      if (items[i].tag) h += '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#f1f5f9;color:#64748b;flex-shrink:0">' + escapeHtml(items[i].tag) + '</span>';
+      h += '</li>';
+    }
+    h += '</ul>';
+  } else if (count === 0 || count === '0') {
+    h += '<div style="text-align:center;padding:8px 0;color:var(--c-text-muted,#9da3b8);font-size:11px"><span class="material-symbols-outlined" style="font-size:24px;color:#d1d5db;display:block;margin-bottom:2px">check_circle</span>لا يوجد</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+// =================================================================
+// 7. تحويلات المعلمين
+// =================================================================
+function buildReferrals_(d) {
+  // ★ فلترة حسب المرحلة المختارة
+  var items = dashFilterByStage_(d.recentActivity);
+  if (items.length === 0) return '<div style="text-align:center;padding:16px 0"><span class="material-symbols-outlined" style="font-size:28px;color:#e2e8f0;display:block;margin-bottom:4px">swap_horiz</span><span style="color:var(--c-text-muted,#9da3b8);font-size:11px">لا توجد تحويلات اليوم لهذه المرحلة</span></div>';
+  var tc = {'مخالفة':{bg:'#fef2f2',fg:'#dc2626',av:'linear-gradient(135deg,#ef4444,#dc2626)'},'ملاحظة':{bg:'#f0fdf4',fg:'#16a34a',av:'linear-gradient(135deg,#22c55e,#16a34a)'},'غياب':{bg:'#fffbeb',fg:'#d97706',av:'linear-gradient(135deg,#f97316,#ea580c)'}};
+  var h = '';
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i], c = tc[it.type] || tc['غياب'];
+    var teacher = it.teacher || '—';
+    var ini = '—';
+    if (teacher === 'الوكيل' || teacher === 'وكيل') { ini = 'وك'; }
+    else if (teacher === 'المرشد' || teacher === 'مرشد') { ini = 'مر'; }
+    else {
+      var nameParts = teacher.split(' ').filter(function(p) { return p.length > 0; });
+      if (nameParts.length >= 2) ini = nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0);
+      else if (nameParts.length === 1) ini = nameParts[0].substring(0, 2);
+    }
+    var section = it.section || 'violations';
+    var studentName = it.student || '';
+    var done = it.actionTaken;
+    h += '<div id="dash-ref-' + i + '" style="display:flex;align-items:center;gap:8px;padding:8px 4px;cursor:pointer;border-radius:8px;transition:background .15s;' + (i < items.length - 1 ? 'border-bottom:1px solid #f8fafc;' : '') + (done ? 'opacity:.55;' : '') + '" onclick="dashOpenReferral(\'' + section + '\',\'' + encodeURIComponent(studentName) + '\',' + i + ')" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'transparent\'">';
+    if (done) {
+      h += '<div style="width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;background:#f0fdf4;color:#22c55e"><span class="material-symbols-outlined" style="font-size:18px">check_circle</span></div>';
+    } else {
+      h += '<div style="width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:white;flex-shrink:0;background:' + c.av + '">' + ini + '</div>';
+    }
+    h += '<div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:700;color:' + (done ? '#94a3b8' : '#0f172a') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(it.teacher || '') + '</div>';
+    h += '<div style="font-size:10px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(it.detail) + ' — ' + escapeHtml(it.student) + '</div></div>';
+    if (done) {
+      h += '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;background:#f0fdf4;color:#22c55e;flex-shrink:0">تم ✓</span>';
+    } else {
+      h += '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;background:' + c.bg + ';color:' + c.fg + ';flex-shrink:0">' + it.type + '</span>';
+    }
+    h += '</div>';
+  }
+  return h;
+}
+
+// فتح تحويلة — ينتقل للقسم ويبحث عن الطالب
+function dashOpenReferral(section, encodedName, idx) {
+  var name = decodeURIComponent(encodedName);
+  // تمييز السطر كمفتوح
+  var row = document.getElementById('dash-ref-' + idx);
+  if (row) row.style.background = '#eef2ff';
+  // الانتقال للقسم المناسب
+  switchSection(section);
+  // بعد تحميل القسم، محاولة البحث عن الطالب
+  setTimeout(function() {
+    var searchFields = document.querySelectorAll('#main-content input[type="text"]');
+    for (var i = 0; i < searchFields.length; i++) {
+      var placeholder = searchFields[i].getAttribute('placeholder') || '';
+      if (placeholder.indexOf('بحث') > -1 || placeholder.indexOf('طالب') > -1 || placeholder.indexOf('اسم') > -1) {
+        searchFields[i].value = name;
+        searchFields[i].dispatchEvent(new Event('input', {bubbles: true}));
+        searchFields[i].focus();
+        break;
+      }
+    }
+  }, 800);
+}
+
+// =================================================================
+// 8. التقويم (مع المناسبات)
+// =================================================================
+function buildCalendarCard_() {
+  var now = new Date(), year = now.getFullYear(), month = now.getMonth(), today = now.getDate();
+  var daysInMonth = new Date(year, month + 1, 0).getDate(), firstDay = new Date(year, month, 1).getDay();
+  var monthNames = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  var hijriMonth = ''; try { hijriMonth = now.toLocaleDateString('ar-SA-u-ca-islamic', {month:'long',year:'numeric'}); } catch(e) {}
+  var holidays = getHolidayDays_(month), monthEvents = getMonthEvents_(month);
+  var eventDays = {}; for (var ei = 0; ei < monthEvents.length; ei++) { if (!monthEvents[ei].holiday) eventDays[monthEvents[ei].d] = monthEvents[ei]; }
+
+  var h = '<div style="background:var(--c-surface,#fff);border-radius:var(--r-lg,16px);padding:var(--sp-4,16px);border:1px solid var(--c-border-light,#f0f2f7);box-shadow:var(--shadow-sm,0 1px 3px rgba(0,0,0,.05))">';
+  h += '<div style="font-size:12px;font-weight:800;color:var(--c-text,#1a1d2e);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center"><span style="display:flex;align-items:center;gap:4px"><span class="material-symbols-outlined" style="font-size:16px;color:var(--c-primary,#4f46e5)">calendar_month</span> ' + monthNames[month] + '</span> <span style="font-size:9px;color:var(--c-text-muted,#9da3b8);font-weight:700">' + hijriMonth + '</span></div>';
+  h += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;text-align:center;margin-bottom:6px">';
+  var dns = ['أح','إث','ثل','أر','خم','جم','سب'];
+  for (var di = 0; di < 7; di++) h += '<div style="font-size:8px;font-weight:800;color:var(--c-text-muted,#9da3b8);padding:2px">' + dns[di] + '</div>';
+  for (var e = 0; e < firstDay; e++) h += '<div></div>';
+  for (var d = 1; d <= daysInMonth; d++) {
+    var dow = (firstDay + d - 1) % 7, isOff = (dow === 5 || dow === 6), isToday = (d === today), isHol = holidays.indexOf(d) > -1, isEv = eventDays[d];
+    var s = 'font-size:10px;font-weight:600;padding:4px 1px;border-radius:6px;cursor:default;transition:background .1s;';
+    if (isToday) s += 'background:linear-gradient(135deg,var(--c-primary,#4f46e5),#8b5cf6);color:white;font-weight:800;box-shadow:0 3px 10px rgba(79,70,229,.25);';
+    else if (isHol) s += 'color:#ef4444;text-decoration:line-through;font-weight:700;background:var(--c-danger-light,#fef2f2);';
+    else if (isEv) s += 'color:var(--c-primary,#4f46e5);font-weight:700;background:var(--c-primary-light,#eef2ff);';
+    else if (isOff) s += 'color:#d1d5db;';
+    else s += 'color:var(--c-text-secondary,#5c6178);';
+    h += '<div style="' + s + '">' + d + '</div>';
+  }
+  h += '</div>';
+
+  // مفتاح الألوان
+  if (monthEvents.length > 0) {
+    h += '<div style="border-top:1px solid var(--c-border-light,#f0f2f7);padding-top:6px">';
+    for (var me = 0; me < Math.min(monthEvents.length, 3); me++) {
+      var ev = monthEvents[me], dc = ev.holiday ? '#ef4444' : ev.type === 'national' ? '#10b981' : '#6366f1';
+      h += '<div style="display:flex;align-items:center;gap:5px;padding:2px 0;font-size:9px;font-weight:600;color:var(--c-text-secondary,#5c6178)">';
+      h += '<span style="width:5px;height:5px;border-radius:50%;background:' + dc + ';flex-shrink:0"></span>';
+      h += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + ev.label + '</span>';
+      h += '<span style="font-size:8px;color:var(--c-text-muted,#9da3b8);font-weight:700;flex-shrink:0">' + ev.d + '/' + ev.m + '</span></div>';
+    }
+    h += '</div>';
+  }
+
+  h += '</div>';
+  return h;
+}
+
+// =================================================================
+// 9. جدول الحصص (بيانات حقيقية)
+// =================================================================
+function buildPeriodCard_() {
+  dashSyncStage_();
+  var now = new Date();
+  var dayIdx = now.getDay(); // 0=Sun
+  var isWeekday = (dayIdx >= 0 && dayIdx <= 4);
+  var stgKey = dashStageIndex === 1 ? 'ث' : 'م';
+  var curPeriod = isWeekday ? getCurrentPeriod_(stgKey === 'ث' ? 'ثانوي' : 'متوسط') : null;
+  var curP = curPeriod ? curPeriod.p : 1;
+  var ramadan = isRamadan_();
+
+  var h = '<div style="background:#fff;border-radius:16px;padding:16px;border:1px solid var(--c-border-light,#f0f2f7);box-shadow:0 1px 4px rgba(0,0,0,.04);display:flex;flex-direction:column">';
+
+  // Header
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
+  h += '<div style="font-size:14px;font-weight:800;color:var(--c-text,#1a1d2e);display:flex;align-items:center;gap:6px">';
+  h += '<span class="material-symbols-outlined" style="font-size:20px;color:#6366f1">schedule</span> الحصة الحالية ';
+  h += '<span style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;font-size:12px;font-weight:800;padding:3px 10px;border-radius:100px" id="dash-period-name">' + (curPeriod ? curP : '—') + '</span>';
+  if (curPeriod) {
+    var rem = getTimeRemaining_(curPeriod);
+    var remColor = 'background:#f0fdf4;color:#22c55e';
+    if (rem === 'انتهت') remColor = 'background:#fef2f2;color:#dc2626';
+    else if (rem.indexOf('تبدأ') > -1) remColor = 'background:#fffbeb;color:#f59e0b';
+    h += '<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;' + remColor + '" id="dash-period-remain">' + rem + '</span>';
+  }
+  h += '</div>';
+  h += '<div style="display:flex;align-items:center;gap:6px">';
+  if (ramadan) h += '<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;background:#fdf4ff;color:#a855f7">🌙 رمضان</span>';
+  if (curPeriod) h += '<span style="font-size:12px;font-weight:700;color:#6366f1;background:#eef2ff;padding:4px 10px;border-radius:8px;direction:ltr;display:inline-block" id="dash-period-time">' + curPeriod.s + ' - ' + curPeriod.e + '</span>';
+  h += '</div></div>';
+
+  // Period pills + stage toggle
+  h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="display:flex;gap:4px" id="dash-period-pills">';
+  for (var p = 1; p <= 7; p++) {
+    var isActive = (p === curP);
+    var isPast = (p < curP && curPeriod);
+    var style;
+    if (isActive) style = 'color:white;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-color:#4f46e5;box-shadow:0 2px 8px rgba(79,70,229,.25)';
+    else if (isPast) style = 'color:#4338ca;background:#e0e7ff;border-color:transparent';
+    else style = 'color:var(--c-text-muted,#9da3b8);background:#f8fafc;border-color:transparent';
+    h += '<span style="width:30px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;cursor:pointer;border:1.5px solid;' + style + '" onclick="dashSelectPeriod(' + p + ')" id="dash-pp-' + p + '">' + p + '</span>';
+  }
+  h += '</div>';
+  var stgLabel = stgKey === 'ث' ? 'ثانوي' : 'متوسط';
+  h += '<button style="padding:5px 14px;border:1.5px solid #c7d2fe;border-radius:8px;background:#eef2ff;font-family:inherit;font-size:12px;font-weight:700;color:#4338ca;cursor:pointer" onclick="dashToggleStage()" id="dash-stage-btn">' + stgLabel + '</button></div>';
+
+  // Schedule table
+  h += '<div style="flex:1;overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr>';
+  h += '<th style="font-size:11px;font-weight:800;color:var(--c-text-muted,#9da3b8);padding:4px 8px;text-align:right;border-bottom:1.5px solid #f1f5f9">الفصل</th>';
+  h += '<th style="font-size:11px;font-weight:800;color:var(--c-text-muted,#9da3b8);padding:4px 8px;text-align:right;border-bottom:1.5px solid #f1f5f9">المعلم</th>';
+  h += '<th style="font-size:11px;font-weight:800;color:var(--c-text-muted,#9da3b8);padding:4px 8px;text-align:right;border-bottom:1.5px solid #f1f5f9">المادة</th></tr></thead>';
+  h += '<tbody id="dash-sch-body">';
+
+  // Fill with current period data
+  if (isWeekday) {
+    h += dashBuildScheduleRows_(dayIdx, curP, stgKey);
+  } else {
+    h += '<tr><td colspan="3" style="text-align:center;padding:24px"><span class="material-symbols-outlined" style="font-size:32px;color:#e2e8f0;display:block;margin-bottom:4px">weekend</span><span style="font-size:13px;color:var(--c-text-muted,#9da3b8);font-weight:600">إجازة نهاية الأسبوع</span></td></tr>';
+  }
+
+  h += '</tbody></table></div></div>';
+  return h;
+}
+
+function dashBuildScheduleRows_(dayIdx, period, stageFilter) {
+  var key = dayIdx + '_' + period;
+  var entries = SCHEDULE_DATA[key] || [];
+  // Filter by stage
+  var filtered = [];
+  for (var i = 0; i < entries.length; i++) {
+    if (stageFilter === 'الكل' || entries[i][3] === stageFilter) filtered.push(entries[i]);
+  }
+  if (filtered.length === 0) {
+    return '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--c-text-muted,#9da3b8);font-size:12px"><span class="material-symbols-outlined" style="font-size:24px;color:#e2e8f0;display:block;margin-bottom:4px">event_available</span>لا توجد حصص</td></tr>';
+  }
+  // Sort by class
+  filtered.sort(function(a, b) { return a[1].localeCompare(b[1]); });
+  var h = '';
+  for (var i = 0; i < filtered.length; i++) {
+    var e = filtered[i];
+    var stgColor = e[3] === 'ث' ? '#8b5cf6' : '#6366f1';
+    var stgBg = e[3] === 'ث' ? '#faf5ff' : '#eef2ff';
+    h += '<tr style="border-bottom:1px solid #f8fafc">';
+    h += '<td style="padding:6px 8px;font-size:12px;font-weight:700;color:var(--c-text,#1a1d2e)"><span style="font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;background:' + stgBg + ';color:' + stgColor + ';margin-left:4px">' + e[1] + '</span></td>';
+    h += '<td style="padding:6px 8px;font-size:12px;font-weight:600;color:var(--c-text,#1a1d2e)">' + e[0] + '</td>';
+    h += '<td style="padding:6px 8px;font-size:11px;color:#64748b">' + (e[2] || '—') + '</td>';
+    h += '</tr>';
+  }
+  return h;
+}
+
+var dashCurrentPeriod = 0, dashStageIndex = 0;
+
+// مزامنة المرحلة مع الاختيار الرئيسي
+function dashSyncStage_() {
+  if (typeof currentStage !== 'undefined') {
+    dashStageIndex = (currentStage === 'ثانوي') ? 1 : 0;
+  }
+}
+
+function dashSelectPeriod(n) {
+  dashCurrentPeriod = n;
+  var pN = ['الأولى','الثانية','الثالثة','الرابعة','الخامسة','السادسة','السابعة'];
+  var el = document.getElementById('dash-period-name');
+  if (el) el.textContent = n;
+
+  // Update timing display
+  var stgKey = dashStageIndex === 1 ? 'ث' : 'م';
+  var timing = getCurrentTiming_();
+  var periods = timing[stgKey];
+  var pInfo = null;
+  for (var i = 0; i < periods.length; i++) { if (periods[i].p === n) { pInfo = periods[i]; break; } }
+  var timeEl = document.getElementById('dash-period-time');
+  if (timeEl && pInfo) timeEl.textContent = pInfo.s + ' - ' + pInfo.e;
+
+  // Update pills
+  for (var i = 1; i <= 7; i++) {
+    var p = document.getElementById('dash-pp-' + i); if (!p) continue;
+    if (i < n) p.style.cssText = 'width:30px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#4338ca;background:#e0e7ff;cursor:pointer;border:1.5px solid transparent';
+    else if (i === n) p.style.cssText = 'width:30px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:white;background:linear-gradient(135deg,#4f46e5,#7c3aed);cursor:pointer;border:1.5px solid #4f46e5;box-shadow:0 2px 8px rgba(79,70,229,.25)';
+    else p.style.cssText = 'width:30px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--c-text-muted,#9da3b8);background:#f8fafc;cursor:pointer;border:1.5px solid transparent';
+  }
+
+  // Update table
+  var dayIdx = new Date().getDay();
+  var body = document.getElementById('dash-sch-body');
+  if (body) body.innerHTML = dashBuildScheduleRows_(dayIdx, n, stgKey);
+}
+
+function dashToggleStage() {
+  dashStageIndex = (dashStageIndex + 1) % 2;
+  var stgKey = dashStageIndex === 1 ? 'ث' : 'م';
+  var btn = document.getElementById('dash-stage-btn');
+  if (btn) btn.textContent = dashStageIndex === 1 ? 'ثانوي' : 'متوسط';
+  // Refresh table
+  var _cp = getCurrentPeriod_(dashStageIndex === 1 ? 'ثانوي' : 'متوسط');
+  var curP = dashCurrentPeriod || (_cp ? _cp.p : 1);
+  dashSelectPeriod(curP);
+}
+
+// =================================================================
+// 10. بطاقة التوثيق (الطباعة) — تفاعلية
+// =================================================================
+var dashPrintHidden = false;
+var dashPrintDismissed = {}; // الطلاب المتجاهلين
+
+function buildPrintingCard_(d) {
+  // ★ فلترة حسب المرحلة المختارة
+  var items = dashFilterByStage_(d.needsPrinting || []).filter(function(it) {
+    return !dashPrintDismissed[it.studentId + '_' + it.type];
+  });
+  var wrap = document.getElementById('dash-printing-wrap');
+  var body = document.getElementById('dash-printing-body');
+  var countEl = document.getElementById('dash-print-count');
+  if (!wrap || !body) return;
+
+  if (items.length === 0) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  if (countEl) countEl.textContent = items.length;
+
+  var violations = items.filter(function(i) { return i.type === 'مخالفة'; });
+  var absences = items.filter(function(i) { return i.type === 'غياب'; });
+
+  var h = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+
+  // عمود المخالفات
+  h += '<div>';
+  h += '<div style="font-size:11px;font-weight:800;color:#dc2626;margin-bottom:6px;display:flex;align-items:center;gap:4px"><span class="material-symbols-outlined" style="font-size:14px">gavel</span> مخالفات بدون نماذج (' + violations.length + ')</div>';
+  if (violations.length === 0) {
+    h += '<div style="text-align:center;padding:8px;color:var(--c-text-muted,#9da3b8);font-size:11px">✓ لا يوجد</div>';
+  } else {
+    for (var vi = 0; vi < violations.length; vi++) h += buildPrintItemCompact_(violations[vi], vi);
+  }
+  h += '</div>';
+
+  // عمود الغياب
+  h += '<div>';
+  h += '<div style="font-size:11px;font-weight:800;color:#ea580c;margin-bottom:6px;display:flex;align-items:center;gap:4px"><span class="material-symbols-outlined" style="font-size:14px">event_busy</span> غياب متكرر (' + absences.length + ')</div>';
+  if (absences.length === 0) {
+    h += '<div style="text-align:center;padding:8px;color:var(--c-text-muted,#9da3b8);font-size:11px">✓ لا يوجد</div>';
+  } else {
+    for (var ai = 0; ai < absences.length; ai++) h += buildPrintItemCompact_(absences[ai], 100 + ai);
+  }
+  h += '</div></div>';
+  body.innerHTML = h;
+}
+
+function buildPrintItemCompact_(item, idx) {
+  var isViol = item.type === 'مخالفة';
+  var degBg = isViol ? (item.degree >= 4 ? '#dc2626' : item.degree >= 3 ? '#f97316' : '#f59e0b') : '#ea580c';
+  return '<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;margin-bottom:4px;background:#f8fafc;border-radius:8px;cursor:pointer" onclick="dashGoToStudent(\'' + escapeHtml(item.section) + '\',\'' + encodeURIComponent(item.name) + '\')">' +
+    '<span style="font-size:10px;font-weight:900;color:white;background:' + degBg + ';padding:1px 6px;border-radius:4px;flex-shrink:0">' + (isViol ? 'د' + item.degree : item.degree + 'x') + '</span>' +
+    '<span style="font-size:11px;font-weight:600;color:var(--c-text,#1a1d2e);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(item.name) + '</span>' +
+    '<span style="font-size:9px;font-weight:700;color:var(--c-text-muted,#9da3b8);flex-shrink:0">' + escapeHtml(item.grade) + '</span>' +
+  '</div>';
+}
+
+function buildPrintItem_(item, idx) {
+  var isViol = item.type === 'مخالفة';
+  var borderColor = isViol ? '#fecaca' : '#fed7aa';
+  var iconColor = isViol ? '#dc2626' : '#ea580c';
+  var degBg = isViol ? (item.degree >= 4 ? '#dc2626' : item.degree >= 3 ? '#f97316' : '#f59e0b') : '#ea580c';
+
+  var h = '<div id="dash-pi-' + idx + '" style="border:1px solid ' + borderColor + ';border-radius:10px;padding:10px;margin-bottom:8px;transition:all .2s">';
+
+  // السطر الرئيسي (قابل للضغط)
+  h += '<div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="dashTogglePrintDetail(' + idx + ')">';
+  h += '<span style="font-size:11px;font-weight:900;color:white;background:' + degBg + ';padding:2px 8px;border-radius:6px;flex-shrink:0">' + (isViol ? 'د' + item.degree : item.degree + 'x') + '</span>';
+  h += '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--c-text,#1a1d2e);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(item.name) + '</div>';
+  h += '<div style="font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(item.detail) + '</div></div>';
+  h += '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:#f1f5f9;color:#64748b;flex-shrink:0">' + escapeHtml(item.grade) + ' ' + escapeHtml(item.cls) + '</span>';
+  h += '<span class="material-symbols-outlined" style="font-size:18px;color:var(--c-text-muted,#9da3b8);flex-shrink:0;transition:transform .2s" id="dash-pi-arrow-' + idx + '">expand_more</span>';
+  h += '</div>';
+
+  // التفاصيل (مخفية)
+  h += '<div id="dash-pi-detail-' + idx + '" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9">';
+
+  // النماذج المطلوبة
+  h += '<div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:6px">📋 النماذج المطلوبة:</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">';
+  for (var f = 0; f < item.neededForms.length; f++) {
+    h += '<span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca">' + escapeHtml(item.neededForms[f]) + '</span>';
+  }
+  h += '</div>';
+
+  // معلومات إضافية
+  if (item.date) h += '<div style="font-size:11px;color:var(--c-text-muted,#9da3b8);margin-bottom:6px">📅 ' + item.date + ' · ' + item.stage + '</div>';
+
+  // الأزرار
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+  // زر الانتقال للقسم
+  h += '<button onclick="dashGoToStudent(\'' + escapeHtml(item.section) + '\',\'' + encodeURIComponent(item.name) + '\')" style="display:flex;align-items:center;gap:4px;padding:6px 14px;background:#4f46e5;color:white;border:none;border-radius:8px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer"><span class="material-symbols-outlined" style="font-size:14px">open_in_new</span> فتح سجل الطالب</button>';
+  // زر تجاهل
+  h += '<button onclick="dashDismissPrint(\'' + escapeHtml(item.studentId) + '\',\'' + escapeHtml(item.type) + '\')" style="display:flex;align-items:center;gap:4px;padding:6px 14px;background:#f1f5f9;color:#64748b;border:none;border-radius:8px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer"><span class="material-symbols-outlined" style="font-size:14px">visibility_off</span> تجاهل</button>';
+  h += '</div></div></div>';
+  return h;
+}
+
+function dashTogglePrintDetail(idx) {
+  var detail = document.getElementById('dash-pi-detail-' + idx);
+  var arrow = document.getElementById('dash-pi-arrow-' + idx);
+  if (!detail) return;
+  if (detail.style.display === 'none') {
+    detail.style.display = 'block';
+    if (arrow) arrow.style.transform = 'rotate(180deg)';
+  } else {
+    detail.style.display = 'none';
+    if (arrow) arrow.style.transform = '';
+  }
+}
+
+function dashTogglePrintSection() {
+  var body = document.getElementById('dash-printing-body');
+  var toggle = document.getElementById('dash-print-toggle');
+  if (!body) return;
+  dashPrintHidden = !dashPrintHidden;
+  body.style.display = dashPrintHidden ? 'none' : 'block';
+  if (toggle) toggle.textContent = dashPrintHidden ? '▼ إظهار' : '▲ إخفاء';
+}
+
+function dashDismissPrint(studentId, type) {
+  dashPrintDismissed[studentId + '_' + type] = true;
+  if (dashboardData) buildPrintingCard_(dashboardData);
+}
+
+function dashGoToStudent(section, encodedName) {
+  var name = decodeURIComponent(encodedName);
+  // الانتقال للقسم
+  switchSection(section);
+  // بعد تحميل القسم، محاولة البحث عن الطالب
+  setTimeout(function() {
+    // محاولة ملء حقل البحث إذا وجد
+    var searchFields = document.querySelectorAll('#main-content input[type="text"]');
+    for (var i = 0; i < searchFields.length; i++) {
+      var placeholder = searchFields[i].getAttribute('placeholder') || '';
+      if (placeholder.indexOf('بحث') > -1 || placeholder.indexOf('طالب') > -1 || placeholder.indexOf('اسم') > -1) {
+        searchFields[i].value = name;
+        searchFields[i].dispatchEvent(new Event('input', {bubbles: true}));
+        searchFields[i].focus();
+        break;
+      }
+    }
+  }, 800);
+}
+
+// CSS
+(function() {
+  var s = document.createElement('style');
+  s.textContent = '@keyframes dashBlink{0%,100%{opacity:1}50%{opacity:.3}}.dash-blink{animation:dashBlink 2s infinite}' +
+    '.dash-stats-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:var(--sp-3,12px)}' +
+    '#dash-main-row{display:grid;grid-template-columns:55fr 45fr;gap:var(--sp-5,20px)}' +
+    '.dash-actions-inner{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-3,12px)}' +
+    '#dash-row4{display:grid;grid-template-columns:240px 1fr 1fr;gap:var(--sp-5,20px)}' +
+    '.dash-stat-card{transition:transform .15s ease,box-shadow .15s ease}' +
+    '.dash-stat-card:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.08)}' +
+    '.dash-actions-inner>div{transition:transform .15s ease,box-shadow .15s ease}' +
+    '.dash-actions-inner>div:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.08)}' +
+    '#dash-printing-body::-webkit-scrollbar{width:4px}' +
+    '#dash-printing-body::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}' +
+    '#dash-referrals::-webkit-scrollbar{width:4px}' +
+    '#dash-referrals::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}' +
+    '@media(max-width:1100px){' +
+      '.dash-stats-grid{grid-template-columns:repeat(3,1fr)}' +
+      '#dash-main-row{grid-template-columns:1fr}' +
+      '#dash-row4{grid-template-columns:1fr 1fr}' +
+    '}' +
+    '@media(max-width:700px){' +
+      '.dash-stats-grid{grid-template-columns:repeat(2,1fr)}' +
+      '.dash-actions-inner{grid-template-columns:1fr}' +
+      '#dash-row4{grid-template-columns:1fr}' +
+    '}';
+  document.head.appendChild(s);
+})();
+</script>

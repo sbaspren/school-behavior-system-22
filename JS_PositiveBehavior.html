@@ -1,0 +1,489 @@
+<script>
+// =================================================================
+// نظام السلوك المتمايز (الإيجابي) - JS_PositiveBehavior.html
+// =================================================================
+
+let positiveBehaviorRecords = [];
+let positiveViewMode = 'cards';
+let positiveStudentGroups = [];
+
+// =================================================================
+// 1. تبويب السلوك المتمايز (داخل قسم المخالفات)
+// =================================================================
+function renderPositiveTab() {
+    // ★ إعادة تعيين قفل التمرير في حال كان المودال مفتوحاً قبل إعادة الرسم
+    document.body.style.overflow = '';
+    const content = document.getElementById('viol-tab-content');
+    if (!content) return;
+    content.innerHTML = `
+        <!-- إحصائيات -->
+        <div class="flex gap-3 mb-4">
+            <div class="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2 text-center">
+                <div id="pos-total-records" class="text-2xl font-black text-emerald-600">٠</div>
+                <div class="text-xs text-gray-500">إجمالي السجلات</div>
+            </div>
+            <div class="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-center">
+                <div id="pos-total-students" class="text-2xl font-black text-blue-600">٠</div>
+                <div class="text-xs text-gray-500">عدد الطلاب</div>
+            </div>
+            <div class="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-center">
+                <div id="pos-total-degrees" class="text-2xl font-black text-amber-600">٠</div>
+                <div class="text-xs text-gray-500">إجمالي الدرجات</div>
+            </div>
+        </div>
+
+        <!-- أزرار الأدوات -->
+        <div class="flex items-center gap-2 mb-4">
+            <button onclick="loadPositiveBehaviorRecords()" class="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-xs font-bold">
+                <span class="material-symbols-outlined text-[16px]">refresh</span> تحديث
+            </button>
+            <button onclick="printPositiveBehaviorList()" class="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-xs font-bold shadow-sm">
+                <span class="material-symbols-outlined text-[16px]">print</span> طباعة القائمة
+            </button>
+        </div>
+
+        <!-- الفلاتر -->
+        <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 mb-5 sticky top-0 z-20">
+            <div class="flex flex-wrap items-center gap-2">
+                <div class="relative flex-shrink-0">
+                    <span class="material-symbols-outlined text-[18px] absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">search</span>
+                    <input type="text" id="pos-search" onkeyup="filterPositiveBehavior()" placeholder="ابحث بالاسم..."
+                        class="w-48 pr-9 pl-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400">
+                </div>
+                <select id="pos-grade-filter" onchange="posGradeChanged(); filterPositiveBehavior()" class="px-2 py-1.5 rounded-lg border border-gray-300 text-xs bg-gray-50 flex-shrink-0"><option value="">كل الصفوف</option></select>
+                <select id="pos-class-filter" onchange="filterPositiveBehavior()" class="px-2 py-1.5 rounded-lg border border-gray-300 text-xs bg-gray-50 flex-shrink-0"><option value="">كل الفصول</option></select>
+                <div class="flex bg-gray-100 rounded-lg p-0.5 flex-shrink-0">
+                    <button onclick="togglePosView('cards')" id="pos-view-cards" class="p-1 rounded text-emerald-600 bg-white"><span class="material-symbols-outlined text-[18px]">grid_view</span></button>
+                    <button onclick="togglePosView('table')" id="pos-view-table" class="p-1 rounded text-gray-400"><span class="material-symbols-outlined text-[18px]">table_rows</span></button>
+                </div>
+                <span class="text-[10px] text-gray-500 mr-2" id="pos-results-count"></span>
+            </div>
+        </div>
+
+        <div id="pos-container" class="min-h-[400px]">
+            <div class="text-center py-16"><div class="loading-bar mx-auto"><div class="loading-bar-progress"></div></div><p class="text-gray-500 mt-4">جاري تحميل البيانات...</p></div>
+        </div>
+
+        <!-- Modal تفاصيل الطالب -->
+        <div id="pos-detail-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" onclick="if(event.target===this)closePosDetailModal()">
+            <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+            <div class="relative bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col animate-modal-in">
+                <div id="pos-modal-header" class="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gradient-to-l from-emerald-50 to-white flex-shrink-0">
+                    <div>
+                        <h3 id="pos-modal-name" class="text-lg font-bold text-gray-800"></h3>
+                        <p id="pos-modal-grade" class="text-sm text-gray-500"></p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span id="pos-modal-count" class="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-sm font-bold"></span>
+                        <button onclick="closePosDetailModal()" class="p-1.5 hover:bg-gray-100 rounded-lg"><span class="material-symbols-outlined text-gray-500">close</span></button>
+                    </div>
+                </div>
+                <div id="pos-modal-body" class="p-6 overflow-y-auto flex-1"></div>
+            </div>
+        </div>
+    `;
+    
+    populatePosFilters();
+    loadPositiveBehaviorRecords();
+}
+
+// =================================================================
+// 2. جلب البيانات
+// =================================================================
+function loadPositiveBehaviorRecords() {
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+            .withSuccessHandler(function(data) {
+                positiveBehaviorRecords = data || [];
+                updatePosStats();
+                filterPositiveBehavior();
+            })
+            .withFailureHandler(function(err) {
+                console.error('خطأ:', err);
+                positiveBehaviorRecords = [];
+                filterPositiveBehavior();
+                showEnhancedToast('danger', 'خطأ في تحميل بيانات السلوك المتمايز');
+            })
+            .getCachedPositiveBehaviorRecords(currentStage);
+    } else {
+        // ★ بيئة المعاينة — إزالة مؤشر التحميل
+        positiveBehaviorRecords = [];
+        var container = document.getElementById('pos-container');
+        if (container) container.innerHTML = '<div class="text-center py-16 bg-white rounded-xl border border-gray-200"><span class="material-symbols-outlined text-gray-300 text-6xl">cloud_off</span><p class="text-gray-500 mt-2">غير متصل بالخادم</p></div>';
+    }
+}
+
+// =================================================================
+// 3. الإحصائيات
+// =================================================================
+function updatePosStats() {
+    var records = positiveBehaviorRecords;
+    var totalDegrees = 0;
+    var studentSet = {};
+    
+    records.forEach(function(r) {
+        var deg = parseFloat(r['الدرجة']) || 0;
+        totalDegrees += deg;
+        var key = r['رقم الطالب'] || r['اسم الطالب'];
+        studentSet[key] = true;
+    });
+    
+    var el1 = document.getElementById('pos-total-records');
+    var el2 = document.getElementById('pos-total-students');
+    var el3 = document.getElementById('pos-total-degrees');
+    if (el1) el1.textContent = toIndic(records.length);
+    if (el2) el2.textContent = toIndic(Object.keys(studentSet).length);
+    if (el3) el3.textContent = toIndic(totalDegrees);
+}
+
+// =================================================================
+// 4. الفلاتر
+// =================================================================
+function populatePosFilters() {
+    var grades = [];
+    var seen = {};
+    var students = (APP_DATA && APP_DATA.students) || [];
+    students.filter(function(s) { return s['المرحلة'] === currentStage; }).forEach(function(s) {
+        var g = s['الصف'];
+        if (g && !seen[g]) { seen[g] = true; grades.push(g); }
+    });
+    var gradeOrder = ['أول', 'ثاني', 'ثالث', 'رابع', 'خامس', 'سادس'];
+    grades.sort(function(a, b) {
+        var iA = -1, iB = -1;
+        for (var i = 0; i < gradeOrder.length; i++) {
+            if (a.indexOf(gradeOrder[i]) >= 0) iA = i;
+            if (b.indexOf(gradeOrder[i]) >= 0) iB = i;
+        }
+        return (iA === -1 ? 99 : iA) - (iB === -1 ? 99 : iB);
+    });
+    var sel = document.getElementById('pos-grade-filter');
+    if (sel) {
+        sel.innerHTML = '<option value="">كل الصفوف</option>';
+        grades.forEach(function(g) { sel.add(new Option(g, g)); });
+    }
+}
+
+function posGradeChanged() {
+    var gradeEl = document.getElementById('pos-grade-filter');
+    var classSel = document.getElementById('pos-class-filter');
+    if (!gradeEl || !classSel) return;
+    var grade = gradeEl.value;
+    classSel.innerHTML = '<option value="">كل الفصول</option>';
+    if (grade) {
+        var classes = [];
+        var seen = {};
+        var students = (APP_DATA && APP_DATA.students) || [];
+        students.filter(function(s) { return s['المرحلة'] === currentStage && s['الصف'] === grade; }).forEach(function(s) {
+            var c = s['الفصل'];
+            if (c && !seen[c]) { seen[c] = true; classes.push(c); }
+        });
+        classes.sort(function(a, b) { return String(a).localeCompare(String(b), 'ar', {numeric: true}); });
+        classes.forEach(function(c) { classSel.add(new Option(c, c)); });
+    }
+}
+
+function filterPositiveBehavior() {
+    var search = (document.getElementById('pos-search') ? document.getElementById('pos-search').value : '').trim();
+    var grade = document.getElementById('pos-grade-filter') ? document.getElementById('pos-grade-filter').value : '';
+    var cls = document.getElementById('pos-class-filter') ? document.getElementById('pos-class-filter').value : '';
+    
+    var filtered = positiveBehaviorRecords.filter(function(r) {
+        if (search && (r['اسم الطالب'] || '').indexOf(search) < 0) return false;
+        if (grade && r['الصف'] !== grade) return false;
+        if (cls && String(r['الفصل']) !== cls) return false;
+        return true;
+    });
+    
+    // ترتيب
+    var gradeOrder = ['أول', 'ثاني', 'ثالث', 'رابع', 'خامس', 'سادس'];
+    filtered.sort(function(a, b) {
+        var gA = -1, gB = -1;
+        for (var i = 0; i < gradeOrder.length; i++) {
+            if ((a['الصف'] || '').indexOf(gradeOrder[i]) >= 0) gA = i;
+            if ((b['الصف'] || '').indexOf(gradeOrder[i]) >= 0) gB = i;
+        }
+        if (gA !== gB) return (gA === -1 ? 99 : gA) - (gB === -1 ? 99 : gB);
+        if (a['الفصل'] !== b['الفصل']) return String(a['الفصل']).localeCompare(String(b['الفصل']), 'ar');
+        return (a['اسم الطالب'] || '').localeCompare(b['اسم الطالب'] || '', 'ar');
+    });
+    
+    displayPositiveBehavior(filtered);
+}
+
+// =================================================================
+// 5. عرض البيانات
+// =================================================================
+function togglePosView(mode) {
+    positiveViewMode = mode;
+    var cardsBtn = document.getElementById('pos-view-cards');
+    var tableBtn = document.getElementById('pos-view-table');
+    if (mode === 'cards') {
+        if (cardsBtn) { cardsBtn.classList.add('text-emerald-600', 'bg-white'); cardsBtn.classList.remove('text-gray-400'); }
+        if (tableBtn) { tableBtn.classList.remove('text-emerald-600', 'bg-white'); tableBtn.classList.add('text-gray-400'); }
+    } else {
+        if (tableBtn) { tableBtn.classList.add('text-emerald-600', 'bg-white'); tableBtn.classList.remove('text-gray-400'); }
+        if (cardsBtn) { cardsBtn.classList.remove('text-emerald-600', 'bg-white'); cardsBtn.classList.add('text-gray-400'); }
+    }
+    filterPositiveBehavior();
+}
+
+function displayPositiveBehavior(records) {
+    var container = document.getElementById('pos-container');
+    if (!container) return;
+    if (!records || records.length === 0) {
+        container.innerHTML = '<div class="text-center py-16 bg-white rounded-xl border border-gray-200"><span class="material-symbols-outlined text-gray-300 text-6xl">search_off</span><p class="text-gray-500 mt-2">لا توجد سجلات سلوك متمايز</p></div>';
+        var countEl0 = document.getElementById('pos-results-count');
+        if (countEl0) countEl0.textContent = '٠ سجل';
+        return;
+    }
+
+    var countEl = document.getElementById('pos-results-count');
+    if (countEl) countEl.textContent = records.length + ' سجل';
+    
+    if (positiveViewMode === 'table') {
+        container.innerHTML = createPosTable(records);
+    } else {
+        container.innerHTML = createPosCards(records);
+    }
+}
+
+// =================================================================
+// 6. بطاقات الطلاب
+// =================================================================
+function createPosCards(records) {
+    // تجميع حسب الطالب
+    var groups = {};
+    records.forEach(function(rec) {
+        var key = String(rec['رقم الطالب'] || rec['اسم الطالب']);
+        if (!groups[key]) groups[key] = { info: rec, behaviors: [] };
+        groups[key].behaviors.push(rec);
+    });
+    
+    var orderedIds = [];
+    var seenIds = {};
+    records.forEach(function(r) {
+        var k = String(r['رقم الطالب'] || r['اسم الطالب']);
+        if (!seenIds[k]) { seenIds[k] = true; orderedIds.push(k); }
+    });
+    positiveStudentGroups = orderedIds.map(function(id) { return groups[id]; });
+    
+    var html = '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">';
+    
+    positiveStudentGroups.forEach(function(g, gIdx) {
+        var behaviors = g.behaviors;
+        var name = g.info['اسم الطالب'] || '';
+        var grade = g.info['الصف'] || '';
+        var cls = g.info['الفصل'] || '';
+        var total = behaviors.length;
+        
+        // حساب إجمالي الدرجات
+        var totalDeg = 0;
+        behaviors.forEach(function(b) {
+            totalDeg += (parseFloat(b['الدرجة']) || 0);
+        });
+        
+        // لون البطاقة بناء على عدد السلوكيات
+        var border = 'border-gray-200';
+        var badge = '', badgeClass = '';
+        if (total >= 10) { border = 'border-emerald-500'; badge = 'متميز'; badgeClass = 'text-white bg-emerald-600'; }
+        else if (total >= 5) { border = 'border-emerald-400'; badge = 'جيد جداً'; badgeClass = 'text-emerald-800 bg-emerald-100 border border-emerald-300'; }
+        else if (total >= 3) { border = 'border-teal-400'; badge = 'جيد'; badgeClass = 'text-teal-800 bg-teal-100 border border-teal-300'; }
+        else { border = 'border-blue-300'; badge = 'بداية'; badgeClass = 'text-blue-800 bg-blue-100 border border-blue-300'; }
+        
+        html += '<div class="bg-white rounded-xl border-2 ' + border + ' p-4 hover:shadow-lg transition-all cursor-pointer group" onclick="openPosDetailModal(' + gIdx + ')">'
+            + '<div class="flex justify-between items-start mb-3">'
+            + '<div class="flex items-center gap-1">'
+            + '<span class="text-[22px] font-black text-emerald-600">' + toIndic(totalDeg) + '</span>'
+            + '<span class="text-[10px] text-gray-400">درجة</span>'
+            + '</div>'
+            + (badge ? '<span class="text-[10px] font-bold ' + badgeClass + ' px-2 py-0.5 rounded-full">' + badge + '</span>' : '')
+            + '</div>'
+            
+            + '<h3 class="font-bold text-gray-800 text-sm leading-tight">' + escapeHtml(name) + '</h3>'
+            + '<p class="text-xs text-gray-500 mt-0.5 mb-3">' + escapeHtml(grade) + '/' + escapeHtml(cls) + '</p>'
+            
+            + '<div class="flex gap-2 justify-center mb-3">'
+            + '<div class="flex-1 text-center rounded-lg py-1.5 bg-emerald-50 border border-emerald-200">'
+            + '<p class="text-base font-black text-emerald-700">' + toIndic(total) + '</p>'
+            + '<p class="text-[8px] text-emerald-600">عدد السلوكيات</p>'
+            + '</div>'
+            + '<div class="flex-1 text-center rounded-lg py-1.5 bg-amber-50 border border-amber-200">'
+            + '<p class="text-base font-black text-amber-700">' + toIndic(totalDeg) + '</p>'
+            + '<p class="text-[8px] text-amber-600">إجمالي الدرجات</p>'
+            + '</div>'
+            + '</div>'
+            
+            + '<div class="text-center text-[11px] text-emerald-600 font-bold group-hover:text-emerald-800 flex items-center justify-center gap-1">'
+            + '<span class="material-symbols-outlined text-[14px]">open_in_new</span>'
+            + 'عرض التفاصيل'
+            + '</div>'
+            + '</div>';
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+// =================================================================
+// 7. جدول البيانات
+// =================================================================
+function createPosTable(records) {
+    var html = '<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">'
+        + '<div class="overflow-x-auto">'
+        + '<table class="w-full text-sm">'
+        + '<thead class="bg-emerald-50 text-emerald-700"><tr>'
+        + '<th class="px-3 py-2.5 text-right text-[11px] font-bold">م</th>'
+        + '<th class="px-3 py-2.5 text-right text-[11px] font-bold">اسم الطالب</th>'
+        + '<th class="px-3 py-2.5 text-center text-[11px] font-bold">الصف</th>'
+        + '<th class="px-3 py-2.5 text-center text-[11px] font-bold">الفصل</th>'
+        + '<th class="px-3 py-2.5 text-right text-[11px] font-bold">السلوك</th>'
+        + '<th class="px-3 py-2.5 text-center text-[11px] font-bold">الدرجة</th>'
+        + '<th class="px-3 py-2.5 text-center text-[11px] font-bold">المعلم</th>'
+        + '<th class="px-3 py-2.5 text-center text-[11px] font-bold">التاريخ</th>'
+        + '</tr></thead><tbody>';
+    
+    records.forEach(function(r, i) {
+        var bg = i % 2 === 0 ? '' : ' class="bg-gray-50"';
+        html += '<tr' + bg + '>'
+            + '<td class="px-3 py-2 text-gray-500 text-[11px]">' + toIndic(i + 1) + '</td>'
+            + '<td class="px-3 py-2 font-bold text-gray-800 text-[12px]">' + escapeHtml(r['اسم الطالب'] || '') + '</td>'
+            + '<td class="px-3 py-2 text-center text-gray-600 text-[11px]">' + escapeHtml(r['الصف'] || '') + '</td>'
+            + '<td class="px-3 py-2 text-center text-gray-600 text-[11px]">' + escapeHtml(r['الفصل'] || '') + '</td>'
+            + '<td class="px-3 py-2 text-gray-700 text-[11px]">' + escapeHtml(r['السلوك المتمايز'] || '') + '</td>'
+            + '<td class="px-3 py-2 text-center"><span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[11px] font-bold">' + escapeHtml(r['الدرجة'] || '-') + '</span></td>'
+            + '<td class="px-3 py-2 text-center text-gray-600 text-[11px]">' + escapeHtml(r['المعلم'] || '') + '</td>'
+            + '<td class="px-3 py-2 text-center text-gray-500 text-[11px]">' + escapeHtml(r['التاريخ'] || '') + '</td>'
+            + '</tr>';
+    });
+    
+    html += '</tbody></table></div></div>';
+    return html;
+}
+
+// =================================================================
+// 8. Modal تفاصيل السلوك المتمايز للطالب
+// =================================================================
+function openPosDetailModal(groupIndex) {
+    var group = positiveStudentGroups[groupIndex];
+    if (!group) return;
+    
+    var behaviors = group.behaviors;
+    var info = group.info;
+    document.getElementById('pos-modal-name').textContent = info['اسم الطالب'];
+    document.getElementById('pos-modal-grade').textContent = info['الصف'] + ' / ' + info['الفصل'];
+    document.getElementById('pos-modal-count').textContent = behaviors.length + ' سلوك متمايز';
+    
+    // حساب الإجمالي
+    var totalDeg = 0;
+    behaviors.forEach(function(b) { totalDeg += (parseFloat(b['الدرجة']) || 0); });
+    
+    var html = '<div class="bg-emerald-50 rounded-xl p-4 mb-4 flex justify-between items-center">'
+        + '<div><span class="text-sm text-emerald-700 font-bold">إجمالي الدرجات</span></div>'
+        + '<div class="text-2xl font-black text-emerald-700">' + toIndic(totalDeg) + '</div>'
+        + '</div>';
+    
+    html += '<div class="space-y-3">';
+    
+    behaviors.forEach(function(b, i) {
+        var deg = (b['الدرجة'] !== null && b['الدرجة'] !== undefined && b['الدرجة'] !== '') ? b['الدرجة'] : '-';
+        
+        html += '<div class="border border-gray-200 rounded-xl p-4 hover:bg-gray-50 transition-colors border-r-4 border-r-emerald-500">'
+            + '<div class="flex justify-between items-start mb-2">'
+            + '<p class="font-bold text-sm text-gray-800 flex-1">' + escapeHtml(b['السلوك المتمايز'] || 'سلوك متمايز') + '</p>'
+            + '<div class="flex items-center gap-2 flex-shrink-0 mr-3">'
+            + '<span class="text-[10px] text-gray-400">' + escapeHtml(b['التاريخ'] || '') + '</span>'
+            + '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">درجة ' + toIndic(deg) + '</span>'
+            + '</div>'
+            + '</div>'
+            + '<div class="flex justify-between items-center text-[11px] text-gray-500">'
+            + '<span>المعلم: ' + escapeHtml(b['المعلم'] || '-') + '</span>'
+            + '</div>'
+            + '</div>';
+    });
+    
+    html += '</div>';
+    document.getElementById('pos-modal-body').innerHTML = html;
+    document.getElementById('pos-detail-modal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closePosDetailModal() {
+    document.getElementById('pos-detail-modal').classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+// =================================================================
+// 9. طباعة القائمة
+// =================================================================
+function printPositiveBehaviorList() {
+    var records = positiveBehaviorRecords || [];
+    var grade = document.getElementById('pos-grade-filter') ? document.getElementById('pos-grade-filter').value : '';
+    var cls = document.getElementById('pos-class-filter') ? document.getElementById('pos-class-filter').value : '';
+    var search = document.getElementById('pos-search') ? document.getElementById('pos-search').value.trim() : '';
+    
+    var filtered = records.filter(function(r) {
+        if (grade && (r['الصف'] || '') !== grade) return false;
+        if (cls && String(r['الفصل']) !== cls) return false;
+        if (search && (r['اسم الطالب'] || '').indexOf(search) < 0) return false;
+        return true;
+    });
+    
+    if (filtered.length === 0) { showEnhancedToast('warning', 'لا توجد بيانات للطباعة'); return; }
+    
+    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    
+    // ترتيب
+    var gradeOrder = ['أول', 'ثاني', 'ثالث', 'رابع', 'خامس', 'سادس'];
+    filtered.sort(function(a, b) {
+        var gA = -1, gB = -1;
+        for (var i = 0; i < gradeOrder.length; i++) {
+            if ((a['الصف'] || '').indexOf(gradeOrder[i]) >= 0) gA = i;
+            if ((b['الصف'] || '').indexOf(gradeOrder[i]) >= 0) gB = i;
+        }
+        if (gA !== gB) return (gA === -1 ? 99 : gA) - (gB === -1 ? 99 : gB);
+        if (a['الفصل'] !== b['الفصل']) return String(a['الفصل']).localeCompare(String(b['الفصل']), 'ar');
+        return (a['اسم الطالب'] || '').localeCompare(b['اسم الطالب'] || '', 'ar');
+    });
+    
+    var rows = '', lastKey = '';
+    filtered.forEach(function(rec, i) {
+        var g = rec['الصف'] || '', c = rec['الفصل'] || '';
+        var key = g + c;
+        if (key !== lastKey && i > 0) rows += '<tr class="sep-row"><td colspan="7"></td></tr>';
+        lastKey = key;
+        rows += '<tr>'
+            + '<td class="data-cell">' + toArShared_(i+1) + '</td>'
+            + '<td class="name-cell">' + escapeHtml(rec['اسم الطالب'] || '') + '</td>'
+            + '<td class="data-cell">' + escapeHtml(g) + '</td>'
+            + '<td class="data-cell">' + escapeHtml(c) + '</td>'
+            + '<td class="detail-cell">' + escapeHtml(rec['السلوك المتمايز'] || '') + '</td>'
+            + '<td class="data-cell" style="font-weight:bold;color:#059669">' + escapeHtml(rec['الدرجة'] || '-') + '</td>'
+            + '<td class="data-cell">' + escapeHtml(rec['المعلم'] || '') + '</td>'
+            + '</tr>';
+    });
+    
+    var titleText = 'سجل السلوك المتمايز';
+    if (grade) titleText += ' - ' + grade;
+    if (cls) titleText += ' / ' + cls;
+    
+    var win = window.open('', '_blank');
+    if (!win) { showEnhancedToast('danger', 'المتصفح منع فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة.'); return; }
+    win.document.write(buildSharedPrintPage_({
+        title: titleText,
+        subtitle: currentStage,
+        dateText: hijri + ' | عدد السجلات: ' + toArShared_(filtered.length),
+        colCount: 7,
+        headers: '<th class="col-header" style="width:5%">م</th>'
+            + '<th class="col-header" style="width:25%">اسم الطالب</th>'
+            + '<th class="col-header" style="width:12%">الصف</th>'
+            + '<th class="col-header" style="width:8%">الفصل</th>'
+            + '<th class="col-header" style="width:25%">السلوك المتمايز</th>'
+            + '<th class="col-header" style="width:8%">الدرجة</th>'
+            + '<th class="col-header" style="width:15%">المعلم</th>',
+        rows: rows,
+        total: toArShared_(filtered.length) + ' سجل'
+    }));
+    win.document.close();
+    setTimeout(function() { win.print(); }, 300);
+}
+</script>

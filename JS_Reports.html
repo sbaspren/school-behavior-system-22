@@ -1,0 +1,224 @@
+<script>
+    // =================================================================
+    // 1. رسم الصفحة (Rendering) - تحديث: إضافة فلاتر الصف والفصل
+    // =================================================================
+    function renderReportsPage() {
+        const main = document.getElementById('main-content');
+        main.innerHTML = `
+            <div class="max-w-full">
+                <h2 class="text-xl font-extrabold text-gray-900 mb-5">تحليل السلوك والمؤشرات</h2>
+                
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 mb-5">
+                    <div class="flex flex-wrap gap-4 items-end">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 mb-1">الصف الدراسي</label>
+                            <select id="rep-grade" onchange="repPopulateClasses(); generateCharts()" class="w-40 border-gray-300 rounded-lg text-sm h-10">
+                                <option value="">كل الصفوف</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 mb-1">الفصل</label>
+                            <select id="rep-class" onchange="generateCharts()" disabled class="w-32 border-gray-300 rounded-lg text-sm h-10 disabled:bg-gray-50">
+                                <option value="">كل الفصول</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 mb-1">من تاريخ</label>
+                            <input type="date" id="rep-from" onchange="generateCharts()" class="border-gray-300 rounded-lg text-sm h-10">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 mb-1">إلى تاريخ</label>
+                            <input type="date" id="rep-to" onchange="generateCharts()" class="border-gray-300 rounded-lg text-sm h-10">
+                        </div>
+                        
+                        <button onclick="generateCharts()" class="mb-0.5 bg-indigo-50 text-indigo-600 px-4 h-10 rounded-lg text-sm font-bold hover:bg-indigo-100 flex items-center gap-2 border border-indigo-200">
+                            <span class="material-symbols-outlined text-[18px]">refresh</span> تحديث
+                        </button>
+                    </div>
+                </div>
+              
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 border-r-4 border-r-indigo-500">
+                        <div id="stat-total" class="text-4xl font-bold text-indigo-600 mb-1">0</div>
+                        <div class="text-sm text-gray-500 font-bold">إجمالي المخالفات المرصودة</div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 border-r-4 border-r-emerald-500">
+                        <div id="stat-students" class="text-4xl font-bold text-emerald-600 mb-1">0</div>
+                        <div class="text-sm text-gray-500 font-bold">عدد الطلاب المخالفين</div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 border-r-4 border-r-rose-500">
+                        <div id="stat-high" class="text-4xl font-bold text-rose-600 mb-1">0</div>
+                        <div class="text-sm text-gray-500 font-bold">مخالفات خطرة (درجة 4 و 5)</div>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <h3 class="font-bold text-gray-700 mb-4 border-b pb-2 flex items-center gap-2"><span class="material-symbols-outlined text-gray-400">pie_chart</span> توزيع المخالفات حسب الدرجة</h3>
+                        <canvas id="chartDegree"></canvas>
+                    </div>
+    
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <h3 class="font-bold text-gray-700 mb-4 border-b pb-2 flex items-center gap-2"><span class="material-symbols-outlined text-gray-400">bar_chart</span> أكثر 5 مخالفات شيوعاً</h3>
+                        <canvas id="chartCommon"></canvas>
+                    </div>
+ 
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 lg:col-span-2">
+                        <h3 class="font-bold text-gray-700 mb-4 border-b pb-2 flex items-center gap-2"><span class="material-symbols-outlined text-gray-400">analytics</span> مقارنة المخالفات بين الفصول</h3>
+                        <canvas id="chartClasses"></canvas>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // تحميل البيانات وتعبئة المنسدلات الأولية
+        repPopulateGrades();
+        
+        google.script.run.withSuccessHandler(data => {
+            currentRecords = data;
+            generateCharts();
+        }).getCachedViolationRecords(currentStage);
+    }
+
+    // =================================================================
+    // 2. دوال تعبئة المنسدلات (من بيانات الطلاب الرسمية)
+    // =================================================================
+    function repPopulateGrades() {
+        const select = document.getElementById('rep-grade');
+        // نأخذ الصفوف الفريدة من قائمة الطلاب الحالية (المفلترة حسب المرحلة)
+        let grades = [...new Set(APP_DATA.students.filter(s => s['المرحلة'] === currentStage).map(s => s['الصف']))];
+        
+        // ترتيب الصفوف منطقياً
+        const gradeOrder = ["أول", "ثاني", "ثالث", "رابع", "خامس", "سادس"];
+        grades.sort((a, b) => {
+            const indexA = gradeOrder.findIndex(key => a.includes(key));
+            const indexB = gradeOrder.findIndex(key => b.includes(key));
+            if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+            return a.localeCompare(b, 'ar');
+        });
+
+        select.innerHTML = '<option value="">كل الصفوف</option>'; 
+        grades.forEach(g => select.add(new Option(g, g)));
+    }
+
+    function repPopulateClasses() {
+        const grade = document.getElementById('rep-grade').value;
+        const select = document.getElementById('rep-class');
+        select.disabled = !grade;
+        select.innerHTML = '<option value="">كل الفصول</option>';
+        
+        if(grade) {
+            // جلب الفصول التابعة للصف المختار من بيانات الطلاب
+            const classes = [...new Set(APP_DATA.students.filter(s => s['المرحلة'] === currentStage && s['الصف'] === grade).map(s => s['الفصل']))];
+            classes.sort((a, b) => a.toString().localeCompare(b.toString(), 'ar', { numeric: true }));
+            classes.forEach(c => select.add(new Option(c, c)));
+        }
+    }
+
+    // =================================================================
+    // 3. توليد المخططات (Charts Logic) - مع الفلاتر الجديدة
+    // =================================================================
+    function generateCharts() {
+        // قراءة الفلاتر
+        const fromDate = document.getElementById('rep-from').value ? new Date(document.getElementById('rep-from').value) : null;
+        const toDate = document.getElementById('rep-to').value ? new Date(document.getElementById('rep-to').value) : null;
+        const gradeFilter = document.getElementById('rep-grade').value;
+        const classFilter = document.getElementById('rep-class').value;
+        
+        let filtered = currentRecords;
+
+        // تطبيق الفلاتر
+        if(fromDate || toDate || gradeFilter || classFilter) {
+            filtered = currentRecords.filter(r => {
+                // فلترة التاريخ
+                const d = new Date(r['وقت الإدخال'] || r['التاريخ الميلادي']); 
+                if(fromDate && d < fromDate) return false;
+                if(toDate) {
+                    const end = new Date(toDate); end.setHours(23,59,59);
+                    if(d > end) return false;
+                }
+                
+                // فلترة الصف والفصل (تعتمد على البيانات المخزنة في السجل)
+                if(gradeFilter && r['الصف'] !== gradeFilter) return false;
+                if(classFilter && r['الفصل'] !== classFilter) return false;
+
+                return true;
+            });
+        }
+
+        // 2. حساب الإحصائيات (KPIs)
+        document.getElementById('stat-total').innerText = toIndic(filtered.length);
+        document.getElementById('stat-students').innerText = toIndic(new Set(filtered.map(r => r['رقم الطالب'])).size);
+        document.getElementById('stat-high').innerText = toIndic(filtered.filter(r => r['الدرجة'] >= 4).length);
+
+        // 3. تنظيف المخططات القديمة
+        Object.values(chartInstances).forEach(c => c.destroy());
+        chartInstances = {};
+
+        // 4. إنشاء المخطط الأول: Pie Chart (الدرجات)
+        const degrees = {};
+        filtered.forEach(r => degrees['الدرجة '+r['الدرجة']] = (degrees['الدرجة '+r['الدرجة']]||0)+1);
+        const ctx1 = document.getElementById('chartDegree').getContext('2d');
+        chartInstances['chartDegree'] = new Chart(ctx1, {
+            type: 'doughnut',
+            data: { 
+                labels: Object.keys(degrees), 
+                datasets: [{ 
+                    data: Object.values(degrees), 
+                    backgroundColor: ['#34d399','#fcd34d','#fb923c','#f87171','#9f1239'],
+                    borderWidth: 0
+                }] 
+            },
+            options: { plugins: { legend: { position: 'bottom' } } }
+        });
+
+        // 5. إنشاء المخطط الثاني: Bar Chart (الأكثر شيوعاً)
+        const commons = {};
+        filtered.forEach(r => commons[r['نص المخالفة']] = (commons[r['نص المخالفة']]||0)+1);
+        const sortedCommons = Object.entries(commons).sort((a,b)=>b[1]-a[1]).slice(0,5);
+        const ctx2 = document.getElementById('chartCommon').getContext('2d');
+        chartInstances['chartCommon'] = new Chart(ctx2, {
+            type: 'bar',
+            data: { 
+                labels: sortedCommons.map(x=>x[0].length > 20 ? x[0].substring(0,20)+'...' : x[0]), 
+                datasets: [{ 
+                    label: 'عدد التكرار', 
+                    data: sortedCommons.map(x=>x[1]), 
+                    backgroundColor: '#6366f1', 
+                    borderRadius: 4 
+                }] 
+            },
+            options: { 
+                indexAxis: 'y',
+                plugins: { legend: { display: false } }
+            }
+        });
+
+        // 6. إنشاء المخطط الثالث: Bar Chart (الفصول)
+        // إذا تم اختيار صف معين، نعرض فصوله. إذا لا، نعرض الصفوف.
+        const classes = {};
+        filtered.forEach(r => { 
+            // إذا كان الفلتر للصف مفعلاً، نعرض تفاصيل الفصول (أ، ب، ج)
+            // إذا كان عاماً، نعرض الصفوف (أول، ثاني، ثالث)
+            const key = gradeFilter ? r['الفصل'] : r['الصف']; 
+            classes[key] = (classes[key]||0)+1; 
+        });
+        
+        const ctx3 = document.getElementById('chartClasses').getContext('2d');
+        chartInstances['chartClasses'] = new Chart(ctx3, {
+            type: 'bar',
+            data: { 
+                labels: Object.keys(classes), 
+                datasets: [{ 
+                    label: 'عدد المخالفات', 
+                    data: Object.values(classes), 
+                    backgroundColor: '#8b5cf6', 
+                    borderRadius: 4 
+                }] 
+            },
+            options: { plugins: { legend: { display: false } } }
+        });
+    }
+</script>

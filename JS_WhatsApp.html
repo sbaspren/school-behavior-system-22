@@ -1,0 +1,819 @@
+<script>
+// =================================================================
+// صفحة أدوات واتساب - JS_WhatsApp.html
+// النسخة المحدثة: دعم الرقم الرئيسي + النمط الموحد/المستقل
+// =================================================================
+
+var wa_pollInterval = null;
+var wa_currentUserType = 'وكيل';
+var wa_whatsappMode = 'per_stage'; // per_stage أو unified
+
+function renderWhatsAppPage() {
+    var main = document.getElementById('main-content');
+    main.innerHTML = '<div class="flex justify-center items-center py-20"><div class="w-12 h-12 border-4 border-green-200 border-t-green-600 rounded-full animate-spin"></div></div>';
+    loadWhatsAppStatus();
+}
+
+function getStageLabel() {
+    if (wa_whatsappMode === 'unified') return 'جميع المراحل';
+    return currentStage === 'متوسط' ? 'المرحلة المتوسطة' : 
+           currentStage === 'ثانوي' ? 'المرحلة الثانوية' :
+           currentStage === 'ابتدائي' ? 'المرحلة الابتدائية' : currentStage;
+}
+
+function getStageColor() {
+    if (wa_whatsappMode === 'unified') return 'purple';
+    return currentStage === 'متوسط' ? 'blue' : currentStage === 'ثانوي' ? 'green' : 'amber';
+}
+
+// =================================================================
+// تحميل حالة الاتصال
+// =================================================================
+function loadWhatsAppStatus() {
+    google.script.run
+        .withSuccessHandler(handleStatusResponse)
+        .withFailureHandler(function(err) { showWaError(err.message); })
+        .getWhatsAppStatus(currentStage);
+}
+
+function handleStatusResponse(result) {
+    // ★ حفظ نمط الواتساب
+    wa_whatsappMode = result.whatsappMode || 'per_stage';
+    
+    var stageName = getStageLabel();
+    var stageColor = getStageColor();
+    
+    // بناء الصفحة الرئيسية
+    var main = document.getElementById('main-content');
+    main.innerHTML = `
+        <div class="max-w-4xl mx-auto">
+            <div class="flex items-center justify-between mb-5">
+                <div class="flex items-center gap-3">
+                    <div class="p-3 bg-green-100 rounded-2xl">
+                        <span class="material-symbols-outlined text-4xl text-green-600">chat</span>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-extrabold text-gray-900">أدوات واتساب</h2>
+                        <p class="text-sm text-gray-500">إدارة الرقم الرئيسي للتواصل</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    ${wa_whatsappMode === 'unified' ? 
+                        '<span class="px-3 py-1 bg-purple-100 text-purple-700 text-xs rounded-full font-bold">رقم موحد</span>' : ''}
+                    <div class="bg-${stageColor}-100 text-${stageColor}-700 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2">
+                        <span class="material-symbols-outlined text-lg">school</span>
+                        ${escapeHtml(stageName)}
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
+                <div class="bg-gradient-to-l from-green-500 to-green-600 p-4">
+                    <div class="flex items-center gap-2 text-white">
+                        <span class="material-symbols-outlined">info</span>
+                        <span class="text-sm">${wa_whatsappMode === 'unified' ?
+                            'رقم واحد رئيسي لجميع المراحل' :
+                            'الرقم الرئيسي يُستخدم لجميع مراسلات <strong>' + escapeHtml(stageName) + '</strong>'}</span>
+                    </div>
+                </div>
+
+                <div class="flex flex-col lg:flex-row min-h-[450px]">
+                    <div class="w-full lg:w-1/2 p-6 bg-gray-50 border-l border-gray-200">
+                        <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                            <span class="w-1 h-6 bg-green-500 rounded-full"></span>
+                            تعليمات ربط الواتساب
+                        </h3>
+                        <ol class="space-y-3 text-sm text-gray-700">
+                            <li class="flex items-start gap-3">
+                                <span class="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold shrink-0">1</span>
+                                <span>أدخل رمز الأمان (6 خانات على الأقل)</span>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold shrink-0">2</span>
+                                <span>اضغط <strong>"إنشاء جلسة جديدة"</strong></span>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold shrink-0">3</span>
+                                <span>افتح واتساب على الجوال → <strong>"الأجهزة المرتبطة"</strong></span>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold shrink-0">4</span>
+                                <span>اضغط <strong>"ربط جهاز"</strong> وامسح الباركود</span>
+                            </li>
+                        </ol>
+                        <div class="mt-6 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                            <p class="text-xs text-amber-800">
+                                ⭐ <strong>مهم:</strong> آخر رقم يُمسح بالباركود يصبح الرقم الرئيسي تلقائياً
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="w-full lg:w-1/2 p-6 flex flex-col">
+                        <div id="wa-main-content" class="flex-1 flex flex-col items-center justify-center">
+                            <div class="text-center py-8">
+                                <div class="w-12 h-12 border-4 border-green-200 border-t-green-600 rounded-full animate-spin mx-auto"></div>
+                                <p class="text-gray-500 mt-4">جاري التحميل...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="wa-phones-card" class="hidden mt-6 bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-green-600">phone_android</span>
+                    أرقام ${escapeHtml(stageName)}
+                </h3>
+                <div id="wa-phones-list" class="space-y-3"></div>
+            </div>
+
+            <div id="wa-stats-card" class="hidden mt-6 bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-green-600">analytics</span>
+                    إحصائيات الإرسال - ${escapeHtml(stageName)}
+                </h3>
+                <div class="grid grid-cols-3 gap-4">
+                    <div class="bg-blue-50 rounded-xl p-4 text-center">
+                        <div class="text-2xl font-bold text-blue-600" id="wa-stat-connected">0</div>
+                        <div class="text-xs text-gray-500">أرقام متصلة</div>
+                    </div>
+                    <div class="bg-green-50 rounded-xl p-4 text-center">
+                        <div class="text-2xl font-black text-green-600" id="wa-stat-total">0</div>
+                        <div class="text-xs text-gray-500">إجمالي الرسائل</div>
+                    </div>
+                    <div class="bg-purple-50 rounded-xl p-4 text-center">
+                        <div class="text-2xl font-black text-purple-600" id="wa-stat-saved">0</div>
+                        <div class="text-xs text-gray-500">أرقام مسجلة</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // التحقق من إعداد رمز الأمان
+    if (result.needSetup) {
+        showSecuritySetupForm();
+        return;
+    }
+    
+    // التحقق من وجود أرقام متصلة
+    if (result.connected && result.sessions && result.sessions.length > 0) {
+        showConnectedState(result);
+    } else {
+        showDisconnectedState(result);
+    }
+}
+
+// =================================================================
+// نموذج إعداد رمز الأمان لأول مرة
+// =================================================================
+function showSecuritySetupForm() {
+    var container = document.getElementById('wa-main-content');
+    container.innerHTML = `
+        <div class="w-full max-w-sm">
+            <div class="text-center mb-5">
+                <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <span class="material-symbols-outlined text-2xl text-green-600">lock</span>
+                </div>
+                <h3 class="text-lg font-bold text-gray-800">إعداد رمز الأمان</h3>
+                <p class="text-sm text-gray-500 mt-1">أول مرة تستخدم أدوات الواتساب</p>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">رمز الأمان (6 خانات على الأقل)</label>
+                    <input type="password" id="wa-setup-code" 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 text-center text-lg tracking-widest"
+                           placeholder="••••••" maxlength="20">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">جوال الاسترجاع الأول (إجباري)</label>
+                    <input type="tel" id="wa-setup-phone1" 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                           placeholder="05xxxxxxxx" dir="ltr">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">جوال الاسترجاع الثاني (اختياري)</label>
+                    <input type="tel" id="wa-setup-phone2" 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                           placeholder="05xxxxxxxx" dir="ltr">
+                </div>
+                
+                <button onclick="submitSecuritySetup()" 
+                        class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2">
+                    <span class="material-symbols-outlined">save</span>
+                    حفظ رمز الأمان
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function submitSecuritySetup() {
+    var code = document.getElementById('wa-setup-code').value.trim();
+    var phone1 = document.getElementById('wa-setup-phone1').value.trim();
+    var phone2 = document.getElementById('wa-setup-phone2').value.trim();
+    
+    if (!code || code.length < 6) {
+        showEnhancedToast('error', 'رمز الأمان يجب أن يكون 6 خانات على الأقل');
+        return;
+    }
+    
+    if (!phone1 || phone1.length < 10) {
+        showEnhancedToast('error', 'رقم الجوال الأول إجباري');
+        return;
+    }
+    
+    showWaLoading('جاري حفظ الإعدادات...');
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result.success) {
+                showEnhancedToast('success', 'تم إعداد رمز الأمان بنجاح');
+                loadWhatsAppStatus();
+            } else {
+                showWaError(result.error);
+            }
+        })
+        .withFailureHandler(function(err) { showWaError(err.message); })
+        .setupSecurityCode(code, phone1, phone2);
+}
+
+// =================================================================
+// حالة متصل
+// =================================================================
+function showConnectedState(result) {
+    var container = document.getElementById('wa-main-content');
+    var primaryPhone = result.primaryPhone || result.phone;
+    var hasPrimary = result.hasPrimary;
+    
+    container.innerHTML = `
+        <div class="text-center">
+            <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="material-symbols-outlined text-4xl text-green-600">check_circle</span>
+            </div>
+            <h3 class="text-xl font-bold text-green-600 mb-2">متصل بنجاح!</h3>
+            <p class="text-gray-600 mb-1 text-lg font-mono" dir="ltr">${escapeHtml(primaryPhone)}</p>
+            ${hasPrimary ? 
+                '<span class="inline-flex items-center gap-1 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold"><span class="material-symbols-outlined text-sm">star</span> الرقم الرئيسي</span>' : 
+                '<span class="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-bold">متصل</span>'}
+            
+            <div class="mt-6 space-y-3">
+                <button onclick="showAddNewPhoneForm()" 
+                        class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2">
+                    <span class="material-symbols-outlined">qr_code_2</span>
+                    تغيير الرقم الرئيسي
+                </button>
+                
+                <button onclick="refreshWhatsAppStatus()" 
+                        class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2">
+                    <span class="material-symbols-outlined">refresh</span>
+                    تحديث الحالة
+                </button>
+            </div>
+        </div>
+    `;
+    
+    // عرض قائمة الأرقام
+    showPhonesList(result.allSessions || result.sessions);
+    
+    // عرض الإحصائيات
+    loadWhatsAppStats();
+}
+
+// =================================================================
+// حالة غير متصل
+// =================================================================
+function showDisconnectedState(result) {
+    var container = document.getElementById('wa-main-content');
+    var stageName = getStageLabel();
+    
+    container.innerHTML = `
+        <div class="text-center w-full">
+            <div class="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="material-symbols-outlined text-4xl text-orange-500">link_off</span>
+            </div>
+            <h3 class="text-xl font-bold text-gray-800 mb-2">لا يوجد رقم رئيسي</h3>
+            <p class="text-gray-500 text-sm mb-5">لم يتم ربط رقم رئيسي لـ ${escapeHtml(stageName)}</p>
+            
+            <div class="bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
+                <p class="text-sm text-red-700">⚠️ لن يعمل أي تواصل (روابط، إشعارات، رسائل) إلا بعد ربط رقم رئيسي</p>
+            </div>
+            
+            <!-- نموذج إنشاء جلسة -->
+            <div class="bg-gray-50 rounded-xl p-4 mb-4">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">رمز الأمان</label>
+                    <input type="password" id="wa-security-code" 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 text-center text-lg tracking-widest"
+                           placeholder="••••••">
+                </div>
+                
+                <button onclick="createNewSession()" 
+                        class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2">
+                    <span class="material-symbols-outlined">qr_code_2</span>
+                    ربط الرقم الرئيسي
+                </button>
+            </div>
+            
+            <div class="text-center">
+                <button onclick="showRecoveryOptions()" class="text-sm text-green-600 hover:text-green-700 hover:underline">
+                    نسيت رمز الأمان؟
+                </button>
+            </div>
+        </div>
+    `;
+    
+    // عرض الأرقام المسجلة (حتى لو غير متصلة)
+    var allSessions = result.allSessions || [];
+    if (allSessions.length > 0) {
+        showPhonesList(allSessions);
+    }
+}
+
+// =================================================================
+// إنشاء جلسة جديدة
+// =================================================================
+function createNewSession() {
+    var code = document.getElementById('wa-security-code').value.trim();
+    
+    if (!code) {
+        showEnhancedToast('error', 'أدخل رمز الأمان');
+        return;
+    }
+    
+    showWaLoading('جاري التحقق...');
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result.success) {
+                wa_currentUserType = 'رئيسي';
+                openQRPage();
+            } else {
+                showWaError(result.error);
+                loadWhatsAppStatus();
+            }
+        })
+        .withFailureHandler(function(err) { showWaError(err.message); })
+        .verifySecurityCode(code);
+}
+
+function openQRPage() {
+    var container = document.getElementById('wa-main-content');
+    var stageName = getStageLabel();
+    
+    container.innerHTML = `
+        <div class="text-center w-full">
+            <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="material-symbols-outlined text-2xl text-green-600">qr_code_2</span>
+            </div>
+            <h3 class="text-lg font-bold text-gray-800 mb-2">مسح الباركود</h3>
+            <p class="text-sm text-gray-500 mb-4">سيصبح الرقم <strong>الرقم الرئيسي</strong> لـ <strong>${escapeHtml(stageName)}</strong></p>
+            
+            <div class="bg-gray-100 rounded-xl p-4 mb-4">
+                <p class="text-sm text-gray-600 mb-3">اضغط الزر لفتح صفحة الباركود:</p>
+                <!-- FIXME: Hardcoded IP address (194.163.133.252) should be configurable via server-side config or fetched dynamically.
+                     Replace with dynamic qrUrl from server (call getWhatsAppQR() and use result.qrUrl). -->
+                <a href="${escapeHtml('http://194.163.133.252:3000/qr')}" target="_blank"
+                   class="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-xl transition">
+                    <span class="material-symbols-outlined">open_in_new</span>
+                    فتح صفحة الباركود
+                </a>
+            </div>
+            
+            <p class="text-xs text-gray-400 mb-4">بعد مسح الباركود، اضغط الزر أدناه</p>
+            
+            <button onclick="checkAndSaveNewPhone()" 
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2">
+                <span class="material-symbols-outlined">check</span>
+                تم المسح - تحقق الآن
+            </button>
+            
+            <button onclick="loadWhatsAppStatus()" 
+                    class="w-full mt-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 px-4 rounded-xl transition">
+                إلغاء
+            </button>
+        </div>
+    `;
+}
+
+function checkAndSaveNewPhone() {
+    showWaLoading('جاري البحث عن الرقم الجديد...');
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result.success && result.sessions && result.sessions.length > 0) {
+                // البحث عن رقم جديد غير مسجل للمرحلة
+                findAndSaveNewPhone(result.sessions);
+            } else {
+                showWaError('لم يتم العثور على رقم متصل. تأكد من مسح الباركود.');
+                openQRPage();
+            }
+        })
+        .withFailureHandler(function(err) { showWaError(err.message); })
+        .getAllConnectedSessions();
+}
+
+function findAndSaveNewPhone(serverSessions) {
+    // جلب الأرقام المحفوظة للمرحلة
+    google.script.run
+        .withSuccessHandler(function(savedResult) {
+            var savedPhones = [];
+            if (savedResult.success && savedResult.sessions) {
+                savedPhones = savedResult.sessions.map(function(s) { return s.phone; });
+            }
+            
+            // البحث عن رقم جديد
+            var newPhone = null;
+            for (var i = 0; i < serverSessions.length; i++) {
+                if (savedPhones.indexOf(serverSessions[i].phone) === -1) {
+                    newPhone = serverSessions[i].phone;
+                    break;
+                }
+            }
+            
+            if (newPhone) {
+                // حفظ الرقم الجديد
+                saveNewPhoneToSheet(newPhone);
+            } else if (serverSessions.length > 0) {
+                // لا يوجد رقم جديد، لكن يوجد أرقام متصلة - نعرض آخر واحد
+                saveNewPhoneToSheet(serverSessions[serverSessions.length - 1].phone);
+            } else {
+                showWaError('لم يتم العثور على رقم جديد');
+                openQRPage();
+            }
+        })
+        .withFailureHandler(function(err) {
+            // في حالة الخطأ، نحفظ أول رقم
+            if (serverSessions.length > 0) {
+                saveNewPhoneToSheet(serverSessions[0].phone);
+            }
+        })
+        .getSavedPhonesByStage(currentStage);
+}
+
+function saveNewPhoneToSheet(phone) {
+    showWaLoading('جاري حفظ الرقم...');
+    
+    // إضافة timeout احتياطي
+    var saveTimeout = setTimeout(function() {
+        showEnhancedToast('info', 'تم الحفظ - جاري التحديث...');
+        loadWhatsAppStatus();
+    }, 8000);
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            clearTimeout(saveTimeout);
+            if (result && result.success) {
+                showEnhancedToast('success', 'تم ربط الرقم ' + phone + ' بنجاح!');
+                loadWhatsAppStatus();
+            } else if (result && result.error) {
+                showWaError(result.error);
+            } else {
+                // في حالة عدم وجود استجابة واضحة، نحدث الحالة
+                showEnhancedToast('info', 'جاري التحقق من الحالة...');
+                loadWhatsAppStatus();
+            }
+        })
+        .withFailureHandler(function(err) { 
+            clearTimeout(saveTimeout);
+            showWaError(err.message); 
+        })
+        .saveWhatsAppPhone(phone, currentStage, wa_currentUserType);
+}
+
+// =================================================================
+// إضافة رقم جديد (عندما يكون متصل بالفعل)
+// =================================================================
+function showAddNewPhoneForm() {
+    var container = document.getElementById('wa-main-content');
+    var stageName = getStageLabel();
+    
+    container.innerHTML = `
+        <div class="text-center w-full">
+            <div class="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="material-symbols-outlined text-3xl text-amber-600">swap_horiz</span>
+            </div>
+            <h3 class="text-lg font-bold text-gray-800 mb-2">تغيير الرقم الرئيسي</h3>
+            <p class="text-sm text-gray-500 mb-4">الرقم الجديد سيصبح الرقم الرئيسي لـ ${escapeHtml(stageName)}</p>
+            
+            <div class="bg-gray-50 rounded-xl p-4 mb-4">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">رمز الأمان</label>
+                    <input type="password" id="wa-security-code" 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 text-center text-lg tracking-widest"
+                           placeholder="••••••">
+                </div>
+                
+                <button onclick="createNewSession()" 
+                        class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2">
+                    <span class="material-symbols-outlined">qr_code_2</span>
+                    مسح باركود جديد
+                </button>
+            </div>
+            
+            <button onclick="loadWhatsAppStatus()" 
+                    class="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 px-4 rounded-xl transition">
+                إلغاء
+            </button>
+        </div>
+    `;
+}
+
+// =================================================================
+// عرض قائمة الأرقام
+// =================================================================
+function showPhonesList(sessions) {
+    var card = document.getElementById('wa-phones-card');
+    var list = document.getElementById('wa-phones-list');
+    
+    if (!sessions || sessions.length === 0) {
+        card.classList.add('hidden');
+        return;
+    }
+    
+    card.classList.remove('hidden');
+    
+    var html = '';
+    sessions.forEach(function(session) {
+        var statusColor = session.status === 'متصل' ? 'green' : 'red';
+        var statusIcon = session.status === 'متصل' ? 'check_circle' : 'cancel';
+        var isPrimary = session.isPrimary;
+        
+        html += `
+            <div class="flex items-center justify-between p-4 ${isPrimary ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50'} rounded-xl">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-${statusColor}-100 rounded-full flex items-center justify-center">
+                        <span class="material-symbols-outlined text-${statusColor}-600">${statusIcon}</span>
+                    </div>
+                    <div>
+                        <p class="font-bold text-gray-800 flex items-center gap-2">
+                            ${escapeHtml(session.phone)}
+                            ${isPrimary ? '<span class="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-bold flex items-center gap-1"><span class="material-symbols-outlined text-xs">star</span>رئيسي</span>' : ''}
+                        </p>
+                        <p class="text-xs text-gray-500">${escapeHtml(session.userType || '-')} • ${session.messageCount || 0} رسالة</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs px-2 py-1 rounded-full bg-${statusColor}-100 text-${statusColor}-700">${escapeHtml(session.status)}</span>
+                    ${!isPrimary && session.status === 'متصل' ?
+                        '<button onclick="makePrimary(\'' + escapeHtml(session.phone) + '\')" class="p-2 text-amber-500 hover:bg-amber-100 rounded-lg transition" title="تعيين كرئيسي"><span class="material-symbols-outlined text-sm">star</span></button>' : ''}
+                    <button onclick="deletePhone('${escapeHtml(session.phone)}', '${escapeHtml(session.userType)}')"
+                            class="p-2 text-red-500 hover:bg-red-100 rounded-lg transition" title="حذف">
+                        <span class="material-symbols-outlined text-sm">delete</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    
+    list.innerHTML = html;
+}
+
+// ★ تعيين رقم كرئيسي يدوياً
+function makePrimary(phone) {
+    showStyledConfirm_({title: 'تعيين رقم رئيسي', message: 'تعيين ' + phone + ' كرقم رئيسي؟', icon: 'star', color: 'green', onConfirm: function() {
+    showEnhancedToast('info', 'جاري التعيين...');
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result.success) {
+                showEnhancedToast('success', result.message);
+                loadWhatsAppStatus();
+            } else {
+                showEnhancedToast('error', result.error);
+            }
+        })
+        .withFailureHandler(function(err) { showEnhancedToast('error', err.message); })
+        .setPrimaryPhone(phone, currentStage);
+    }});
+}
+
+function deletePhone(phone, userType) {
+    showStyledConfirm_({title: 'حذف الرقم', message: 'هل تريد حذف الرقم ' + phone + '؟', icon: 'delete', color: 'red', onConfirm: function() {
+    showEnhancedToast('info', 'جاري الحذف...');
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result.success) {
+                showEnhancedToast('success', 'تم حذف الرقم');
+                loadWhatsAppStatus();
+            } else {
+                showEnhancedToast('error', result.error);
+            }
+        })
+        .withFailureHandler(function(err) { showEnhancedToast('error', err.message); })
+        .deleteWhatsAppPhone(phone, currentStage, userType);
+    }});
+}
+
+// =================================================================
+// الإحصائيات
+// =================================================================
+function loadWhatsAppStats() {
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result.success) {
+                document.getElementById('wa-stat-connected').textContent = result.stats.connectedPhones;
+                document.getElementById('wa-stat-total').textContent = result.stats.totalMessages;
+                document.getElementById('wa-stat-saved').textContent = result.stats.savedPhones;
+                document.getElementById('wa-stats-card').classList.remove('hidden');
+            }
+        })
+        .withFailureHandler(function(err) { console.error(err); })
+        .getWhatsAppStats(currentStage);
+}
+
+// =================================================================
+// استرجاع رمز الأمان
+// =================================================================
+function showRecoveryOptions() {
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (!result.hasPhone1 && !result.hasPhone2) {
+                showEnhancedToast('error', 'لم يتم تسجيل أرقام استرجاع.');
+                return;
+            }
+            
+            var options = '';
+            if (result.hasPhone1) {
+                options += '<button onclick="sendRecoveryCode(1)" class="w-full mb-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition">إرسال إلى ' + escapeHtml(result.phone1) + '</button>';
+            }
+            if (result.hasPhone2) {
+                options += '<button onclick="sendRecoveryCode(2)" class="w-full mb-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition">إرسال إلى ' + escapeHtml(result.phone2) + '</button>';
+            }
+            
+            var container = document.getElementById('wa-main-content');
+            container.innerHTML = `
+                <div class="text-center w-full">
+                    <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <span class="material-symbols-outlined text-3xl text-blue-600">sms</span>
+                    </div>
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">استرجاع رمز الأمان</h3>
+                    <p class="text-sm text-gray-500 mb-4">اختر الرقم لإرسال رمز الاسترجاع:</p>
+                    ${options}
+                    <button onclick="loadWhatsAppStatus()" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 px-4 rounded-xl transition mt-2">
+                        إلغاء
+                    </button>
+                </div>
+            `;
+        })
+        .withFailureHandler(function(err) { showEnhancedToast('error', err.message); })
+        .getRecoveryPhones();
+}
+
+function sendRecoveryCode(phoneChoice) {
+    showWaLoading('جاري إرسال رمز الاسترجاع...');
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result.success) {
+                showEnhancedToast('success', result.message);
+                showRecoveryCodeInput();
+            } else {
+                showWaError(result.error);
+            }
+        })
+        .withFailureHandler(function(err) { showWaError(err.message); })
+        .sendRecoveryCode(phoneChoice);
+}
+
+function showRecoveryCodeInput() {
+    var container = document.getElementById('wa-main-content');
+    container.innerHTML = `
+        <div class="text-center w-full">
+            <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="material-symbols-outlined text-2xl text-green-600">pin</span>
+            </div>
+            <h3 class="text-lg font-bold text-gray-800 mb-4">أدخل رمز الاسترجاع</h3>
+            
+            <div class="space-y-4">
+                <input type="text" id="wa-recovery-code" 
+                       class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 text-center text-2xl tracking-widest"
+                       placeholder="----" maxlength="4">
+                
+                <button onclick="verifyRecoveryCode()" 
+                        class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl transition">
+                    تحقق
+                </button>
+                
+                <button onclick="loadWhatsAppStatus()" 
+                        class="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 px-4 rounded-xl transition">
+                    إلغاء
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function verifyRecoveryCode() {
+    var code = document.getElementById('wa-recovery-code').value.trim();
+    
+    if (!code || code.length < 4) {
+        showEnhancedToast('error', 'أدخل رمز الاسترجاع المكون من 4 أرقام');
+        return;
+    }
+    
+    showWaLoading('جاري التحقق...');
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result.success) {
+                showEnhancedToast('success', 'تم التحقق بنجاح');
+                showNewSecurityCodeForm();
+            } else {
+                showWaError(result.error);
+                showRecoveryCodeInput();
+            }
+        })
+        .withFailureHandler(function(err) { showWaError(err.message); })
+        .verifyRecoveryCode(code);
+}
+
+function showNewSecurityCodeForm() {
+    var container = document.getElementById('wa-main-content');
+    container.innerHTML = `
+        <div class="text-center w-full">
+            <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="material-symbols-outlined text-2xl text-green-600">lock_reset</span>
+            </div>
+            <h3 class="text-lg font-bold text-gray-800 mb-4">تعيين رمز أمان جديد</h3>
+            
+            <div class="space-y-4">
+                <input type="password" id="wa-new-code" 
+                       class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 text-center text-lg tracking-widest"
+                       placeholder="الرمز الجديد (6 خانات على الأقل)">
+                
+                <button onclick="saveNewSecurityCode()" 
+                        class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl transition">
+                    حفظ الرمز الجديد
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function saveNewSecurityCode() {
+    var newCode = document.getElementById('wa-new-code').value.trim();
+    
+    if (!newCode || newCode.length < 6) {
+        showEnhancedToast('error', 'رمز الأمان يجب أن يكون 6 خانات على الأقل');
+        return;
+    }
+    
+    showWaLoading('جاري الحفظ...');
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result.success) {
+                showEnhancedToast('success', 'تم تغيير رمز الأمان بنجاح');
+                loadWhatsAppStatus();
+            } else {
+                showWaError(result.error);
+            }
+        })
+        .withFailureHandler(function(err) { showWaError(err.message); })
+        .changeSecurityCode(newCode);
+}
+
+// =================================================================
+// دوال مساعدة
+// =================================================================
+function refreshWhatsAppStatus() {
+    showWaLoading('جاري التحديث...');
+    loadWhatsAppStatus();
+}
+
+function showWaLoading(message) {
+    var container = document.getElementById('wa-main-content');
+    container.innerHTML = `
+        <div class="text-center py-8">
+            <div class="w-12 h-12 border-4 border-green-200 border-t-green-600 rounded-full animate-spin mx-auto"></div>
+            <p class="text-gray-500 mt-4">${escapeHtml(message || 'جاري التحميل...')}</p>
+        </div>
+    `;
+}
+
+function showWaError(message) {
+    showEnhancedToast('error', message);
+    var container = document.getElementById('wa-main-content');
+    container.innerHTML = `
+        <div class="text-center py-8">
+            <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="material-symbols-outlined text-3xl text-red-500">error</span>
+            </div>
+            <p class="text-red-600 font-medium">${escapeHtml(message || '')}</p>
+            <button onclick="loadWhatsAppStatus()" class="mt-4 text-green-600 hover:underline">إعادة المحاولة</button>
+        </div>
+    `;
+}
+
+// تنظيف عند مغادرة الصفحة
+function cleanupWhatsAppPage() {
+    if (wa_pollInterval) {
+        clearInterval(wa_pollInterval);
+        wa_pollInterval = null;
+    }
+}
+</script>

@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ديمو التحسينات - نظام شؤون الطلاب</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Cairo', sans-serif; background: #f0f2f5; color: #1a1a2e; overflow-x: hidden; }
+
+        /* ============================================ */
+        /* تحسين 6: سايدبار محسّن مع collapse للجوال   */
+        /* ============================================ */
+        .sidebar {
+            position: fixed; right: 0; top: 0; bottom: 0; width: 260px;
+            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #fff; z-index: 100; display: flex; flex-direction: column;
+            transition: width 0.3s ease; overflow: hidden;
+            box-shadow: -4px 0 20px rgba(0,0,0,0.1);
+        }
+        .sidebar.collapsed { width: 70px; }
+        .sidebar.collapsed .sidebar-label,
+        .sidebar.collapsed .sidebar-category,
+        .sidebar.collapsed .school-info,
+        .sidebar.collapsed .user-info-text { display: none; }
+        .sidebar.collapsed .sidebar-item { justify-content: center; padding: 12px 0; }
+        .sidebar.collapsed .sidebar-item .material-symbols-outlined { margin-left: 0; }
+
+        .sidebar-header {
+            padding: 20px 16px 16px; text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .sidebar-logo {
+            width: 48px; height: 48px; background: linear-gradient(135deg, #6c63ff, #3f51b5);
+            border-radius: 14px; display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 10px; font-size: 24px;
+        }
+        .school-info h2 { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+        .school-info p { font-size: 11px; opacity: 0.6; }
+
+        /* تحسين 11: معلومات المستخدم */
+        .user-section {
+            padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex; align-items: center; gap: 10px;
+        }
+        .user-avatar {
+            width: 36px; height: 36px; border-radius: 50%;
+            background: linear-gradient(135deg, #f093fb, #f5576c);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px; font-weight: 700; flex-shrink: 0;
+        }
+        .user-info-text h4 { font-size: 12px; font-weight: 600; }
+        .user-info-text p { font-size: 10px; opacity: 0.5; }
+
+        .sidebar-nav { flex: 1; overflow-y: auto; padding: 12px 8px; }
+        .sidebar-nav::-webkit-scrollbar { width: 3px; }
+        .sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+
+        .sidebar-category {
+            font-size: 10px; font-weight: 500; opacity: 0.4;
+            padding: 16px 12px 6px; text-transform: uppercase; letter-spacing: 1px;
+        }
+        .sidebar-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; border-radius: 10px; cursor: pointer;
+            transition: all 0.2s; font-size: 13px; font-weight: 500;
+            color: rgba(255,255,255,0.7); position: relative;
+        }
+        .sidebar-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+        .sidebar-item.active {
+            background: var(--section-color, #6c63ff); color: #fff;
+            box-shadow: 0 4px 15px rgba(108,99,255,0.3);
+        }
+        .sidebar-item .material-symbols-outlined { font-size: 20px; }
+        /* تحسين 15: إشعارات */
+        .sidebar-badge {
+            position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+            background: #f5576c; color: #fff; font-size: 10px; font-weight: 700;
+            min-width: 18px; height: 18px; border-radius: 9px;
+            display: flex; align-items: center; justify-content: center; padding: 0 5px;
+        }
+
+        /* ============================================ */
+        /* المحتوى الرئيسي                              */
+        /* ============================================ */
+        .main-content {
+            margin-right: 260px; min-height: 100vh;
+            transition: margin-right 0.3s ease;
+        }
+        .sidebar.collapsed ~ .main-content { margin-right: 70px; }
+
+        /* الهيدر العلوي */
+        .top-header {
+            background: #fff; padding: 12px 24px;
+            display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid #e8e8e8; position: sticky; top: 0; z-index: 50;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+        .collapse-btn {
+            width: 36px; height: 36px; border-radius: 10px; border: 1px solid #e8e8e8;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; background: #fff; transition: all 0.2s;
+        }
+        .collapse-btn:hover { background: #f5f5f5; }
+
+        /* تحسين 16: اختيار المرحلة أكبر وأوضح */
+        .stage-selector {
+            display: flex; align-items: center; gap: 8px;
+            background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 12px;
+            padding: 8px 16px; cursor: pointer; transition: all 0.2s;
+        }
+        .stage-selector:hover { border-color: var(--section-color); }
+        .stage-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--section-color); }
+        .stage-selector span { font-weight: 600; font-size: 14px; }
+
+        .header-left { display: flex; align-items: center; gap: 10px; }
+        /* تحسين 14: بحث سريع */
+        .search-box {
+            display: flex; align-items: center; gap: 8px;
+            background: #f8f9fa; border: 1px solid #e8e8e8; border-radius: 12px;
+            padding: 8px 14px; min-width: 250px; transition: all 0.2s;
+        }
+        .search-box:focus-within { border-color: var(--section-color); box-shadow: 0 0 0 3px rgba(108,99,255,0.1); }
+        .search-box input { border: none; background: none; outline: none; font-family: 'Cairo'; font-size: 13px; flex: 1; }
+        .search-box .material-symbols-outlined { font-size: 20px; color: #999; }
+
+        /* تحسين 15: جرس الإشعارات */
+        .notif-btn {
+            position: relative; width: 40px; height: 40px; border-radius: 12px;
+            border: 1px solid #e8e8e8; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; background: #fff; transition: all 0.2s;
+        }
+        .notif-btn:hover { background: #f5f5f5; }
+        .notif-dot {
+            position: absolute; top: 6px; right: 6px; width: 8px; height: 8px;
+            background: #f5576c; border-radius: 50%; border: 2px solid #fff;
+        }
+
+        /* ============================================ */
+        /* تحسين 2: البانر المدمج مع الإحصائيات         */
+        /* ============================================ */
+        .page-hero {
+            margin: 20px 24px 0; border-radius: 20px; overflow: hidden;
+            background: var(--section-gradient);
+            color: #fff; position: relative;
+        }
+        .page-hero::before {
+            content: ''; position: absolute; inset: 0;
+            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        }
+        .hero-content {
+            position: relative; z-index: 1;
+            padding: 24px 28px 20px; display: flex; align-items: center; justify-content: space-between;
+        }
+        .hero-info h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+        .hero-info p { font-size: 13px; opacity: 0.85; }
+
+        /* تحسين 9: إحصائيات مدمجة في البانر مع أيقونات + اتجاه */
+        .hero-stats { display: flex; gap: 12px; }
+        .hero-stat {
+            background: rgba(255,255,255,0.15); backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2); border-radius: 14px;
+            padding: 14px 20px; text-align: center; min-width: 110px;
+            transition: transform 0.2s;
+        }
+        .hero-stat:hover { transform: translateY(-2px); background: rgba(255,255,255,0.2); }
+        .hero-stat-icon { font-size: 20px; margin-bottom: 4px; opacity: 0.9; }
+        .hero-stat-num { font-size: 28px; font-weight: 900; line-height: 1; }
+        .hero-stat-label { font-size: 11px; opacity: 0.8; margin-top: 2px; }
+        .hero-stat-trend { font-size: 10px; margin-top: 4px; display: flex; align-items: center; justify-content: center; gap: 2px; }
+        .trend-up { color: #ffd700; }
+        .trend-down { color: #a5f3c4; }
+
+        /* ============================================ */
+        /* تحسين 10: تبويبات أقوى بصرياً                */
+        /* ============================================ */
+        .tabs-bar {
+            margin: 16px 24px 0; background: #fff; border-radius: 16px;
+            padding: 6px; display: flex; gap: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        .tab-item {
+            flex: 1; padding: 10px 16px; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            font-size: 13px; font-weight: 600; cursor: pointer;
+            color: #666; transition: all 0.25s; position: relative;
+        }
+        .tab-item:hover { background: #f5f5f5; color: #333; }
+        .tab-item.active {
+            background: var(--section-color); color: #fff;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .tab-item .material-symbols-outlined { font-size: 18px; }
+
+        /* ============================================ */
+        /* تحسين 8: شريط الأزرار المحسّن                */
+        /* ============================================ */
+        .action-bar {
+            margin: 12px 24px 0; display: flex; align-items: center;
+            justify-content: space-between; gap: 10px;
+        }
+        .action-group { display: flex; gap: 8px; align-items: center; }
+
+        .btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 9px 18px; border-radius: 12px; font-family: 'Tajawal';
+            font-size: 13px; font-weight: 600; cursor: pointer; border: none;
+            transition: all 0.2s; white-space: nowrap;
+        }
+        .btn-primary {
+            background: var(--section-color); color: #fff;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+        .btn-outline {
+            background: #fff; color: #555; border: 1px solid #ddd;
+        }
+        .btn-outline:hover { border-color: var(--section-color); color: var(--section-color); }
+        .btn-success { background: #10b981; color: #fff; }
+        .btn-success:hover { background: #059669; }
+        .btn-danger { background: #ef4444; color: #fff; }
+
+        /* تحسين 8: قائمة منسدلة لأزرار الاستيراد */
+        .dropdown-wrapper { position: relative; }
+        .dropdown-menu {
+            display: none; position: absolute; top: 100%; right: 0; margin-top: 6px;
+            background: #fff; border-radius: 12px; min-width: 200px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.12); border: 1px solid #e8e8e8;
+            z-index: 20; overflow: hidden;
+        }
+        .dropdown-wrapper.open .dropdown-menu { display: block; }
+        .dropdown-item {
+            padding: 10px 16px; display: flex; align-items: center; gap: 8px;
+            font-size: 13px; cursor: pointer; transition: background 0.15s;
+        }
+        .dropdown-item:hover { background: #f5f5f5; }
+        .dropdown-item .material-symbols-outlined { font-size: 18px; color: #666; }
+
+        /* ============================================ */
+        /* الجدول اليومي                                 */
+        /* ============================================ */
+        .content-area { margin: 12px 24px 24px; }
+
+        .data-table-wrapper {
+            background: #fff; border-radius: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            overflow: hidden;
+        }
+        .data-table {
+            width: 100%; border-collapse: collapse; font-size: 13px;
+        }
+        .data-table thead th {
+            padding: 14px 16px; text-align: right; font-weight: 700;
+            color: #475569; font-size: 13px; background: #fafafa;
+            border-bottom: 2px solid #f0f0f0; white-space: nowrap;
+            letter-spacing: 0.3px;
+        }
+        .data-table tbody tr {
+            border-bottom: 1px solid #f5f5f5; transition: background 0.15s;
+        }
+        .data-table tbody tr:hover { background: #f8faff; }
+        .data-table tbody td { padding: 12px 16px; vertical-align: middle; }
+
+        .student-name { font-weight: 700; color: #1a1a2e; }
+        .grade-badge {
+            display: inline-flex; padding: 3px 10px; border-radius: 8px;
+            font-size: 11px; font-weight: 600; background: #f0f0f0; color: #555;
+        }
+        .degree-badge {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 30px; height: 30px; border-radius: 10px; font-weight: 800; font-size: 14px;
+        }
+        .deg-1 { background: #dcfce7; color: #166534; }
+        .deg-2 { background: #fef9c3; color: #854d0e; }
+        .deg-3 { background: #fed7aa; color: #9a3412; }
+        .deg-4 { background: #fecaca; color: #991b1b; }
+        .deg-5 { background: #f87171; color: #fff; }
+
+        .status-sent { color: #10b981; font-weight: 600; font-size: 12px; display: flex; align-items: center; gap: 4px; }
+        .status-unsent { color: #ef4444; font-weight: 600; font-size: 12px; display: flex; align-items: center; gap: 4px; }
+
+        .table-actions { display: flex; gap: 4px; }
+        .table-btn {
+            width: 32px; height: 32px; border-radius: 8px; border: 1px solid #e8e8e8;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; background: #fff; transition: all 0.2s;
+        }
+        .table-btn:hover { background: #f0f0f0; }
+        .table-btn .material-symbols-outlined { font-size: 16px; }
+
+        .table-checkbox {
+            width: 18px; height: 18px; border-radius: 6px;
+            accent-color: var(--section-color);
+        }
+
+        /* ============================================ */
+        /* فاصل الفصول — Group Separator (مضغوط)       */
+        /* ============================================ */
+        .group-separator td {
+            padding: 0 !important; height: 6px;
+            background: #f0f2f5 !important; border: none !important;
+        }
+        .group-header td {
+            background: #f8fafc !important;
+            padding: 6px 16px !important;
+            border-bottom: 1px solid #e2e8f0 !important;
+            border-top: none !important;
+        }
+        .group-header-content {
+            display: flex; align-items: center; gap: 8px;
+        }
+        .group-label {
+            font-weight: 600; font-size: 12.5px; color: #64748b;
+        }
+        .group-count {
+            font-size: 10.5px; color: #94a3b8; font-weight: 500;
+        }
+
+        /* ============================================ */
+        /* تحسين 3: الحالة الفارغة المصغّرة              */
+        /* ============================================ */
+        .empty-state {
+            padding: 40px 20px; text-align: center;
+        }
+        .empty-state-icon {
+            width: 64px; height: 64px; margin: 0 auto 12px;
+            background: #f5f5f5; border-radius: 16px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .empty-state-icon .material-symbols-outlined { font-size: 28px; color: #bbb; }
+        .empty-state h3 { font-size: 15px; color: #888; font-weight: 600; margin-bottom: 4px; }
+        .empty-state p { font-size: 12px; color: #aaa; }
+
+        /* ============================================ */
+        /* تحسين 17: Skeleton Loading                    */
+        /* ============================================ */
+        .skeleton { position: relative; overflow: hidden; background: #f0f0f0; border-radius: 8px; }
+        .skeleton::after {
+            content: ''; position: absolute; inset: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+        .skeleton-row { display: flex; gap: 16px; padding: 14px 16px; border-bottom: 1px solid #f5f5f5; }
+        .skeleton-cell { height: 14px; border-radius: 7px; }
+
+        /* ============================================ */
+        /* تحسين 18: الجوال — Responsive                */
+        /* ============================================ */
+        @media (max-width: 768px) {
+            .sidebar { width: 0; }
+            .sidebar.mobile-open { width: 260px; }
+            .main-content { margin-right: 0 !important; }
+            .hero-content { flex-direction: column; gap: 16px; text-align: center; }
+            .hero-stats { flex-wrap: wrap; justify-content: center; }
+            .hero-stat { min-width: 90px; padding: 10px 14px; }
+            .hero-stat-num { font-size: 22px; }
+            .search-box { min-width: 0; flex: 1; }
+            .action-bar { flex-wrap: wrap; }
+            .tabs-bar { overflow-x: auto; }
+            .data-table-wrapper { overflow-x: auto; }
+        }
+
+        /* الألوان حسب القسم */
+        .section-violations { --section-color: #7c3aed; --section-gradient: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%); }
+        .section-notes { --section-color: #059669; --section-gradient: linear-gradient(135deg, #059669 0%, #10b981 100%); }
+        .section-tardiness { --section-color: #dc2626; --section-gradient: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); }
+        /* تحسين 4: لون مختلف للاستئذان بدل البنفسجي */
+        .section-permissions { --section-color: #0891b2; --section-gradient: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%); }
+        .section-absence { --section-color: #ea580c; --section-gradient: linear-gradient(135deg, #ea580c 0%, #f97316 100%); }
+
+        /* نافذة الديمو — أزرار التبديل */
+        .demo-switcher {
+            position: fixed; bottom: 20px; left: 20px; z-index: 200;
+            background: #1a1a2e; color: #fff; border-radius: 16px;
+            padding: 12px; display: flex; gap: 8px; box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+        }
+        .demo-switch-btn {
+            padding: 8px 14px; border-radius: 10px; border: none;
+            font-family: 'Cairo'; font-size: 12px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s; color: #fff; background: rgba(255,255,255,0.1);
+        }
+        .demo-switch-btn:hover { background: rgba(255,255,255,0.2); }
+        .demo-switch-btn.active { background: var(--section-color); }
+
+        .demo-banner {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            color: #78350f; text-align: center; padding: 8px;
+            font-size: 13px; font-weight: 700; position: sticky; top: 0; z-index: 999;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #bbb; }
+    </style>
+</head>
+<body>
+
+<div class="demo-banner">
+    ⚠️ هذا ملف ديمو فقط لعرض التحسينات المقترحة — لا يؤثر على النظام الأصلي
+</div>
+
+<!-- ============================================ -->
+<!-- السايدبار المحسّن                             -->
+<!-- ============================================ -->
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <div class="sidebar-logo">🎓</div>
+        <div class="school-info">
+            <h2>نظام شؤون الطلاب</h2>
+            <p>مدرسة متوسطة وثانوية العرين</p>
+        </div>
+    </div>
+
+    <!-- تحسين 11: معلومات المستخدم -->
+    <div class="user-section">
+        <div class="user-avatar">أ</div>
+        <div class="user-info-text">
+            <h4>أحمد محمد العتيبي</h4>
+            <p>موجه طلابي</p>
+        </div>
+    </div>
+
+    <nav class="sidebar-nav">
+        <div class="sidebar-category sidebar-label">الرئيسية</div>
+        <div class="sidebar-item" onclick="switchSection('dashboard')">
+            <span class="material-symbols-outlined">dashboard</span>
+            <span class="sidebar-label">لوحة المتابعة</span>
+        </div>
+
+        <div class="sidebar-category sidebar-label">السلوك والمخالفات</div>
+        <div class="sidebar-item active" style="--section-color:#7c3aed" onclick="switchSection('violations')" data-section="violations">
+            <span class="material-symbols-outlined">gavel</span>
+            <span class="sidebar-label">المخالفات السلوكية</span>
+            <span class="sidebar-badge">3</span>
+        </div>
+
+        <div class="sidebar-category sidebar-label">الشؤون التعليمية</div>
+        <div class="sidebar-item" style="--section-color:#059669" onclick="switchSection('notes')" data-section="notes">
+            <span class="material-symbols-outlined">menu_book</span>
+            <span class="sidebar-label">الملاحظات التربوية</span>
+        </div>
+        <div class="sidebar-item" onclick="switchSection('academic')">
+            <span class="material-symbols-outlined">school</span>
+            <span class="sidebar-label">التحصيل الدراسي</span>
+        </div>
+
+        <div class="sidebar-category sidebar-label">المواظبة والغياب</div>
+        <div class="sidebar-item" style="--section-color:#dc2626" onclick="switchSection('tardiness')" data-section="tardiness">
+            <span class="material-symbols-outlined">alarm</span>
+            <span class="sidebar-label">التأخر</span>
+            <span class="sidebar-badge">5</span>
+        </div>
+        <div class="sidebar-item" style="--section-color:#0891b2" onclick="switchSection('permissions')" data-section="permissions">
+            <span class="material-symbols-outlined">door_open</span>
+            <span class="sidebar-label">الاستئذان</span>
+        </div>
+        <div class="sidebar-item" style="--section-color:#ea580c" onclick="switchSection('absence')" data-section="absence">
+            <span class="material-symbols-outlined">event_busy</span>
+            <span class="sidebar-label">الغياب</span>
+            <span class="sidebar-badge" style="background:#ea580c">12</span>
+        </div>
+
+        <div class="sidebar-category sidebar-label">الخدمات العامة</div>
+        <div class="sidebar-item">
+            <span class="material-symbols-outlined">folder_open</span>
+            <span class="sidebar-label">النماذج العامة</span>
+        </div>
+
+        <div class="sidebar-category sidebar-label">خدمات التواصل</div>
+        <div class="sidebar-item">
+            <span class="material-symbols-outlined">chat</span>
+            <span class="sidebar-label">أدوات واتساب</span>
+        </div>
+        <div class="sidebar-item">
+            <span class="material-symbols-outlined">history</span>
+            <span class="sidebar-label">سجل التواصل</span>
+        </div>
+
+        <div class="sidebar-category sidebar-label">النظام</div>
+        <div class="sidebar-item">
+            <span class="material-symbols-outlined">settings</span>
+            <span class="sidebar-label">الإعدادات</span>
+        </div>
+    </nav>
+</aside>
+
+<!-- ============================================ -->
+<!-- المحتوى الرئيسي                               -->
+<!-- ============================================ -->
+<div class="main-content section-violations" id="mainContent">
+
+    <!-- الهيدر العلوي مع البحث والإشعارات -->
+    <div class="top-header">
+        <div class="header-right">
+            <div class="collapse-btn" onclick="toggleSidebar()">
+                <span class="material-symbols-outlined" style="font-size:20px">menu</span>
+            </div>
+            <!-- تحسين 16: اختيار المرحلة أكبر -->
+            <div class="stage-selector">
+                <div class="stage-dot"></div>
+                <span>المرحلة المتوسطة</span>
+                <span class="material-symbols-outlined" style="font-size:18px;color:#999">expand_more</span>
+            </div>
+        </div>
+        <div class="header-left">
+            <!-- تحسين 14: بحث سريع -->
+            <div class="search-box">
+                <span class="material-symbols-outlined">search</span>
+                <input type="text" placeholder="ابحث عن طالب، صف، مخالفة...">
+            </div>
+            <!-- تحسين 15: إشعارات -->
+            <div class="notif-btn">
+                <span class="material-symbols-outlined" style="font-size:20px">notifications</span>
+                <div class="notif-dot"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================================================ -->
+    <!-- قسم المخالفات السلوكية                             -->
+    <!-- ================================================ -->
+    <div id="section-violations">
+        <!-- تحسين 2 + 9: بانر مدمج مع الإحصائيات -->
+        <div class="page-hero">
+            <div class="hero-content">
+                <div class="hero-info">
+                    <h1>مخالفات المرحلة المتوسطة ليوم السبت</h1>
+                    <p>٤ رمضان ١٤٤٧ هـ الموافق ٢١ فبراير ٢٠٢٦</p>
+                </div>
+                <div class="hero-stats">
+                    <div class="hero-stat">
+                        <div class="hero-stat-icon">📋</div>
+                        <div class="hero-stat-num">٧</div>
+                        <div class="hero-stat-label">مخالفات اليوم</div>
+                        <div class="hero-stat-trend trend-up">↑ ٢ عن أمس</div>
+                    </div>
+                    <div class="hero-stat">
+                        <div class="hero-stat-icon">📊</div>
+                        <div class="hero-stat-num">٤٤</div>
+                        <div class="hero-stat-label">إجمالي المخالفات</div>
+                    </div>
+                    <div class="hero-stat">
+                        <div class="hero-stat-icon">⚠️</div>
+                        <div class="hero-stat-num">١</div>
+                        <div class="hero-stat-label">درجة ٤-٥</div>
+                        <div class="hero-stat-trend trend-down">↓ مستقر</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- تحسين 10: تبويبات بخلفية ملونة -->
+        <div class="tabs-bar">
+            <div class="tab-item active">
+                <span class="material-symbols-outlined">today</span> اليومي
+            </div>
+            <div class="tab-item">
+                <span class="material-symbols-outlined">verified</span> المعتمد
+            </div>
+            <div class="tab-item">
+                <span class="material-symbols-outlined">star</span> السلوك المتمايز
+            </div>
+            <div class="tab-item">
+                <span class="material-symbols-outlined">bar_chart</span> التقارير
+            </div>
+        </div>
+
+        <!-- تحسين 7 + 8: شريط أزرار بدون تكرار -->
+        <div class="action-bar">
+            <div class="action-group">
+                <button class="btn btn-primary">
+                    <span class="material-symbols-outlined" style="font-size:18px">add_circle</span>
+                    تسجيل مخالفة
+                </button>
+                <button class="btn btn-outline" onclick="loadData()">
+                    <span class="material-symbols-outlined" style="font-size:18px">refresh</span>
+                    تحديث
+                </button>
+            </div>
+            <div class="action-group">
+                <button class="btn btn-success">
+                    <span class="material-symbols-outlined" style="font-size:18px">send</span>
+                    إرسال للجميع
+                </button>
+                <button class="btn btn-outline">
+                    <span class="material-symbols-outlined" style="font-size:18px">print</span>
+                    طباعة
+                </button>
+            </div>
+        </div>
+
+        <!-- الجدول بالبيانات الافتراضية -->
+        <div class="content-area">
+            <div class="data-table-wrapper" id="violationsTable">
+                <!-- يتم تعبئته بـ JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ================================================ -->
+    <!-- قسم الملاحظات التربوية                             -->
+    <!-- ================================================ -->
+    <div id="section-notes" style="display:none">
+        <div class="page-hero">
+            <div class="hero-content">
+                <div class="hero-info">
+                    <h1>ملاحظات المرحلة المتوسطة ليوم السبت</h1>
+                    <p>٤ رمضان ١٤٤٧ هـ الموافق ٢١ فبراير ٢٠٢٦</p>
+                </div>
+                <div class="hero-stats">
+                    <div class="hero-stat">
+                        <div class="hero-stat-icon">📝</div>
+                        <div class="hero-stat-num">٥</div>
+                        <div class="hero-stat-label">ملاحظات اليوم</div>
+                    </div>
+                    <div class="hero-stat">
+                        <div class="hero-stat-icon">📊</div>
+                        <div class="hero-stat-num">٢٨</div>
+                        <div class="hero-stat-label">إجمالي الملاحظات</div>
+                    </div>
+                    <div class="hero-stat">
+                        <div class="hero-stat-icon">📩</div>
+                        <div class="hero-stat-num">٣</div>
+                        <div class="hero-stat-label">لم تُرسل</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="tabs-bar">
+            <div class="tab-item active"><span class="material-symbols-outlined">today</span> اليومي</div>
+            <div class="tab-item"><span class="material-symbols-outlined">verified</span> المعتمد</div>
+            <div class="tab-item"><span class="material-symbols-outlined">bar_chart</span> التقارير</div>
+        </div>
+        <div class="action-bar">
+            <div class="action-group">
+                <button class="btn btn-primary" style="--section-color:#059669"><span class="material-symbols-outlined" style="font-size:18px">add_circle</span> تسجيل ملاحظة</button>
+                <button class="btn btn-outline"><span class="material-symbols-outlined" style="font-size:18px">category</span> أنواع الملاحظات</button>
+                <button class="btn btn-outline"><span class="material-symbols-outlined" style="font-size:18px">refresh</span> تحديث</button>
+            </div>
+            <div class="action-group">
+                <button class="btn btn-success"><span class="material-symbols-outlined" style="font-size:18px">send</span> إرسال للمحددين</button>
+                <button class="btn btn-outline"><span class="material-symbols-outlined" style="font-size:18px">print</span> طباعة</button>
+            </div>
+        </div>
+        <div class="content-area"><div class="data-table-wrapper" id="notesTable"></div></div>
+    </div>
+
+    <!-- ================================================ -->
+    <!-- قسم التأخر                                        -->
+    <!-- ================================================ -->
+    <div id="section-tardiness" style="display:none">
+        <div class="page-hero">
+            <div class="hero-content">
+                <div class="hero-info">
+                    <h1>متأخرو المرحلة المتوسطة ليوم السبت</h1>
+                    <p>٤ رمضان ١٤٤٧ هـ الموافق ٢١ فبراير ٢٠٢٦</p>
+                </div>
+                <div class="hero-stats">
+                    <div class="hero-stat">
+                        <div class="hero-stat-icon">⏰</div>
+                        <div class="hero-stat-num">٦</div>
+                        <div class="hero-stat-label">متأخر اليوم</div>
+                        <div class="hero-stat-trend trend-up">↑ ٣ عن أمس</div>
+                    </div>
+                    <div class="hero-stat">
+                        <div class="hero-stat-icon">📊</div>
+                        <div class="hero-stat-num">٣٢</div>
+                        <div class="hero-stat-label">إجمالي التأخر</div>
+                    </div>
+                    <div class="hero-stat">
+                        <div class="hero-stat-icon">📩</div>
+                        <div class="hero-stat-num">٤</div>
+                        <div class="hero-stat-label">لم تُرسل</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="tabs-bar">
+            <div class="tab-item active"><span class="material-symbols-outlined">today</span> اليومي</div>
+            <div class="tab-item"><span class="material-symbols-outlined">verified</span> المعتمد</div>
+            <div class="tab-item"><span class="material-symbols-outlined">bar_chart</span> التقارير</div>
+        </div>
+        <div class="action-bar">
+            <div class="action-group">
+                <button class="btn btn-primary" style="--section-color:#dc2626"><span class="material-symbols-outlined" style="font-size:18px">add_circle</span> تسجيل تأخر</button>
+                <button class="btn btn-outline"><span class="material-symbols-outlined" style="font-size:18px">refresh</span> تحديث</button>
+            </div>
+            <div class="action-group">
+                <button class="btn btn-success"><span class="material-symbols-outlined" style="font-size:18px">send</span> إرسال للجميع</button>
+                <button class="btn btn-outline"><span class="material-symbols-outlined" style="font-size:18px">print</span> طباعة</button>
+            </div>
+        </div>
+        <div class="content-area"><div class="data-table-wrapper" id="tardinessTable"></div></div>
+    </div>
+
+    <!-- ================================================ -->
+    <!-- قسم الاستئذان (تحسين 4: لون تركواز)               -->
+    <!-- ================================================ -->
+    <div id="section-permissions" style="display:none">
+        <div class="page-hero">
+            <div class="hero-content">
+                <div class="hero-info">
+                    <h1>مستأذنو المرحلة المتوسطة ليوم السبت</h1>
+                    <p>٤ رمضان ١٤٤٧ هـ الموافق ٢١ فبراير ٢٠٢٦</p>
+                </div>
+                <div class="hero-stats">
+                    <div class="hero-stat">
+                        <div class="hero-stat-icon">🚪</div>
+                        <div class="hero-stat-num">٤</div>
+                        <div class="hero-stat-label">مستأذن اليوم</div>
+                    </div>
+                    <div class="hero-stat">
+                        <div class="hero-stat-icon">📊</div>
+                        <div class="hero-stat-num">١٨</div>
+                        <div class="hero-stat-label">إجمالي الاستئذان</div>
+                    </div>
+                    <div class="hero-stat">
+                        <div class="hero-stat-icon">📩</div>
+                        <div class="hero-stat-num">١</div>
+                        <div class="hero-stat-label">لم تُرسل</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="tabs-bar">
+            <div class="tab-item active"><span class="material-symbols-outlined">today</span> اليومي</div>
+            <div class="tab-item"><span class="material-symbols-outlined">verified</span> المعتمد</div>
+            <div class="tab-item"><span class="material-symbols-outlined">bar_chart</span> التقارير</div>
+        </div>
+        <div class="action-bar">
+            <div class="action-group">
+                <button class="btn btn-primary" style="--section-color:#0891b2"><span class="material-symbols-outlined" style="font-size:18px">add_circle</span> تسجيل استئذان</button>
+                <button class="btn btn-outline"><span class="material-symbols-outlined" style="font-size:18px">refresh</span> تحديث</button>
+            </div>
+            <div class="action-group">
+                <button class="btn btn-success"><span class="material-symbols-outlined" style="font-size:18px">send</span> إرسال للجميع</button>
+                <button class="btn btn-outline"><span class="material-symbols-outlined" style="font-size:18px">print</span> طباعة</button>
+            </div>
+        </div>
+        <div class="content-area"><div class="data-table-wrapper" id="permissionsTable"></div></div>
+    </div>
+
+    <!-- ================================================ -->
+    <!-- قسم الغياب (تحسين 8: قائمة استيراد منسدلة)        -->
+    <!-- ================================================ -->
+    <div id="section-absence" style="display:none">
+        <div class="page-hero">
+            <div class="hero-content">
+                <div class="hero-info">
+                    <h1>كشف غياب المرحلة المتوسطة ليوم السبت</h1>
+                    <p>٤ رمضان ١٤٤٧ هـ الموافق ٢١ فبراير ٢٠٢٦</p>
+                </div>
+                <div class="hero-stats">
+                    <div class="hero-stat">
+                        <div class="hero-stat-icon">🚫</div>
+                        <div class="hero-stat-num">٨</div>
+                        <div class="hero-stat-label">غائب اليوم</div>
+                        <div class="hero-stat-trend trend-up">↑ ٣ عن أمس</div>
+                    </div>
+                    <div class="hero-stat">
+                        <div class="hero-stat-icon">📋</div>
+                        <div class="hero-stat-num">٥</div>
+                        <div class="hero-stat-label">أعذار معلقة</div>
+                    </div>
+                    <div class="hero-stat">
+                        <div class="hero-stat-icon">🔔</div>
+                        <div class="hero-stat-num">+١٠</div>
+                        <div class="hero-stat-label">حملة تنبيه</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="tabs-bar">
+            <div class="tab-item active"><span class="material-symbols-outlined">today</span> الغياب اليومي</div>
+            <div class="tab-item"><span class="material-symbols-outlined">verified</span> المعتمد</div>
+            <div class="tab-item"><span class="material-symbols-outlined">description</span> الأعذار</div>
+            <div class="tab-item"><span class="material-symbols-outlined">bar_chart</span> التقارير</div>
+        </div>
+        <!-- تحسين 8: أزرار الاستيراد مدمجة في قائمة منسدلة -->
+        <div class="action-bar">
+            <div class="action-group">
+                <div class="dropdown-wrapper" id="importDropdown">
+                    <button class="btn btn-primary" style="--section-color:#ea580c" onclick="toggleDropdown('importDropdown')">
+                        <span class="material-symbols-outlined" style="font-size:18px">upload_file</span>
+                        استيراد
+                        <span class="material-symbols-outlined" style="font-size:16px">expand_more</span>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="dropdown-item">
+                            <span class="material-symbols-outlined">cloud_upload</span>
+                            استيراد Excel (نور)
+                        </div>
+                        <div class="dropdown-item">
+                            <span class="material-symbols-outlined">table_view</span>
+                            استيراد منصة (Excel)
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-outline" style="border-color:#ea580c;color:#ea580c">
+                    <span class="material-symbols-outlined" style="font-size:18px">add_circle</span>
+                    تسجيل يدوي
+                </button>
+                <button class="btn btn-outline"><span class="material-symbols-outlined" style="font-size:18px">refresh</span> تحديث</button>
+            </div>
+            <div class="action-group">
+                <button class="btn btn-success"><span class="material-symbols-outlined" style="font-size:18px">send</span> إرسال للجميع</button>
+                <button class="btn btn-outline"><span class="material-symbols-outlined" style="font-size:18px">print</span> طباعة الكشف</button>
+            </div>
+        </div>
+        <div class="content-area"><div class="data-table-wrapper" id="absenceTable"></div></div>
+    </div>
+
+</div>
+
+<!-- أزرار تبديل الأقسام -->
+<div class="demo-switcher" id="demoSwitcher">
+    <button class="demo-switch-btn active" style="--section-color:#7c3aed" onclick="switchSection('violations')">المخالفات</button>
+    <button class="demo-switch-btn" style="--section-color:#059669" onclick="switchSection('notes')">الملاحظات</button>
+    <button class="demo-switch-btn" style="--section-color:#dc2626" onclick="switchSection('tardiness')">التأخر</button>
+    <button class="demo-switch-btn" style="--section-color:#0891b2" onclick="switchSection('permissions')">الاستئذان</button>
+    <button class="demo-switch-btn" style="--section-color:#ea580c" onclick="switchSection('absence')">الغياب</button>
+    <button class="demo-switch-btn" onclick="showSkeleton()">🔄 Skeleton</button>
+</div>
+
+<script>
+// ============================================
+// بيانات افتراضية — 30 طالب موزعين على 6 فصول
+// مرتبين أبجدياً داخل كل فصل
+// ============================================
+const ALL_STUDENTS = [
+    // ١م / أ
+    { name: 'أحمد خالد العتيبي', grade: '١م', section: 'أ' },
+    { name: 'بدر سعود الشمري', grade: '١م', section: 'أ' },
+    { name: 'حسن محمد القحطاني', grade: '١م', section: 'أ' },
+    { name: 'سعد ابراهيم العنزي', grade: '١م', section: 'أ' },
+    { name: 'عبدالله ناصر المالكي', grade: '١م', section: 'أ' },
+    // ١م / ب
+    { name: 'تركي مشعل الحربي', grade: '١م', section: 'ب' },
+    { name: 'خالد عبدالرحمن الغامدي', grade: '١م', section: 'ب' },
+    { name: 'راكان وليد الحارثي', grade: '١م', section: 'ب' },
+    { name: 'فهد أحمد الزهراني', grade: '١م', section: 'ب' },
+    { name: 'نواف سلطان البقمي', grade: '١م', section: 'ب' },
+    // ٢م / أ
+    { name: 'أنس صالح الدوسري', grade: '٢م', section: 'أ' },
+    { name: 'ثامر عبدالعزيز المطيري', grade: '٢م', section: 'أ' },
+    { name: 'سلطان فيصل السبيعي', grade: '٢م', section: 'أ' },
+    { name: 'عمر ناصر الشهري', grade: '٢م', section: 'أ' },
+    { name: 'محمد سالم الرشيدي', grade: '٢م', section: 'أ' },
+    // ٢م / ب
+    { name: 'إبراهيم حمد العمري', grade: '٢م', section: 'ب' },
+    { name: 'جاسر تركي القرني', grade: '٢م', section: 'ب' },
+    { name: 'زياد خالد الأحمدي', grade: '٢م', section: 'ب' },
+    { name: 'ماجد عبدالله اليامي', grade: '٢م', section: 'ب' },
+    { name: 'يوسف سعد الخثعمي', grade: '٢م', section: 'ب' },
+    // ٣م / أ
+    { name: 'باسل أحمد الفيفي', grade: '٣م', section: 'أ' },
+    { name: 'حاتم سليمان العسيري', grade: '٣م', section: 'أ' },
+    { name: 'صالح محمد الشلوي', grade: '٣م', section: 'أ' },
+    { name: 'مشاري ماجد الوادعي', grade: '٣م', section: 'أ' },
+    { name: 'ياسر خالد الكلثمي', grade: '٣م', section: 'أ' },
+    // ٣م / ب
+    { name: 'أمجد ناصر الشيباني', grade: '٣م', section: 'ب' },
+    { name: 'حمد فهد الجهني', grade: '٣م', section: 'ب' },
+    { name: 'طلال عبدالرحمن البلوي', grade: '٣م', section: 'ب' },
+    { name: 'نايف تركي الرويلي', grade: '٣م', section: 'ب' },
+    { name: 'وائل سعود العطوي', grade: '٣م', section: 'ب' },
+];
+
+const VIOLATIONS_TEXT = [
+    'التحدث أثناء الشرح بشكل متكرر', 'العبث بممتلكات الفصل', 'التأخر عن الحصة',
+    'إثارة الفوضى في الممرات', 'استخدام الجوال في المدرسة', 'الشجار مع زميل',
+    'عدم الالتزام بالزي المدرسي', 'إزعاج المعلم أثناء الدرس', 'الخروج من الفصل بدون إذن',
+    'تخريب ممتلكات المدرسة', 'رمي الأوراق في الفصل', 'الكتابة على الطاولات'
+];
+const NOTES_TEXT = [
+    'طالب متميز في مادة الرياضيات', 'يحتاج متابعة سلوكية', 'التعاون المثالي مع الزملاء',
+    'يحتاج تحسين مستوى القراءة', 'مبدع في الأنشطة اللامنهجية', 'مستوى ممتاز في الحفظ',
+    'بحاجة لتعزيز الثقة بالنفس', 'يظهر قيادة في المجموعات'
+];
+const TIMES = ['٧:١٥','٧:٢٠','٧:٢٥','٧:٣٠','٧:٣٥','٧:٤٠','٧:٤٥','٧:٥٠','٨:٠٠','٨:١٠'];
+
+function toIndic(n) { return n.toString().replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]); }
+
+// ============================================
+// ترتيب الفصول: ١م/أ → ١م/ب → ٢م/أ → ...
+// ============================================
+const GRADE_ORDER = { '١م': 1, '٢م': 2, '٣م': 3 };
+const SECTION_ORDER = { 'أ': 1, 'ب': 2, 'ج': 3 };
+
+function sortStudents(students) {
+    return [...students].sort((a, b) => {
+        // 1. ترتيب الصف
+        const gradeA = GRADE_ORDER[a.grade] || 99;
+        const gradeB = GRADE_ORDER[b.grade] || 99;
+        if (gradeA !== gradeB) return gradeA - gradeB;
+        // 2. ترتيب الفصل
+        const secA = SECTION_ORDER[a.section] || 99;
+        const secB = SECTION_ORDER[b.section] || 99;
+        if (secA !== secB) return secA - secB;
+        // 3. ترتيب أبجدي (أ → ي)
+        return a.name.localeCompare(b.name, 'ar');
+    });
+}
+
+function groupByClass(students) {
+    const groups = {};
+    students.forEach(s => {
+        const key = s.grade + ' / ' + s.section;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(s);
+    });
+    return groups;
+}
+
+// ============================================
+// دالة عامة لبناء فاصل الفصل
+// ============================================
+function classHeaderRow(className, count, colSpan) {
+    return `<tr class="group-separator"><td colspan="${colSpan}"></td></tr>
+            <tr class="group-header"><td colspan="${colSpan}">
+                <div class="group-header-content">
+                    <span class="group-label">${className}</span>
+                    <span class="group-count">(${toIndic(count)})</span>
+                </div>
+            </td></tr>`;
+}
+
+// ============================================
+// بناء جدول المخالفات — مجمّع ومرتّب
+// ============================================
+function buildViolationsTable() {
+    const el = document.getElementById('violationsTable');
+    // اختيار 15 طالب من فصول مختلفة
+    const picked = [0,2,4, 5,7,9, 10,12,14, 16,18, 20,23, 26,28].map(i => ALL_STUDENTS[i]);
+    const sorted = sortStudents(picked);
+    const groups = groupByClass(sorted);
+    const cols = 8;
+
+    let html = `<table class="data-table">
+        <thead><tr>
+            <th style="width:40px"><input type="checkbox" class="table-checkbox"></th>
+            <th>#</th><th>الطالب</th><th>الصف</th><th>المخالفة</th>
+            <th style="text-align:center">الدرجة</th><th style="text-align:center">الإرسال</th><th style="text-align:center">إجراءات</th>
+        </tr></thead><tbody>`;
+
+    let counter = 0;
+    let firstGroup = true;
+    Object.keys(groups).forEach(className => {
+        if (!firstGroup) html += classHeaderRow(className, groups[className].length, cols);
+        else { html += classHeaderRow(className, groups[className].length, cols); firstGroup = false; }
+
+        groups[className].forEach(s => {
+            counter++;
+            const deg = ((counter - 1) % 4) + 1;
+            const sent = counter <= 8;
+            const vText = VIOLATIONS_TEXT[(counter - 1) % VIOLATIONS_TEXT.length];
+            html += `<tr>
+                <td><input type="checkbox" class="table-checkbox"></td>
+                <td style="color:#999;font-weight:600">${toIndic(counter)}</td>
+                <td><span class="student-name">${s.name}</span></td>
+                <td><span class="grade-badge">${s.grade} / ${s.section}</span></td>
+                <td style="font-size:12px;color:#444">${vText}</td>
+                <td style="text-align:center"><span class="degree-badge deg-${deg}">${toIndic(deg)}</span></td>
+                <td style="text-align:center">${sent ? '<span class="status-sent"><span class="material-symbols-outlined" style="font-size:14px">check_circle</span> تم</span>' : '<span class="status-unsent"><span class="material-symbols-outlined" style="font-size:14px">cancel</span> لم يرسل</span>'}</td>
+                <td><div class="table-actions">
+                    <div class="table-btn" title="طباعة إشعار"><span class="material-symbols-outlined" style="color:#7c3aed">print</span></div>
+                    <div class="table-btn" title="إرسال واتساب"><span class="material-symbols-outlined" style="color:#10b981">send</span></div>
+                    <div class="table-btn" title="حذف"><span class="material-symbols-outlined" style="color:#ef4444">delete</span></div>
+                </div></td>
+            </tr>`;
+        });
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+}
+
+// ============================================
+// بناء جدول الملاحظات — مجمّع ومرتّب
+// ============================================
+function buildNotesTable() {
+    const el = document.getElementById('notesTable');
+    const picked = [1,3, 6,8, 11,13, 17,19, 21,24, 27,29].map(i => ALL_STUDENTS[i]);
+    const sorted = sortStudents(picked);
+    const groups = groupByClass(sorted);
+    const cols = 8;
+    const types = ['إيجابية','سلبية'];
+
+    let html = `<table class="data-table">
+        <thead><tr>
+            <th style="width:40px"><input type="checkbox" class="table-checkbox"></th>
+            <th>#</th><th>الطالب</th><th>الصف</th><th>الملاحظة</th>
+            <th style="text-align:center">النوع</th><th style="text-align:center">الإرسال</th><th style="text-align:center">إجراءات</th>
+        </tr></thead><tbody>`;
+
+    let counter = 0;
+    Object.keys(groups).forEach(className => {
+        html += classHeaderRow(className, groups[className].length, cols);
+        groups[className].forEach(s => {
+            counter++;
+            const sent = counter <= 5;
+            const type = types[(counter - 1) % 2];
+            const typeColor = type === 'إيجابية' ? '#059669' : '#dc2626';
+            html += `<tr>
+                <td><input type="checkbox" class="table-checkbox"></td>
+                <td style="color:#999;font-weight:600">${toIndic(counter)}</td>
+                <td><span class="student-name">${s.name}</span></td>
+                <td><span class="grade-badge">${s.grade} / ${s.section}</span></td>
+                <td style="font-size:12px;color:#444">${NOTES_TEXT[(counter-1) % NOTES_TEXT.length]}</td>
+                <td style="text-align:center"><span style="padding:3px 10px;border-radius:8px;font-size:11px;font-weight:600;background:${typeColor}15;color:${typeColor}">${type}</span></td>
+                <td style="text-align:center">${sent ? '<span class="status-sent"><span class="material-symbols-outlined" style="font-size:14px">check_circle</span> تم</span>' : '<span class="status-unsent"><span class="material-symbols-outlined" style="font-size:14px">cancel</span> لم يرسل</span>'}</td>
+                <td><div class="table-actions">
+                    <div class="table-btn" title="إرسال"><span class="material-symbols-outlined" style="color:#059669">send</span></div>
+                    <div class="table-btn" title="حذف"><span class="material-symbols-outlined" style="color:#ef4444">delete</span></div>
+                </div></td>
+            </tr>`;
+        });
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+}
+
+// ============================================
+// بناء جدول التأخر — مجمّع ومرتّب
+// ============================================
+function buildTardinessTable() {
+    const el = document.getElementById('tardinessTable');
+    const picked = [0,4, 7,9, 12,14, 16, 22,25, 28].map(i => ALL_STUDENTS[i]);
+    const sorted = sortStudents(picked);
+    const groups = groupByClass(sorted);
+    const cols = 8;
+
+    let html = `<table class="data-table">
+        <thead><tr>
+            <th style="width:40px"><input type="checkbox" class="table-checkbox"></th>
+            <th>#</th><th>الطالب</th><th>الصف</th><th style="text-align:center">وقت الحضور</th>
+            <th style="text-align:center">الحصة</th><th style="text-align:center">الإرسال</th><th style="text-align:center">إجراءات</th>
+        </tr></thead><tbody>`;
+
+    let counter = 0;
+    Object.keys(groups).forEach(className => {
+        html += classHeaderRow(className, groups[className].length, cols);
+        groups[className].forEach(s => {
+            counter++;
+            const sent = counter <= 4;
+            html += `<tr>
+                <td><input type="checkbox" class="table-checkbox"></td>
+                <td style="color:#999;font-weight:600">${toIndic(counter)}</td>
+                <td><span class="student-name">${s.name}</span></td>
+                <td><span class="grade-badge">${s.grade} / ${s.section}</span></td>
+                <td style="text-align:center;font-weight:700;color:#dc2626">${TIMES[(counter-1) % TIMES.length]}</td>
+                <td style="text-align:center"><span style="padding:3px 10px;border-radius:8px;font-size:11px;font-weight:600;background:#fef3c7;color:#92400e">الحصة ${toIndic(counter <= 5 ? 1 : 2)}</span></td>
+                <td style="text-align:center">${sent ? '<span class="status-sent"><span class="material-symbols-outlined" style="font-size:14px">check_circle</span> تم</span>' : '<span class="status-unsent"><span class="material-symbols-outlined" style="font-size:14px">cancel</span> لم يرسل</span>'}</td>
+                <td><div class="table-actions">
+                    <div class="table-btn" title="إرسال"><span class="material-symbols-outlined" style="color:#10b981">send</span></div>
+                    <div class="table-btn" title="حذف"><span class="material-symbols-outlined" style="color:#ef4444">delete</span></div>
+                </div></td>
+            </tr>`;
+        });
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+}
+
+// ============================================
+// بناء جدول الاستئذان — مجمّع ومرتّب
+// ============================================
+function buildPermissionsTable() {
+    const el = document.getElementById('permissionsTable');
+    const picked = [2, 6, 11,13, 19, 23,27].map(i => ALL_STUDENTS[i]);
+    const sorted = sortStudents(picked);
+    const groups = groupByClass(sorted);
+    const cols = 8;
+    const reasons = ['مراجعة طبية','ظروف عائلية','موعد حكومي','صداع شديد','ظروف عائلية','مراجعة طبية','موعد حكومي'];
+
+    let html = `<table class="data-table">
+        <thead><tr>
+            <th style="width:40px"><input type="checkbox" class="table-checkbox"></th>
+            <th>#</th><th>الطالب</th><th>الصف</th><th style="text-align:center">وقت الخروج</th>
+            <th style="text-align:center">السبب</th><th style="text-align:center">الإرسال</th><th style="text-align:center">إجراءات</th>
+        </tr></thead><tbody>`;
+
+    let counter = 0;
+    Object.keys(groups).forEach(className => {
+        html += classHeaderRow(className, groups[className].length, cols);
+        groups[className].forEach(s => {
+            counter++;
+            const sent = counter <= 3;
+            html += `<tr>
+                <td><input type="checkbox" class="table-checkbox"></td>
+                <td style="color:#999;font-weight:600">${toIndic(counter)}</td>
+                <td><span class="student-name">${s.name}</span></td>
+                <td><span class="grade-badge">${s.grade} / ${s.section}</span></td>
+                <td style="text-align:center;font-weight:700;color:#0891b2">٩:${toIndic(15 + counter*10)}</td>
+                <td style="text-align:center"><span style="padding:3px 10px;border-radius:8px;font-size:11px;font-weight:600;background:#e0f2fe;color:#0369a1">${reasons[(counter-1) % reasons.length]}</span></td>
+                <td style="text-align:center">${sent ? '<span class="status-sent"><span class="material-symbols-outlined" style="font-size:14px">check_circle</span> تم</span>' : '<span class="status-unsent"><span class="material-symbols-outlined" style="font-size:14px">cancel</span> لم يرسل</span>'}</td>
+                <td><div class="table-actions">
+                    <div class="table-btn" title="إرسال"><span class="material-symbols-outlined" style="color:#10b981">send</span></div>
+                    <div class="table-btn" title="حذف"><span class="material-symbols-outlined" style="color:#ef4444">delete</span></div>
+                </div></td>
+            </tr>`;
+        });
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+}
+
+// ============================================
+// بناء جدول الغياب — مجمّع ومرتّب
+// ============================================
+function buildAbsenceTable() {
+    const el = document.getElementById('absenceTable');
+    const picked = [1,3,4, 5,8, 10,13,14, 15,18, 20,22,24, 26,29].map(i => ALL_STUDENTS[i]);
+    const sorted = sortStudents(picked);
+    const groups = groupByClass(sorted);
+    const cols = 9;
+    // بيانات غياب ثابتة بدل عشوائية
+    const absData = [
+        {e:1,u:0},{e:0,u:3},{e:2,u:1},{e:0,u:5},{e:3,u:2},
+        {e:1,u:4},{e:0,u:7},{e:2,u:0},{e:0,u:6},{e:1,u:1},
+        {e:3,u:3},{e:0,u:2},{e:1,u:5},{e:2,u:4},{e:0,u:8}
+    ];
+
+    let html = `<table class="data-table">
+        <thead><tr>
+            <th style="width:40px"><input type="checkbox" class="table-checkbox"></th>
+            <th>#</th><th>الطالب</th><th>الصف</th>
+            <th style="text-align:center">بعذر</th><th style="text-align:center">بدون عذر</th>
+            <th style="text-align:center">الحالة</th><th style="text-align:center">الإرسال</th><th style="text-align:center">إجراءات</th>
+        </tr></thead><tbody>`;
+
+    let counter = 0;
+    Object.keys(groups).forEach(className => {
+        html += classHeaderRow(className, groups[className].length, cols);
+        groups[className].forEach(s => {
+            const d = absData[counter % absData.length];
+            counter++;
+            const sent = counter <= 6;
+            const status = d.u >= 5 ? 'خطر' : d.u >= 3 ? 'تحذير' : 'عادي';
+            const statusStyle = status === 'خطر' ? 'background:#fecaca;color:#991b1b' : status === 'تحذير' ? 'background:#fef3c7;color:#92400e' : 'background:#d1fae5;color:#065f46';
+            html += `<tr>
+                <td><input type="checkbox" class="table-checkbox"></td>
+                <td style="color:#999;font-weight:600">${toIndic(counter)}</td>
+                <td><span class="student-name">${s.name}</span></td>
+                <td><span class="grade-badge">${s.grade} / ${s.section}</span></td>
+                <td style="text-align:center;font-weight:700">${toIndic(d.e)}</td>
+                <td style="text-align:center;font-weight:700;color:#dc2626">${toIndic(d.u)}</td>
+                <td style="text-align:center"><span style="padding:3px 10px;border-radius:8px;font-size:11px;font-weight:600;${statusStyle}">${status}</span></td>
+                <td style="text-align:center">${sent ? '<span class="status-sent"><span class="material-symbols-outlined" style="font-size:14px">check_circle</span> تم</span>' : '<span class="status-unsent"><span class="material-symbols-outlined" style="font-size:14px">cancel</span> لم يرسل</span>'}</td>
+                <td><div class="table-actions">
+                    <div class="table-btn" title="إرسال"><span class="material-symbols-outlined" style="color:#10b981">send</span></div>
+                    <div class="table-btn" title="طباعة"><span class="material-symbols-outlined" style="color:#ea580c">print</span></div>
+                    <div class="table-btn" title="حذف"><span class="material-symbols-outlined" style="color:#ef4444">delete</span></div>
+                </div></td>
+            </tr>`;
+        });
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+}
+
+// ============================================
+// تحسين 17: Skeleton Loading
+// ============================================
+function showSkeleton() {
+    const sections = ['violations','notes','tardiness','permissions','absence'];
+    const current = sections.find(s => document.getElementById('section-' + s).style.display !== 'none') || 'violations';
+    const tableId = current + 'Table';
+    const el = document.getElementById(tableId);
+
+    let html = '<div style="padding:0">';
+    for (let i = 0; i < 6; i++) {
+        html += `<div class="skeleton-row">
+            <div class="skeleton skeleton-cell" style="width:18px;height:18px;border-radius:4px"></div>
+            <div class="skeleton skeleton-cell" style="width:30px"></div>
+            <div class="skeleton skeleton-cell" style="width:160px"></div>
+            <div class="skeleton skeleton-cell" style="width:70px"></div>
+            <div class="skeleton skeleton-cell" style="width:200px"></div>
+            <div class="skeleton skeleton-cell" style="width:35px;height:30px;border-radius:10px"></div>
+            <div class="skeleton skeleton-cell" style="width:50px"></div>
+            <div class="skeleton skeleton-cell" style="width:90px"></div>
+        </div>`;
+    }
+    html += '</div>';
+    el.innerHTML = html;
+
+    setTimeout(() => {
+        if (current === 'violations') buildViolationsTable();
+        else if (current === 'notes') buildNotesTable();
+        else if (current === 'tardiness') buildTardinessTable();
+        else if (current === 'permissions') buildPermissionsTable();
+        else if (current === 'absence') buildAbsenceTable();
+    }, 2000);
+}
+
+// ============================================
+// التنقل بين الأقسام
+// ============================================
+const SECTION_CLASSES = {
+    violations: 'section-violations',
+    notes: 'section-notes',
+    tardiness: 'section-tardiness',
+    permissions: 'section-permissions',
+    absence: 'section-absence'
+};
+
+function switchSection(name) {
+    // إخفاء الكل
+    ['violations','notes','tardiness','permissions','absence'].forEach(s => {
+        document.getElementById('section-' + s).style.display = 'none';
+    });
+    // إظهار المطلوب
+    document.getElementById('section-' + name).style.display = 'block';
+
+    // تغيير كلاس اللون
+    const main = document.getElementById('mainContent');
+    Object.values(SECTION_CLASSES).forEach(c => main.classList.remove(c));
+    main.classList.add(SECTION_CLASSES[name]);
+
+    // تحديث السايدبار
+    document.querySelectorAll('.sidebar-item').forEach(item => item.classList.remove('active'));
+    const sideItem = document.querySelector(`.sidebar-item[data-section="${name}"]`);
+    if (sideItem) sideItem.classList.add('active');
+
+    // تحديث أزرار الديمو
+    document.querySelectorAll('.demo-switch-btn').forEach((btn, i) => {
+        btn.classList.remove('active');
+    });
+    const btnIndex = ['violations','notes','tardiness','permissions','absence'].indexOf(name);
+    if (btnIndex >= 0) document.querySelectorAll('.demo-switch-btn')[btnIndex].classList.add('active');
+}
+
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('collapsed');
+}
+
+function toggleDropdown(id) {
+    document.getElementById(id).classList.toggle('open');
+}
+
+// إغلاق القائمة عند الضغط خارجها
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.dropdown-wrapper')) {
+        document.querySelectorAll('.dropdown-wrapper.open').forEach(d => d.classList.remove('open'));
+    }
+});
+
+// ============================================
+// تهيئة الصفحة
+// ============================================
+buildViolationsTable();
+buildNotesTable();
+buildTardinessTable();
+buildPermissionsTable();
+buildAbsenceTable();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>نموذج التأخر والاستئذان</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI','Tahoma','Arial',sans-serif;-webkit-tap-highlight-color:transparent}
+body{background:#f0f2f5;min-height:100vh;min-height:100dvh;color:#1f2937}
+.header{background:linear-gradient(135deg,#1e40af,#3b82f6);padding:16px 20px;position:sticky;top:0;z-index:40;box-shadow:0 2px 12px rgba(30,64,175,.3)}
+.hdr-row{display:flex;align-items:center;justify-content:space-between;max-width:600px;margin:0 auto}
+.hdr-info h1{font-size:20px;font-weight:800;color:#fff}
+.hdr-sub{font-size:12px;color:rgba(255,255,255,.8);margin-top:2px}
+.hdr-btn{width:42px;height:42px;border-radius:12px;border:none;background:rgba(255,255,255,.15);color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.hdr-btn:active{transform:scale(.9)}
+@keyframes spin{to{transform:rotate(360deg)}}.spinning{animation:spin .8s linear infinite}
+.tabs{display:flex;background:#fff;margin:16px 16px 0;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.tab{flex:1;padding:14px;text-align:center;font-size:15px;font-weight:700;border:none;background:#fff;color:#6b7280;cursor:pointer;transition:all .25s}
+.tab.active{color:#fff}
+.tab.perm.active{background:linear-gradient(135deg,#1e40af,#3b82f6)}
+.tab.late.active{background:linear-gradient(135deg,#c2410c,#ea580c)}
+.main{max-width:600px;margin:0 auto;padding:16px 16px 120px}
+.card{background:#fff;border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,.05);border:2px solid transparent}
+.card.c-blue{border-color:rgba(59,130,246,.15)}.card.c-orange{border-color:rgba(234,88,12,.15)}
+.card-title{font-size:14px;font-weight:700;color:#374151;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.fr{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}.fr.full{grid-template-columns:1fr}
+.fl{font-size:12px;font-weight:700;color:#6b7280;margin-bottom:4px}
+.sel{width:100%;padding:12px 14px;border:2px solid #e5e7eb;border-radius:12px;font-size:15px;font-family:inherit;background:#fff;color:#1f2937;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L1 3h10z' fill='%239ca3af'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:12px center;cursor:pointer}
+.sel:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+.sel.of:focus{border-color:#ea580c;box-shadow:0 0 0 3px rgba(234,88,12,.1)}
+.sb{width:100%;padding:10px 14px;border:2px solid #e5e7eb;border-radius:12px;font-size:14px;font-family:inherit;margin-bottom:10px}
+.sb:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+.sb.of:focus{border-color:#ea580c;box-shadow:0 0 0 3px rgba(234,88,12,.1)}
+.sl{max-height:350px;overflow-y:auto;border:2px solid #e5e7eb;border-radius:12px;-webkit-overflow-scrolling:touch}
+.si{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid #f3f4f6;cursor:pointer;user-select:none;-webkit-user-select:none}
+.si:last-child{border-bottom:none}
+.si.on{background:#eff6ff}.si.on.lo{background:#fff7ed}
+.ck{width:22px;height:22px;border-radius:6px;border:2px solid #d1d5db;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;transition:all .15s}
+.si.on .ck{background:#3b82f6;border-color:#3b82f6}
+.si.on.lo .ck{background:#ea580c;border-color:#ea580c}
+.sn{font-size:15px;font-weight:600;color:#1f2937;flex:1}
+.ct{font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px;background:#f3f4f6;color:#6b7280;flex-shrink:0}
+.sa{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f9fafb;border-bottom:2px solid #e5e7eb;cursor:pointer;user-select:none}
+.sat{font-size:13px;font-weight:700;color:#6b7280}
+.badge{font-size:12px;font-weight:800;padding:2px 10px;border-radius:100px;color:#fff}
+.badge.bb{background:#3b82f6}.badge.bo{background:#ea580c}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:100px;font-size:12px;font-weight:700;color:#fff;animation:ci .2s ease}
+.chip.cb{background:#3b82f6}.chip.co{background:#ea580c}
+.chip-c{opacity:.75;font-size:10px}.chip-x{cursor:pointer;font-size:14px;opacity:.8}
+@keyframes ci{from{transform:scale(.8);opacity:0}to{transform:scale(1);opacity:1}}
+.bbar{position:fixed;bottom:0;left:0;right:0;padding:14px 16px;background:#fff;border-top:1px solid #e5e7eb;z-index:30;box-shadow:0 -4px 12px rgba(0,0,0,.06)}
+.bbar-in{max-width:600px;margin:0 auto;display:flex;gap:10px}
+.btn-s{flex:1;padding:16px;border:none;border-radius:14px;color:#fff;font-size:17px;font-weight:800;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 14px rgba(0,0,0,.15)}
+.btn-s.bp{background:linear-gradient(135deg,#1e40af,#3b82f6)}
+.btn-s.bl{background:linear-gradient(135deg,#c2410c,#ea580c)}
+.btn-s:disabled{opacity:.4;cursor:not-allowed}
+.btn-s:active:not(:disabled){transform:scale(.98)}
+.btn-l{width:56px;height:56px;border-radius:14px;border:2px solid #e5e7eb;background:#fff;color:#6b7280;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)}
+.mo.open{display:flex}
+.ms{background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:600px;max-height:80vh;display:flex;flex-direction:column;animation:su .3s ease}
+@keyframes su{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.mh-bar{width:40px;height:4px;background:#d1d5db;border-radius:100px;margin:10px auto}
+.mhd{padding:0 20px 14px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between}
+.mhd h3{font-size:18px;font-weight:800}
+.mc{width:36px;height:36px;border-radius:50%;border:none;background:#f3f4f6;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.mb{flex:1;overflow-y:auto;padding:16px 20px;-webkit-overflow-scrolling:touch}
+.lsh{font-size:14px;font-weight:800;color:#6b7280;padding:8px 12px;background:#f3f4f6;border-radius:10px;margin:12px 0 8px;text-align:center}
+.lsh:first-child{margin-top:0}
+.li{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #f3f4f6}
+.li:last-child{border-bottom:none}
+.ln{font-size:14px;font-weight:700}
+.lt{font-size:11px;font-weight:700;padding:4px 10px;border-radius:100px;color:#fff}
+.lt.ltp{background:#3b82f6}.lt.ltl{background:#ea580c}
+.empty{text-align:center;padding:40px 20px;color:#9ca3af;font-size:15px}
+.toast{position:fixed;top:80px;left:50%;transform:translateX(-50%) translateY(-20px);padding:14px 24px;border-radius:14px;color:#fff;font-size:15px;font-weight:700;z-index:60;opacity:0;transition:all .3s;pointer-events:none;text-align:center;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.ts{background:#16a34a}.toast.te{background:#dc2626}.toast.ti{background:#3b82f6}
+.err-s{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;padding:32px}
+.err-i{font-size:64px;margin-bottom:16px}
+.err-t{font-size:20px;font-weight:800;margin-bottom:8px}
+.err-m{color:#6b7280;font-size:14px}
+.hid{display:none!important}
+</style>
+</head>
+<body>
+
+<div class="header"><div class="hdr-row">
+  <div class="hdr-info"><h1>📋 التأخر والاستئذان</h1><div class="hdr-sub" id="staffName"></div></div>
+  <button class="hdr-btn" onclick="doRefresh()" id="refreshBtn">🔄</button>
+</div></div>
+
+<!-- شاشة الخطأ -->
+<div id="errScr" class="err-s hid"><div class="err-i">🔒</div><div class="err-t">رابط غير صالح</div><div class="err-m" id="errMsg">تأكد من صحة الرابط</div></div>
+
+<!-- المحتوى الرئيسي -->
+<div id="appWrap" class="hid">
+<div class="tabs">
+  <button class="tab perm active" onclick="swTab('perm')">🚪 استئذان</button>
+  <button class="tab late" onclick="swTab('late')">⏰ تأخر</button>
+</div>
+<div class="main">
+  <div id="perm-c">
+    <div class="card c-blue"><div class="card-title">🏫 المرحلة والصف</div>
+      <div class="fr"><div><div class="fl">المرحلة</div><select class="sel" id="p_stage" onchange="upGrades('p')"><option value="">اختر</option></select></div>
+      <div><div class="fl">الصف</div><select class="sel" id="p_grade" onchange="loadGrade('p')"><option value="">اختر</option></select></div></div>
+    </div>
+    <div class="card c-blue"><div class="card-title">👥 الطلاب <span id="p-badge" class="badge bb hid">0</span></div>
+      <input type="text" class="sb" id="p_search" placeholder="🔍 ابحث عن طالب..." oninput="doFilter('p')">
+      <div class="sl" id="p_list"><div class="empty">اختر المرحلة والصف أولاً</div></div>
+      <div class="chips" id="p_chips"></div>
+    </div>
+    <div class="card c-blue"><div class="card-title">📝 تفاصيل الاستئذان</div>
+      <div class="fr"><div><div class="fl">السبب</div><select class="sel" id="p_reason"><option value="">اختر</option><option value="ظرف صحي">ظرف صحي</option><option value="ظرف أسري">ظرف أسري</option><option value="موعد حكومي">موعد حكومي</option><option value="طلب ولي الأمر">طلب ولي الأمر</option></select></div>
+      <div><div class="fl">المستلم</div><select class="sel" id="p_guardian"><option value="">اختر</option><option value="الأب">الأب</option><option value="الأخ">الأخ</option><option value="الأم">الأم</option></select></div></div>
+    </div>
+  </div>
+  <div id="late-c" class="hid">
+    <div class="card c-orange"><div class="card-title">🏫 المرحلة والصف</div>
+      <div class="fr"><div><div class="fl">المرحلة</div><select class="sel of" id="l_stage" onchange="upGrades('l')"><option value="">اختر</option></select></div>
+      <div><div class="fl">الصف</div><select class="sel of" id="l_grade" onchange="loadGrade('l')"><option value="">اختر</option></select></div></div>
+    </div>
+    <div class="card c-orange"><div class="card-title">👥 المتأخرين <span id="l-badge" class="badge bo hid">0</span></div>
+      <input type="text" class="sb of" id="l_search" placeholder="🔍 ابحث عن طالب..." oninput="doFilter('l')">
+      <div class="sl" id="l_list"><div class="empty">اختر المرحلة والصف أولاً</div></div>
+      <div class="chips" id="l_chips"></div>
+    </div>
+  </div>
+</div></div>
+
+<div class="bbar" id="botBar" style="display:none"><div class="bbar-in">
+  <button class="btn-s bp" id="subBtn" onclick="doSubmit()" disabled>✅ تسجيل الاستئذان</button>
+  <button class="btn-l" onclick="openLog()">📜</button>
+</div></div>
+
+<div class="mo" id="logMo" onclick="if(event.target===this)closeLog()"><div class="ms"><div class="mh-bar"></div>
+  <div class="mhd"><h3>📜 سجل اليوم</h3><button class="mc" onclick="closeLog()">✕</button></div>
+  <div class="mb" id="logB"><div class="empty">جاري التحميل...</div></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ★★★ قراءة البيانات المحقونة من السيرفر — نفس طريقة المعلم بالضبط ★★★
+var PAGE_DATA;
+try { PAGE_DATA = <?!= pageData ?>; } catch(e) { PAGE_DATA = {success:false, error:'خطأ في تحليل البيانات: ' + e.message}; }
+
+var D=document, allStu=null, staff=null, aTab='perm', sel={p:[],l:[]};
+// ★ المراحل والصفوف تُحقن ديناميكياً من هيكل_المدرسة (بدل القيم المثبتة)
+var GM;
+try { GM = <?!= gradeMap ?>; } catch(e) { GM = {}; }
+
+// ★★★ التهيئة — تقرأ البيانات الجاهزة بدون استدعاء سيرفر ★★★
+function init(){
+  if(!PAGE_DATA || typeof PAGE_DATA !== 'object') { showErr('فشل تحميل البيانات'); return; }
+  if(!PAGE_DATA.success) { showErr(PAGE_DATA.error || 'رابط غير صالح أو منتهي'); return; }
+
+  staff = PAGE_DATA.staff;
+  D.getElementById('staffName').textContent = '👤 ' + staff.name + (staff.role ? ' — ' + staff.role : '');
+
+  // ★ بناء قوائم المراحل ديناميكياً من هيكل_المدرسة
+  var stages = Object.keys(GM);
+  ['p_stage', 'l_stage'].forEach(function(id) {
+    var sel = D.getElementById(id);
+    stages.forEach(function(s) {
+      var opt = D.createElement('option');
+      opt.value = s;
+      opt.textContent = s;
+      sel.appendChild(opt);
+    });
+  });
+
+  D.getElementById('appWrap').classList.remove('hid');
+  D.getElementById('botBar').style.display = '';
+  loadStu();
+}
+
+function showErr(m){ D.getElementById('errScr').classList.remove('hid'); D.getElementById('errMsg').textContent = m; }
+
+function loadStu(){
+  google.script.run.withSuccessHandler(function(r){
+    if(r&&r.success){allStu=r.students;toast('تم تحميل الطلاب','ti');}else toast('فشل تحميل الطلاب','te');
+  }).withFailureHandler(function(e){toast('خطأ: '+e.message,'te');}).getAllStudentsForStaff();
+}
+
+function swTab(t){
+  aTab=t;D.querySelectorAll('.tab').forEach(function(b){b.classList.remove('active');});
+  D.querySelector('.tab.'+t).classList.add('active');
+  D.getElementById('perm-c').classList.toggle('hid',t!=='perm');
+  D.getElementById('late-c').classList.toggle('hid',t!=='late');
+  var b=D.getElementById('subBtn');b.className='btn-s '+(t==='perm'?'bp':'bl');
+  b.innerHTML=t==='perm'?'✅ تسجيل الاستئذان':'✅ تسجيل التأخر';upSub();
+}
+
+function upGrades(p){
+  var st=D.getElementById(p+'_stage').value,g=D.getElementById(p+'_grade');
+  g.innerHTML='<option value="">اختر</option>';sel[p]=[];upChips(p);
+  if(st&&GM[st])GM[st].forEach(function(v){var o=D.createElement('option');o.value=v;o.textContent=v;g.appendChild(o);});
+  D.getElementById(p+'_list').innerHTML='<div class="empty">اختر المرحلة والصف أولاً</div>';upSub();
+}
+
+function loadGrade(p){
+  var st=D.getElementById(p+'_stage').value,gr=D.getElementById(p+'_grade').value;
+  D.getElementById(p+'_search').value='';sel[p]=[];upChips(p);
+  var list=D.getElementById(p+'_list');
+  if(!allStu||!st||!gr){list.innerHTML='<div class="empty">اختر المرحلة والصف أولاً</div>';upSub();return;}
+  var arr=[];
+  Object.keys(allStu[st]||{}).forEach(function(cls){
+    if(cls.indexOf(gr)===0){var sec=cls.replace(gr,'').trim();
+      (allStu[st][cls]||[]).forEach(function(s){arr.push({name:s.name,id:s.id||'',phone:s.phone||'',cls:cls,sec:sec||cls});});}
+  });
+  arr.sort(function(a,b){return a.name.localeCompare(b.name,'ar');});
+  render(p,arr);upSub();
+}
+
+function render(p,arr){
+  var list=D.getElementById(p+'_list'),isL=p==='l';
+  if(!arr.length){list.innerHTML='<div class="empty">لا يوجد طلاب</div>';return;}
+  var h='<div class="sa" onclick="togAll(\''+p+'\')"><span class="sat">تحديد الكل ('+arr.length+')</span></div>';
+  arr.forEach(function(s){
+    var on=sel[p].some(function(x){return x.name===s.name&&x.cls===s.cls;});
+    h+='<div class="si'+(on?(isL?' on lo':' on'):'')+'" onclick="tog(\''+p+'\',this)" data-n="'+E(s.name)+'" data-c="'+E(s.cls)+'" data-s="'+E(s.sec)+'" data-i="'+E(s.id)+'" data-p="'+E(s.phone)+'">';
+    h+='<div class="ck">'+(on?'✓':'')+'</div><span class="sn">'+E(s.name)+'</span><span class="ct">'+E(s.sec)+'</span></div>';
+  });
+  list.innerHTML=h;
+}
+
+function E(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+
+function tog(p,el){
+  var n=el.getAttribute('data-n'),c=el.getAttribute('data-c'),isL=p==='l';
+  var i=sel[p].findIndex(function(x){return x.name===n&&x.cls===c;});
+  if(i>-1){sel[p].splice(i,1);el.classList.remove('on','lo');el.querySelector('.ck').textContent='';}
+  else{sel[p].push({name:n,cls:c,sec:el.getAttribute('data-s'),id:el.getAttribute('data-i'),phone:el.getAttribute('data-p')});el.classList.add('on');if(isL)el.classList.add('lo');el.querySelector('.ck').textContent='✓';}
+  upChips(p);upSub();
+}
+
+function togAll(p){
+  var items=D.getElementById(p+'_list').querySelectorAll('.si'),allOn=sel[p].length===items.length,isL=p==='l';
+  sel[p]=[];
+  if(!allOn){items.forEach(function(el){sel[p].push({name:el.getAttribute('data-n'),cls:el.getAttribute('data-c'),sec:el.getAttribute('data-s'),id:el.getAttribute('data-i'),phone:el.getAttribute('data-p')});el.classList.add('on');if(isL)el.classList.add('lo');el.querySelector('.ck').textContent='✓';});}
+  else{items.forEach(function(el){el.classList.remove('on','lo');el.querySelector('.ck').textContent='';});}
+  upChips(p);upSub();
+}
+
+function remStu(p,n,c){
+  var i=sel[p].findIndex(function(x){return x.name===n&&x.cls===c;});
+  if(i>-1)sel[p].splice(i,1);
+  D.getElementById(p+'_list').querySelectorAll('.si').forEach(function(el){if(el.getAttribute('data-n')===n&&el.getAttribute('data-c')===c){el.classList.remove('on','lo');el.querySelector('.ck').textContent='';}});
+  upChips(p);upSub();
+}
+
+function upChips(p){
+  var box=D.getElementById(p+'_chips'),bg=D.getElementById(p+'-badge'),cnt=sel[p].length,isL=p==='l';
+  if(!cnt){box.innerHTML='';bg.classList.add('hid');return;}
+  bg.textContent=cnt;bg.classList.remove('hid');
+  var h='';sel[p].forEach(function(s){var sh=s.name.split(' ').slice(0,2).join(' ');h+='<span class="chip '+(isL?'co':'cb')+'">'+E(sh)+' <span class="chip-c">('+E(s.sec)+')</span> <span class="chip-x" data-p="'+p+'" data-rn="'+E(s.name)+'" data-rc="'+E(s.cls)+'">✕</span></span>';});
+  box.innerHTML=h;
+}
+
+function doFilter(p){
+  var q=D.getElementById(p+'_search').value.trim();
+  D.getElementById(p+'_list').querySelectorAll('.si').forEach(function(el){el.style.display=(!q||(el.getAttribute('data-n')||'').indexOf(q)>-1)?'':'none';});
+}
+
+function upSub(){
+  var p=aTab==='perm'?'p':'l';
+  var ok=sel[p].length>0&&D.getElementById(p+'_stage').value&&D.getElementById(p+'_grade').value;
+  // ★ التحقق من السبب والمستلم للاستئذان
+  if(ok&&p==='p')ok=ok&&D.getElementById('p_reason').value&&D.getElementById('p_guardian').value;
+  D.getElementById('subBtn').disabled=!ok;
+}
+
+var _submitting=false;
+function doSubmit(){
+  if(_submitting)return;_submitting=true;
+  var btn=D.getElementById('subBtn');btn.disabled=true;var orig=btn.innerHTML;btn.innerHTML='⏳ جاري...';
+  var p=aTab==='perm'?'p':'l',stage=D.getElementById(p+'_stage').value;
+  var byC={};sel[p].forEach(function(s){if(!byC[s.cls])byC[s.cls]=[];byC[s.cls].push({name:s.name,id:s.id,phone:s.phone});});
+  var keys=Object.keys(byC),total=sel[p].length,done=0,fail=0;
+  function fin(){
+    var tt=aTab==='perm'?'الاستئذان':'التأخر';
+    if(fail)toast('⚠️ نجح '+(total-fail)+' وفشل '+fail,'te');
+    else toast('✅ تم تسجيل '+tt+' — '+total+' طالب','ts');
+    _submitting=false;resetF(p);btn.disabled=false;btn.innerHTML=orig;
+  }
+  keys.forEach(function(cls){
+    var stu=byC[cls];
+    if(aTab==='perm'){
+      google.script.run.withSuccessHandler(function(r){if(r&&r.success)done+=stu.length;else fail+=stu.length;if(done+fail>=total)fin();}).withFailureHandler(function(){fail+=stu.length;if(done+fail>=total)fin();})
+      .saveStaffPermission({stage:stage,className:cls,students:stu,reason:D.getElementById('p_reason').value,guardian:D.getElementById('p_guardian').value,responsible:staff.name,staffName:staff.name});
+    } else {
+      google.script.run.withSuccessHandler(function(r){if(r&&r.success)done+=stu.length;else fail+=stu.length;if(done+fail>=total)fin();}).withFailureHandler(function(){fail+=stu.length;if(done+fail>=total)fin();})
+      .saveStaffLatecomers({stage:stage,className:cls,students:stu,staffName:staff.name});
+    }
+  });
+}
+
+function resetF(p){
+  sel[p]=[];D.getElementById(p+'_list').querySelectorAll('.si').forEach(function(el){el.classList.remove('on','lo');el.querySelector('.ck').textContent='';});
+  upChips(p);upSub();
+  if(p==='p'){D.getElementById('p_reason').selectedIndex=0;D.getElementById('p_guardian').selectedIndex=0;}
+}
+
+function openLog(){
+  D.getElementById('logMo').classList.add('open');D.getElementById('logB').innerHTML='<div class="empty">⏳ جاري التحميل...</div>';
+  google.script.run.withSuccessHandler(function(r){
+    if(!r||!r.success){D.getElementById('logB').innerHTML='<div class="empty">❌ خطأ</div>';return;}
+    var en=r.entries||{},stages=Object.keys(en),total=0;
+    stages.forEach(function(s){total+=en[s].length;});
+    if(!total){D.getElementById('logB').innerHTML='<div class="empty">📭 لا توجد سجلات</div>';return;}
+    var h='';
+    stages.forEach(function(s){var arr=en[s];if(arr.length){h+='<div class="lsh">🔷 '+E(s)+' ('+arr.length+')</div>';arr.forEach(function(e){h+='<div class="li"><span class="ln">'+E(e.name)+'</span><span class="lt '+(e.type==='استئذان'?'ltp':'ltl')+'">'+E(e.type)+' '+E(e.time||'')+'</span></div>';});}});
+    D.getElementById('logB').innerHTML=h;
+  }).withFailureHandler(function(){D.getElementById('logB').innerHTML='<div class="empty">❌ خطأ</div>';}).getTodaysStaffEntries();
+}
+function closeLog(){D.getElementById('logMo').classList.remove('open');}
+
+function doRefresh(){
+  var b=D.getElementById('refreshBtn');b.classList.add('spinning');b.disabled=true;
+  google.script.run.withSuccessHandler(function(r){
+    if(r&&r.success){allStu=r.students;toast('✅ تم التحديث','ts');
+      // ★ تحديث العرض الحالي
+      var p=aTab==='perm'?'p':'l';
+      var gr=D.getElementById(p+'_grade').value;if(gr)loadGrade(p);
+    }else toast('❌ فشل','te');
+    b.classList.remove('spinning');b.disabled=false;
+  }).withFailureHandler(function(){toast('❌ فشل','te');b.classList.remove('spinning');b.disabled=false;}).getAllStudentsForStaff();
+}
+
+function toast(m,c){var t=D.getElementById('toast');t.textContent=m;t.className='toast '+(c||'ti')+' show';clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove('show');},2500);}
+
+// ★ Event delegation — بديل آمن عن inline onclick
+D.addEventListener('click',function(e){
+  var cx=e.target.closest('.chip-x');if(cx){e.stopPropagation();remStu(cx.getAttribute('data-p'),cx.getAttribute('data-rn'),cx.getAttribute('data-rc'));return;}
+});
+
+// ★★★ بدء التطبيق فوراً — البيانات محقونة مسبقاً ★★★
+init();
+</script>
+</body>
+</html>

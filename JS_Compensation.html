@@ -1,0 +1,386 @@
+<script>
+// =================================================================
+// نظام درجات التعويض - JS_Compensation.html
+// يعرض المخالفات ذات النقاط المخصومة ويتيح اختيار سلوك تعويضي
+// مطابق لقيم نظام نور
+// =================================================================
+
+var compensationRecords = [];
+var compensationFilter = 'all'; // all | pending | compensated
+
+// ═══ قائمة السلوكيات التعويضية (مطابقة لنور) ═══
+var COMPENSATION_BEHAVIORS = [
+  { text: 'انضباط الطالب وعدم غيابه بدون عذر خلال الفصل الدراسي', noorValue: '189,' },
+  { text: 'التعاون مع الزملاء والمعلمين وإدارة المدرسة', noorValue: '1201017,' },
+  { text: 'المشاركة في الخدمة المجتمعية خارج المدرسة', noorValue: '1601194,' },
+  { text: 'تقديم فعالية حوارية', noorValue: '1601195,' },
+  { text: 'المشاركة في حملة توعوية', noorValue: '1601196,' },
+  { text: 'عرض تجارب شخصية ناجحة', noorValue: '1601197,' },
+  { text: 'الالتحاق ببرنامج أو دورة', noorValue: '1601198,' },
+  { text: 'المشاركة في أنشطة مهارات الاتصال', noorValue: '1601199,' },
+  { text: 'المشاركة في أنشطة مهارات القيادة والمسؤولية', noorValue: '1601200,' },
+  { text: 'المشاركة في أنشطة المهارات الرقمية', noorValue: '1601201,' },
+  { text: 'المشاركة في أنشطة مهارة إدارة الوقت', noorValue: '1601202,' },
+  { text: 'كتابة رسالة شكر', noorValue: '1601203,' },
+  { text: 'المشاركة في الإذاعة', noorValue: '1601204,' },
+  { text: 'تقديم مقترح لصالح المجتمع المدرسي', noorValue: '1601205,' },
+  { text: 'أخرى (بناءً على توصية لجنة التوجيه الطلابي)', noorValue: '1601207,' }
+];
+
+// =================================================================
+// 1. عرض تبويب التعويض
+// =================================================================
+function renderCompensationTab() {
+  var content = document.getElementById('viol-tab-content');
+  content.innerHTML = `
+    <!-- إحصائيات -->
+    <div class="flex gap-3 mb-4 flex-wrap">
+      <div class="bg-red-50 border border-red-200 rounded-lg px-4 py-2 text-center min-w-[120px]">
+        <div id="comp-total" class="text-2xl font-black text-red-600">٠</div>
+        <div class="text-xs text-gray-500">إجمالي المخصومات</div>
+      </div>
+      <div class="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-center min-w-[120px]">
+        <div id="comp-points" class="text-2xl font-black text-amber-600">٠</div>
+        <div class="text-xs text-gray-500">إجمالي النقاط</div>
+      </div>
+      <div class="bg-orange-50 border border-orange-200 rounded-lg px-4 py-2 text-center min-w-[120px]">
+        <div id="comp-pending" class="text-2xl font-black text-orange-600">٠</div>
+        <div class="text-xs text-gray-500">بانتظار التعويض</div>
+      </div>
+      <div class="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2 text-center min-w-[120px]">
+        <div id="comp-done" class="text-2xl font-black text-emerald-600">٠</div>
+        <div class="text-xs text-gray-500">تم التعويض</div>
+      </div>
+    </div>
+
+    <!-- أزرار وفلاتر -->
+    <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 mb-5 sticky top-0 z-20">
+      <div class="flex flex-wrap items-center gap-2">
+        <button onclick="loadCompensationRecords()" class="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-xs font-bold">
+          <span class="material-symbols-outlined text-[16px]">refresh</span> تحديث
+        </button>
+        <div class="h-5 border-r border-gray-200"></div>
+        <div class="relative flex-shrink-0">
+          <span class="material-symbols-outlined text-[18px] absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">search</span>
+          <input type="text" id="comp-search" onkeyup="filterCompensationRecords()" placeholder="ابحث بالاسم..."
+            class="w-48 pr-9 pl-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-orange-400 focus:border-orange-400">
+        </div>
+        <select id="comp-status-filter" onchange="filterCompensationRecords()" class="px-2 py-1.5 rounded-lg border border-gray-300 text-xs bg-gray-50">
+          <option value="all">الكل</option>
+          <option value="pending">بانتظار التعويض</option>
+          <option value="compensated">تم التعويض</option>
+        </select>
+        <select id="comp-grade-filter" onchange="filterCompensationRecords()" class="px-2 py-1.5 rounded-lg border border-gray-300 text-xs bg-gray-50">
+          <option value="">كل الصفوف</option>
+        </select>
+        <span class="text-[10px] text-gray-500 mr-2" id="comp-results-count"></span>
+      </div>
+    </div>
+
+    <div id="comp-container" class="min-h-[300px]">
+      <div class="text-center py-16"><div class="loading-bar mx-auto"><div class="loading-bar-progress"></div></div><p class="text-gray-500 mt-4">جاري تحميل البيانات...</p></div>
+    </div>
+
+    <!-- Modal اختيار السلوك التعويضي -->
+    <div id="comp-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" onclick="if(event.target===this)closeCompensationModal()">
+      <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+      <div class="relative bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col animate-modal-in">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-l from-orange-50 to-white flex-shrink-0">
+          <div class="flex justify-between items-center">
+            <div>
+              <h3 class="text-lg font-bold text-gray-800">اختيار السلوك التعويضي</h3>
+              <p id="comp-modal-student" class="text-sm text-gray-500"></p>
+            </div>
+            <button onclick="closeCompensationModal()" class="p-1.5 hover:bg-gray-100 rounded-lg">
+              <span class="material-symbols-outlined text-gray-500">close</span>
+            </button>
+          </div>
+        </div>
+        <div class="p-6 overflow-y-auto flex-1">
+          <!-- بيانات المخالفة -->
+          <div id="comp-modal-violation-info" class="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm"></div>
+
+          <!-- قائمة السلوكيات التعويضية -->
+          <label class="block text-sm font-bold text-gray-700 mb-2">السلوك التعويضي المطابق لنور:</label>
+          <select id="comp-behavior-select" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-400 mb-4">
+            <option value="">-- اختر السلوك التعويضي --</option>
+          </select>
+
+          <div class="flex items-center gap-2 mb-4">
+            <span class="material-symbols-outlined text-emerald-500 text-[18px]">verified</span>
+            <span class="text-xs text-gray-500">القيم مطابقة 100% لنظام نور — سيظهر السجل تلقائياً في تبويب "تعويضية" بقسم نور</span>
+          </div>
+
+          <button onclick="confirmCompensation()" class="w-full py-2.5 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
+            <span class="material-symbols-outlined text-[18px]">check_circle</span> حفظ التعويض
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  loadCompensationRecords();
+}
+
+// =================================================================
+// 2. جلب البيانات
+// =================================================================
+function loadCompensationRecords() {
+  var container = document.getElementById('comp-container');
+  if (container) {
+    container.innerHTML = '<div class="text-center py-16"><div class="loading-bar mx-auto"><div class="loading-bar-progress"></div></div><p class="text-gray-500 mt-4">جاري تحميل البيانات...</p></div>';
+  }
+
+  if (typeof google === 'undefined' || !google.script || !google.script.run) {
+    if (container) container.innerHTML = '<div class="text-center py-10 text-gray-400"><span class="material-symbols-outlined text-4xl mb-2">cloud_off</span><p>غير متصل بالخادم</p></div>';
+    return;
+  }
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!result || !result.success) {
+        if (container) container.innerHTML = '<div class="text-center py-10 text-red-500"><span class="material-symbols-outlined text-4xl mb-2">error</span><p>' + escapeHtml(result ? result.error : 'خطأ غير معروف') + '</p></div>';
+        return;
+      }
+
+      compensationRecords = result.records || [];
+
+      // تحديث الإحصائيات
+      var stats = result.stats || {};
+      var el;
+      el = document.getElementById('comp-total'); if (el) el.textContent = toArabicNum_(stats.total || 0);
+      el = document.getElementById('comp-points'); if (el) el.textContent = toArabicNum_(stats.totalPoints || 0);
+      el = document.getElementById('comp-pending'); if (el) el.textContent = toArabicNum_(stats.pending || 0);
+      el = document.getElementById('comp-done'); if (el) el.textContent = toArabicNum_(stats.compensated || 0);
+
+      // ملء فلتر الصفوف
+      populateCompGradeFilter_();
+
+      // عرض الجدول
+      filterCompensationRecords();
+    })
+    .withFailureHandler(function(err) {
+      if (container) container.innerHTML = '<div class="text-center py-10 text-red-500"><span class="material-symbols-outlined text-4xl mb-2">error</span><p>' + escapeHtml(err.message || 'خطأ في الاتصال') + '</p></div>';
+    })
+    .getCompensationEligibleRecords(currentStage);
+}
+
+// =================================================================
+// 3. فلتر وعرض الجدول
+// =================================================================
+function filterCompensationRecords() {
+  var search = (document.getElementById('comp-search') || {}).value || '';
+  var statusFilter = (document.getElementById('comp-status-filter') || {}).value || 'all';
+  var gradeFilter = (document.getElementById('comp-grade-filter') || {}).value || '';
+
+  var filtered = compensationRecords.filter(function(r) {
+    if (search && (r.studentName || '').indexOf(search) < 0 && String(r.studentId || '').indexOf(search) < 0) return false;
+    if (statusFilter === 'pending' && r.compensated) return false;
+    if (statusFilter === 'compensated' && !r.compensated) return false;
+    if (gradeFilter && r.grade !== gradeFilter) return false;
+    return true;
+  });
+
+  var countEl = document.getElementById('comp-results-count');
+  if (countEl) countEl.textContent = 'عرض ' + filtered.length + ' من ' + compensationRecords.length;
+
+  renderCompensationTable_(filtered);
+}
+
+function renderCompensationTable_(records) {
+  var container = document.getElementById('comp-container');
+  if (!container) return;
+
+  if (records.length === 0) {
+    container.innerHTML = '<div class="text-center py-16"><span class="material-symbols-outlined text-gray-300 text-6xl mb-3">inventory_2</span><p class="text-gray-400 font-bold">لا توجد مخالفات مؤهلة للتعويض</p></div>';
+    return;
+  }
+
+  var html = '<div class="overflow-x-auto"><table class="w-full bg-white rounded-xl shadow-sm border border-gray-100 text-sm">';
+  html += '<thead><tr class="bg-gray-50 border-b border-gray-200">';
+  html += '<th class="px-3 py-2.5 text-right font-bold text-gray-600">#</th>';
+  html += '<th class="px-3 py-2.5 text-right font-bold text-gray-600">الطالب</th>';
+  html += '<th class="px-3 py-2.5 text-right font-bold text-gray-600">الصف</th>';
+  html += '<th class="px-3 py-2.5 text-right font-bold text-gray-600">المخالفة</th>';
+  html += '<th class="px-3 py-2.5 text-center font-bold text-gray-600">الدرجة</th>';
+  html += '<th class="px-3 py-2.5 text-center font-bold text-gray-600">النقاط</th>';
+  html += '<th class="px-3 py-2.5 text-right font-bold text-gray-600">التاريخ</th>';
+  html += '<th class="px-3 py-2.5 text-center font-bold text-gray-600">الحالة</th>';
+  html += '<th class="px-3 py-2.5 text-center font-bold text-gray-600">إجراء</th>';
+  html += '</tr></thead><tbody>';
+
+  for (var i = 0; i < records.length; i++) {
+    var r = records[i];
+    var rowClass = i % 2 === 0 ? '' : 'bg-gray-50/50';
+    var statusBadge = r.compensated
+      ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700"><span class="material-symbols-outlined text-[14px]">check_circle</span>تم التعويض</span>'
+      : '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-orange-100 text-orange-700"><span class="material-symbols-outlined text-[14px]">pending</span>بانتظار</span>';
+
+    var actionBtn = r.compensated
+      ? '<span class="text-gray-300 text-xs">--</span>'
+      : '<button onclick="openCompensationModal(' + i + ')" class="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-bold hover:bg-orange-600 transition-colors flex items-center gap-1 mx-auto"><span class="material-symbols-outlined text-[14px]">autorenew</span>تعويض</button>';
+
+    var degreeColors = { '1': 'bg-blue-100 text-blue-700', '2': 'bg-yellow-100 text-yellow-700', '3': 'bg-orange-100 text-orange-700', '4': 'bg-red-100 text-red-700', '5': 'bg-red-200 text-red-800' };
+    var degreeClass = degreeColors[String(r.degree)] || 'bg-gray-100 text-gray-700';
+
+    html += '<tr class="border-b border-gray-100 hover:bg-orange-50/30 ' + rowClass + '">';
+    html += '<td class="px-3 py-2 text-gray-400">' + (i + 1) + '</td>';
+    html += '<td class="px-3 py-2"><div class="font-bold text-gray-800">' + escapeHtml(r.studentName) + '</div><div class="text-[10px] text-gray-400">' + escapeHtml(r.studentId) + '</div></td>';
+    html += '<td class="px-3 py-2 text-gray-600">' + escapeHtml(r.grade) + ' / ' + escapeHtml(r.section) + '</td>';
+    html += '<td class="px-3 py-2"><div class="text-gray-800 text-xs">' + escapeHtml(r.violationText) + '</div><div class="text-[10px] text-gray-400">' + escapeHtml(r.violationType) + '</div></td>';
+    html += '<td class="px-3 py-2 text-center"><span class="px-2 py-0.5 rounded-full text-[11px] font-bold ' + degreeClass + '">' + escapeHtml(r.degree) + '</span></td>';
+    html += '<td class="px-3 py-2 text-center font-bold text-red-600">-' + escapeHtml(r.points) + '</td>';
+    html += '<td class="px-3 py-2 text-xs text-gray-500">' + escapeHtml(r.dateHijri) + '</td>';
+    html += '<td class="px-3 py-2 text-center">' + statusBadge + '</td>';
+    html += '<td class="px-3 py-2 text-center">' + actionBtn + '</td>';
+    html += '</tr>';
+  }
+
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+}
+
+// =================================================================
+// 4. فلتر الصفوف
+// =================================================================
+function populateCompGradeFilter_() {
+  var select = document.getElementById('comp-grade-filter');
+  if (!select) return;
+
+  var grades = {};
+  compensationRecords.forEach(function(r) { if (r.grade) grades[r.grade] = true; });
+
+  var options = '<option value="">كل الصفوف</option>';
+  Object.keys(grades).sort().forEach(function(g) {
+    options += '<option value="' + escapeHtml(g) + '">' + escapeHtml(g) + '</option>';
+  });
+  select.innerHTML = options;
+}
+
+// =================================================================
+// 5. Modal التعويض
+// =================================================================
+var compensationSelectedRecord = null; // ★ حفظ السجل مباشرة بدلاً من index (لتفادي stale index)
+
+function openCompensationModal(idx) {
+  var filtered = getFilteredCompensationRecords_();
+  var record = filtered[idx];
+  if (!record) return;
+
+  compensationSelectedRecord = record; // ★ حفظ السجل نفسه
+
+  // بيانات الطالب
+  var studentInfo = document.getElementById('comp-modal-student');
+  if (studentInfo) studentInfo.textContent = record.studentName + ' — ' + record.grade + ' / ' + record.section;
+
+  // بيانات المخالفة
+  var violInfo = document.getElementById('comp-modal-violation-info');
+  if (violInfo) {
+    violInfo.innerHTML =
+      '<div class="flex justify-between items-center mb-1"><span class="font-bold text-red-700">المخالفة:</span><span class="bg-red-200 text-red-800 px-2 py-0.5 rounded-full text-[11px] font-bold">درجة ' + escapeHtml(record.degree) + '</span></div>' +
+      '<div class="text-gray-700 mb-1">' + escapeHtml(record.violationText) + '</div>' +
+      '<div class="flex gap-4 text-[11px] text-gray-500"><span>النقاط المخصومة: <b class="text-red-600">-' + escapeHtml(record.points) + '</b></span><span>التاريخ: ' + escapeHtml(record.dateHijri) + '</span><span>التكرار: ' + escapeHtml(record.repeatLevel) + '</span></div>';
+  }
+
+  // ملء القائمة المنسدلة
+  var select = document.getElementById('comp-behavior-select');
+  if (select) {
+    var opts = '<option value="">-- اختر السلوك التعويضي --</option>';
+    for (var i = 0; i < COMPENSATION_BEHAVIORS.length; i++) {
+      opts += '<option value="' + i + '">' + escapeHtml(COMPENSATION_BEHAVIORS[i].text) + '</option>';
+    }
+    select.innerHTML = opts;
+  }
+
+  var modal = document.getElementById('comp-modal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeCompensationModal() {
+  var modal = document.getElementById('comp-modal');
+  if (modal) modal.classList.add('hidden');
+  compensationSelectedRecord = null;
+  _compensationSaving = false; // ★ إعادة تعيين العلم عند إغلاق النافذة
+}
+
+function getFilteredCompensationRecords_() {
+  var search = (document.getElementById('comp-search') || {}).value || '';
+  var statusFilter = (document.getElementById('comp-status-filter') || {}).value || 'all';
+  var gradeFilter = (document.getElementById('comp-grade-filter') || {}).value || '';
+
+  return compensationRecords.filter(function(r) {
+    if (search && (r.studentName || '').indexOf(search) < 0 && String(r.studentId || '').indexOf(search) < 0) return false;
+    if (statusFilter === 'pending' && r.compensated) return false;
+    if (statusFilter === 'compensated' && !r.compensated) return false;
+    if (gradeFilter && r.grade !== gradeFilter) return false;
+    return true;
+  });
+}
+
+// =================================================================
+// 6. حفظ التعويض
+// =================================================================
+var _compensationSaving = false; // ★ حماية من الحفظ المزدوج
+
+function confirmCompensation() {
+  if (_compensationSaving) return; // ★ منع النقر المزدوج
+
+  var select = document.getElementById('comp-behavior-select');
+  var behaviorIdx = select ? select.value : '';
+  if (behaviorIdx === '') {
+    showToast('يرجى اختيار السلوك التعويضي', 'warning');
+    return;
+  }
+
+  var behavior = COMPENSATION_BEHAVIORS[parseInt(behaviorIdx)];
+  var record = compensationSelectedRecord; // ★ استخدام السجل المحفوظ مباشرة
+  if (!record || !behavior) return;
+
+  if (typeof google === 'undefined' || !google.script || !google.script.run) {
+    showToast('غير متصل بالخادم', 'error');
+    return;
+  }
+
+  _compensationSaving = true;
+
+  // تعطيل الزر
+  var btn = document.querySelector('#comp-modal button[onclick="confirmCompensation()"]');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span> جاري الحفظ...';
+  }
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      _compensationSaving = false;
+      if (result && result.success) {
+        closeCompensationModal();
+        showToast('تم حفظ التعويض — ' + result.studentName + ': ' + behavior.text, 'success');
+        loadCompensationRecords(); // إعادة تحميل
+      } else {
+        showToast('خطأ: ' + (result ? result.error : 'غير معروف'), 'error');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">check_circle</span> حفظ التعويض';
+        }
+      }
+    })
+    .withFailureHandler(function(err) {
+      _compensationSaving = false;
+      showToast('خطأ: ' + err.message, 'error');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">check_circle</span> حفظ التعويض';
+      }
+    })
+    .saveCompensationRecord({
+      studentId: record.studentId,
+      stage: currentStage,
+      behaviorText: behavior.text,
+      noorValue: behavior.noorValue,
+      violationRowIndex: record.rowIndex,         // ★ ربط التعويض بالمخالفة المحددة
+      violationId: record.violationId,             // ★ رقم المخالفة للتتبع
+      violationText: record.violationText          // ★ نص المخالفة للتوثيق
+    });
+}
+
+</script>
