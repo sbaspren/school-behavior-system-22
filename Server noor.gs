@@ -106,8 +106,23 @@ function getNoorViolationRecords_(ss, stage) {
     return true;
   }).map(function(r) {
     r._type = 'violation';
-    // استبعاد مخالفة 101 (التأخر الصباحي) لأنها تُعرض في تبويب التأخر
-    // ملاحظة: لا نستبعدها هنا لأن المخالفات المسجلة يدوياً كمخالفة 101 يجب أن تظهر
+    r._noorMode = NOOR_DROPDOWN_MAP.modes.violation;
+
+    // ربط المخالفة بنور عبر رقم المخالفة
+    var violId = parseInt(r['رقم المخالفة'] || r['رقم_المخالفة'] || '0');
+    var mapping = NOOR_DROPDOWN_MAP.violations[violId];
+    if (mapping) {
+      r._noorValue = mapping.noorValue;
+      r._noorText = mapping.noorText;
+    } else {
+      // بحث بالنص كخطة بديلة
+      var violText = String(r['نص المخالفة'] || r['نص_المخالفة'] || '').trim();
+      var textMapping = findNoorViolationByText_(violText);
+      if (textMapping) {
+        r._noorValue = textMapping.noorValue;
+        r._noorText = textMapping.noorText;
+      }
+    }
     return r;
   });
 }
@@ -137,6 +152,8 @@ function getNoorTardinessRecords_(ss, stage) {
   }).map(function(r) {
     r._type = 'tardiness';
     r._noorValue = '1601174,الدرجة الأولى'; // التأخر الصباحي دائماً
+    r._noorMode = NOOR_DROPDOWN_MAP.modes.tardiness;
+    r._noorText = 'التأخر الصباحي.';
     return r;
   });
 }
@@ -164,14 +181,19 @@ function getNoorPositiveRecords_(ss, stage) {
     }
     return true;
   }).map(function(r) {
-    var behaviorName = String(r['السلوك_المتمايز'] || r['السلوك المتمايز'] || '');
+    var behaviorName = String(r['السلوك_المتمايز'] || r['السلوك المتمايز'] || '').trim();
     // التمييز بين التعويضية والمتمايز
-    // التعويضية: السلوك يحتوي على كلمة "تعويض" أو "تعويضي" أو الدرجة تحتوي على "تعويض"
     var degree = String(r['الدرجة'] || '');
+    r._noorMode = NOOR_DROPDOWN_MAP.modes.compensation; // نفس الوضع للنوعين
+
     if (behaviorName.indexOf('تعويض') >= 0 || degree.indexOf('تعويض') >= 0) {
       r._type = 'compensation';
+      var mapping = findNoorMapping_(NOOR_DROPDOWN_MAP.compensation, behaviorName);
+      if (mapping) { r._noorValue = mapping.noorValue; r._noorText = mapping.noorText; }
     } else {
       r._type = 'excellent';
+      var mapping = findNoorMapping_(NOOR_DROPDOWN_MAP.excellent, behaviorName);
+      if (mapping) { r._noorValue = mapping.noorValue; r._noorText = mapping.noorText; }
     }
     return r;
   });
@@ -199,6 +221,14 @@ function getNoorAbsenceRecords_(ss, stage) {
     return true;
   }).map(function(r) {
     r._type = 'absence';
+    r._noorMode = NOOR_DROPDOWN_MAP.modes.absence;
+
+    var absType = String(r['نوع_الغياب'] || r['نوع الغياب'] || '').trim();
+    var mapping = NOOR_DROPDOWN_MAP.absence[absType];
+    if (mapping) {
+      r._noorValue = mapping.noorValue;
+      r._noorText = mapping.noorText;
+    }
     return r;
   });
 }
@@ -469,4 +499,22 @@ function countDocumentedToday_(stage) {
   } catch (e) {
     return 0;
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// بحث عن مخالفة في خريطة نور بالنص (خطة بديلة عندما يكون رقم المخالفة غير متوفر)
+// ═══════════════════════════════════════════════════════════════════════════
+function findNoorViolationByText_(text) {
+  if (!text) return null;
+  var norm = normalizeArabicForMatch_(text);
+  var vMap = NOOR_DROPDOWN_MAP.violations;
+  for (var id in vMap) {
+    if (vMap.hasOwnProperty(id)) {
+      var noorNorm = normalizeArabicForMatch_(vMap[id].noorText);
+      if (noorNorm.indexOf(norm) >= 0 || norm.indexOf(noorNorm) >= 0) {
+        return vMap[id];
+      }
+    }
+  }
+  return null;
 }

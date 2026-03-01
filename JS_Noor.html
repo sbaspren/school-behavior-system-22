@@ -14,10 +14,10 @@ var GRADE_MAPS = {
 };
 
 var ABSENCE_TYPES = [
-  { label: 'غياب بدون عذر', value: '48,' },
-  { label: 'غياب بعذر', value: '141,' },
-  { label: 'غياب منصة بعذر', value: '800667,' },
-  { label: 'غياب منصة بدون عذر', value: '1201153,' }
+  { label: 'الغياب بدون عذر مقبول', value: '48,' },
+  { label: 'الغياب بعذر', value: '141,' },
+  { label: 'الغياب بعذر مقبول عبر منصة مدرستي', value: '800667,' },
+  { label: 'الغياب بدون عذر مقبول عبر منصة مدرستي', value: '1201153,' }
 ];
 
 function diagInit() {
@@ -252,7 +252,9 @@ function dSendToNoor() {
       'الفصل': s.section,
       'نوع_الغياب': s.absLabel,
       '_noorValue': s.absValue,
+      '_noorText': s.absLabel,
       '_noorMode': { mowadaba: '2', deductType: null },
+      '_type': 'absence',
       '_rowIndex': i
     };
   });
