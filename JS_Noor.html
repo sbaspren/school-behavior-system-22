@@ -1,285 +1,1017 @@
 <script>
 // ═══════════════════════════════════════════════════════════════
-// واجهة اختبار v7 — إدخال يدوي لطالب غائب
+// JS_Noor.html — واجهة التوثيق في نور (v4 — أصلي v3 + جسر v7)
+// التغيير الوحيد: التواصل عبر الجسر (inbox/outbox) بدل window.open
 // ═══════════════════════════════════════════════════════════════
 
-var _inbox = null, _outbox = null;
-var _noorConnected = false, _noorUser = '', _noorRole = '', _noorStages = [];
-var _manualStudents = [];
+// ═══════════════════════════════════════════════════════════════
+// ★ NOOR_MAPPING — جدول الربط الثابت (Static Lookup Table)
+// يربط قيم النظام → قيم dropdown في نور الفعلي
+// المصدر: ملفات JSON المستخرجة من صفحة نور الفعلية
+// ═══════════════════════════════════════════════════════════════
+var NOOR_MAPPING = {
+  // ═══ المخالفات السلوكية ═══
+  // المفتاح = رقم المخالفة في النظام (من Server_Data.gs)
+  // القيمة  = value لـ dropdown في نور (ctl00_PlaceHolderMain_gvClassStudentsAttendance_ctlXX_ddlDegreeDeductAmount)
+  violations: {
+    // الدرجة الأولى (8 مخالفات)
+    101: '1601174,الدرجة الأولى',   // التأخر الصباحي
+    102: '1201074,الدرجة الأولى',   // عدم حضور الاصطفاف الصباحي
+    103: '1201099,الدرجة الأولى',   // التأخر عن الاصطفاف أو العبث أثناءه
+    104: '1601175,الدرجة الأولى',   // التأخر في الدخول إلى الحصص
+    105: '1201100,الدرجة الأولى',   // إعاقة سير الحصص الدراسية
+    106: '1201075,الدرجة الأولى',   // النوم داخل الفصل
+    107: '1201101,الدرجة الأولى',   // تكرار الخروج والدخول من البوابة
+    108: '1201077,الدرجة الأولى',   // التجمهر أمام بوابة المدرسة
+    // الدرجة الثانية (4 مخالفات)
+    201: '1201081,الدرجة الثانية',  // عدم حضور الحصة أو الهروب منها
+    202: '1601190,الدرجة الثانية',  // الدخول أو الخروج من الفصل دون استئذان
+    203: '1601177,الدرجة الثانية',  // دخول فصل آخر دون استئذان
+    204: '1201102,الدرجة الثانية',  // إثارة الفوضى
+    // الدرجة الثالثة (11 مخالفة)
+    301: '1601186,الدرجة الثالثة',  // عدم التقيد بالزي المدرسي
+    302: '1201106,الدرجة الثالثة',  // الشجار أو الاشتراك في مضاربة
+    303: '1201105,الدرجة الثالثة',  // الإشارة بحركات مخلة بالأدب تجاه الطلبة
+    304: '1201080,الدرجة الثالثة',  // التلفظ بكلمات نابية
+    305: '1201079,الدرجة الثالثة',  // إلحاق الضرر المتعمد بممتلكات الطلبة
+    306: '1201082,الدرجة الثالثة',  // العبث بتجهيزات المدرسة أو مبانيها
+    307: '1201110,الدرجة الثالثة',  // إحضار المواد الخطرة دون استخدامها
+    308: '1201097,الدرجة الثالثة',  // حيازة السجائر بأنواعها
+    309: '1201109,الدرجة الثالثة',  // حيازة المواد الإعلامية الممنوعة
+    310: '1201089,الدرجة الثالثة',  // التوقيع عن ولي الأمر
+    311: '1201108,الدرجة الثالثة',  // امتهان الكتب الدراسية
+    // الدرجة الرابعة (8 مخالفات)
+    401: '1201113,الدرجة الرابعة',  // تعمد إصابة أحد الطلبة
+    402: '1601188,الدرجة الرابعة',  // سرقة شيء من ممتلكات الطلبة أو المدرسة
+    403: '1201132,الدرجة الرابعة',  // التصوير أو التسجيل الصوتي
+    404: '1201082,الدرجة الثالثة',  // إلحاق ضرر جسيم بتجهيزات المدرسة
+    405: '1201114,الدرجة الرابعة',  // التدخين بأنواعه داخل المدرسة
+    406: '1201092,الدرجة الرابعة',  // الهروب من المدرسة
+    407: '1601184,الدرجة الرابعة',  // إحضار أو استخدام المواد الخطرة
+    408: '1201115,الدرجة الرابعة',  // عرض أو توزيع المواد الإعلامية الممنوعة
+    // الدرجة الخامسة (13 مخالفة)
+    501: '1201121,الدرجة الخامسة',  // الإساءة أو الاستهزاء بشعائر الإسلام
+    502: '1201122,الدرجة الخامسة',  // الإساءة للدولة أو رموزها
+    503: '1201121,الدرجة الخامسة',  // بث أفكار متطرفة أو إلحادية
+    504: '1601181,الدرجة الخامسة',  // الإساءة للأديان السماوية أو إثارة العنصرية
+    505: '1201131,الدرجة الرابعة',  // التزوير أو استخدام الأختام الرسمية
+    506: '1201095,الدرجة الخامسة',  // التحرش الجنسي
+    507: '1601179,الدرجة الخامسة',  // مظاهر أو شعارات الشذوذ الجنسي
+    508: '1201096,الدرجة الخامسة',  // إشعال النار داخل المدرسة
+    509: '1201125,الدرجة الخامسة',  // حيازة أو استخدام الأسلحة
+    510: '1201127,الدرجة الخامسة',  // حيازة أو تعاطي أو ترويج المخدرات
+    511: '1201126,الدرجة الخامسة',  // الجرائم المعلوماتية بكافة أنواعها
+    512: '1201128,الدرجة الخامسة',  // ابتزاز الطلبة
+    513: '1601185,الدرجة الخامسة',  // التنمر بجميع أنواعه
+    // المخالفات الرقمية (601-613)
+    601: '1601175,الدرجة الأولى',   // التأخر في حضور الحصة الافتراضية
+    602: '1201101,الدرجة الأولى',   // الخروج المتكرر من الحصص الافتراضية
+    603: '1201100,الدرجة الأولى',   // إعاقة سير الحصص الافتراضية
+    604: '1201081,الدرجة الثانية',  // الهروب من الحصة الافتراضية
+    605: '1201102,الدرجة الثانية',  // إرسال متعمد لمواد غير مرتبطة
+    606: '1201105,الدرجة الثالثة',  // استخدام صور منافية للقيم
+    607: '1201080,الدرجة الثالثة',  // التلفظ بكلمات نابية (رقمي)
+    608: '1201109,الدرجة الثالثة',  // تصوير الدروس الافتراضية ونشرها
+    609: '1201089,الدرجة الثالثة',  // إساءة استخدام معلومات الدخول
+    610: '1201115,الدرجة الرابعة',  // إرسال صور مخلة بالآداب
+    611: '1201132,الدرجة الرابعة',  // التصوير/التسجيل الصوتي (رقمي)
+    612: '1601185,الدرجة الخامسة',  // التنمر الإلكتروني
+    613: '1201095,الدرجة الخامسة',  // التحرش الجنسي الإلكتروني
+    // مخالفات رقمية إضافية (614-620) — الدرجة الخامسة
+    614: '1201121,الدرجة الخامسة',  // الإساءة لشعائر الإسلام (إلكتروني)
+    615: '1201122,الدرجة الخامسة',  // الإساءة للدولة أو رموزها (إلكتروني)
+    616: '1601180,الدرجة الخامسة',  // بث أفكار متطرفة (إلكتروني)
+    617: '1201128,الدرجة الخامسة',  // ابتزاز الطلبة (إلكتروني)
+    618: '1601179,الدرجة الخامسة',  // مظاهر الشذوذ الجنسي (إلكتروني)
+    619: '1201127,الدرجة الخامسة',  // الترويج للمخدرات (إلكتروني)
+    620: '1201126,الدرجة الخامسة',  // الجرائم المعلوماتية (إلكتروني)
+    // مخالفات الهيئة التعليمية (701-710)
+    701: '1201116,الدرجة الرابعة',  // تهديد المعلمين أو الإداريين
+    702: '1201129,الدرجة الرابعة',  // التلفظ بألفاظ غير لائقة تجاه المعلمين
+    703: '1201135,الدرجة الخامسة',  // الاعتداء بالضرب على المعلمين
+    704: '1201136,الدرجة الخامسة',  // ابتزاز المعلمين أو الإداريين
+    705: '1601183,الدرجة الخامسة',  // الجرائم المعلوماتية تجاه المعلمين
+    706: '1601214,الدرجة الرابعة',  // السخرية من المعلمين أو الإداريين
+    707: '1201131,الدرجة الرابعة',  // التوقيع عن أحد منسوبي المدرسة
+    708: '1201132,الدرجة الرابعة',  // تصوير المعلمين أو التسجيل الصوتي
+    709: '1201133,الدرجة الخامسة',  // إلحاق الضرر بممتلكات المعلمين أو سرقتها
+    710: '1201134,الدرجة الخامسة'   // الإشارة بحركات مخلة تجاه المعلمين
+  },
 
-var GRADE_MAPS = {
-  'ابتدائي': { 'الأول': '1,1', 'الثاني': '2,1', 'الثالث': '3,1', 'الرابع': '4,1', 'الخامس': '5,1', 'السادس': '6,1' },
-  'متوسط':   { 'الأول': '7,1', 'الثاني': '8,1', 'الثالث': '9,1' },
-  'ثانوي':    { 'الأول': '10,1', 'الثاني': '11,1', 'الثالث': '12,1' }
+  // ═══ السلوك الإيجابي (متمايز + تعويضي) ═══
+  positive: {
+    'متميز': {
+      'انضباط الطالب وعدم غيابه بدون عذر خلال الفصل الدراسي': '1601248,',
+      'التعاون مع الزملاء والمعلمين وإدارة المدرسة': '1601240,',
+      'المشاركة في الإذاعة': '1601241,',
+      'المشاركة في الخدمة المجتمعية خارج المدرسة': '1601242,',
+      'المشاركة في أنشطة المهارات الرقمية': '1601243,',
+      'المشاركة في أنشطة مهارات الاتصال': '1601244,',
+      'المشاركة في أنشطة مهارات القيادة والمسؤولية': '1601245,',
+      'المشاركة في أنشطة مهارة إدارة الوقت': '1601246,',
+      'المشاركة في حملة توعوية': '1601247,',
+      'تقديم فعالية حوارية': '1601249,',
+      'تقديم مقترح لصالح المجتمع المدرسي': '1601250,',
+      'عرض تجارب شخصية ناجحة': '1601251,',
+      'كتابة رسالة شكر': '1601252,',
+      'الالتحاق ببرنامج أو دورة': '1601239,',
+      'أخرى': '1601233,'
+    },
+    'تعويض': {
+      'انضباط الطالب وعدم غيابه بدون عذر خلال الفصل الدراسي': '189,',
+      'انضباط الطالب وعدم غيابه': '189,',
+      'التعاون مع الزملاء والمعلمين وإدارة المدرسة': '1201017,',
+      'المشاركة في الخدمة المجتمعية خارج المدرسة': '1601194,',
+      'تقديم فعالية حوارية': '1601195,',
+      'المشاركة في حملة توعوية': '1601196,',
+      'عرض تجارب شخصية ناجحة': '1601197,',
+      'الالتحاق ببرنامج أو دورة': '1601198,',
+      'المشاركة في أنشطة مهارات الاتصال': '1601199,',
+      'المشاركة في أنشطة مهارات القيادة والمسؤولية': '1601200,',
+      'المشاركة في أنشطة المهارات الرقمية': '1601201,',
+      'المشاركة في أنشطة مهارة إدارة الوقت': '1601202,',
+      'كتابة رسالة شكر': '1601203,',
+      'المشاركة في الإذاعة': '1601204,',
+      'تقديم مقترح لصالح المجتمع المدرسي': '1601205,',
+      'أخرى': '1601207,'
+    }
+  },
+
+  // ═══ الغياب اليومي ═══
+  absence: {
+    'غياب بعذر':                        '141,',
+    'غياب بدون عذر':                    '48,',
+    'الغياب بعذر':                      '141,',
+    'الغياب بدون عذر مقبول':            '48,',
+    'بعذر':                             '141,',
+    'بدون عذر':                         '48,',
+    'معذور':                            '141,',
+    'مرفوض':                            '48,',
+    'غياب بعذر عبر منصة مدرستي':        '800667,',
+    'غياب بدون عذر عبر منصة مدرستي':    '1201153,',
+    'الغياب بعذر مقبول عبر منصة مدرستي':'800667,',
+    'الغياب بدون عذر مقبول عبر منصة مدرستي':'1201153,'
+  },
+
+  // ═══ إعدادات فلاتر نور ═══
+  noorFilters: {
+    mowadaba:   { behavior: '1', attendance: '2' },
+    deductType: { violation: '1', positive: '2' },
+    absenceType:{ fullDay: '1', period: '2' }
+  },
+
+  // ═══ أكواد الصفوف في نور ═══
+  grades: {
+    'ابتدائي': { 'الأول': '1,1', 'الثاني': '2,1', 'الثالث': '3,1', 'الرابع': '4,1', 'الخامس': '5,1', 'السادس': '6,1' },
+    'متوسط':   { 'الأول': '7,1', 'الثاني': '8,1', 'الثالث': '9,1' },
+    'ثانوي':    { 'الأول': '10,1', 'الثاني': '11,1', 'الثالث': '12,1' }
+  },
+
+  // ═══ تجاوزات المخالفات للمرحلة الابتدائية ═══
+  violations_ابتدائي: {
+    105: null,
+    301: '1601186,الدرجة الأولى', 302: '1201106,الدرجة الثانية',
+    303: '1201105,الدرجة الثانية', 304: '1201080,الدرجة الثانية',
+    305: '1201079,الدرجة الثانية', 306: '1201082,الدرجة الثانية',
+    307: null, 308: '1201097,الدرجة الرابعة',
+    309: '1601189,الدرجة الرابعة', 311: '1201108,الدرجة الثانية',
+    401: '1601213,الدرجة الثالثة', 402: '1601188,الدرجة الثالثة',
+    404: '1201084,الدرجة الثالثة', 406: '1201092,الدرجة الثالثة',
+    407: '1601184,الدرجة الثالثة', 408: '1601189,الدرجة الرابعة',
+    501: '1201121,الدرجة الرابعة', 502: '1201122,الدرجة الرابعة',
+    503: '1201121,الدرجة الرابعة', 504: null,
+    506: '1201095,الدرجة الرابعة', 507: '1601179,الدرجة الرابعة',
+    508: '1201096,الدرجة الرابعة', 509: '1601178,الدرجة الرابعة',
+    510: null, 511: '1201126,الدرجة الرابعة', 512: null,
+    513: '1601185,الدرجة الرابعة',
+    109: '1601176,الدرجة الأولى',
+    606: '1201105,الدرجة الثانية', 607: '1201080,الدرجة الثانية',
+    608: null, 610: '1201115,الدرجة الثالثة',
+    611: '1201132,الدرجة الثالثة', 612: '1601185,الدرجة الرابعة',
+    613: '1201095,الدرجة الرابعة', 614: '1201121,الدرجة الرابعة',
+    615: '1201122,الدرجة الرابعة', 616: null, 617: null,
+    618: '1601179,الدرجة الرابعة', 619: null,
+    620: '1201126,الدرجة الرابعة'
+  }
 };
 
-var ABSENCE_TYPES = [
-  { label: 'الغياب بدون عذر مقبول', value: '48,' },
-  { label: 'الغياب بعذر', value: '141,' },
-  { label: 'الغياب بعذر مقبول عبر منصة مدرستي', value: '800667,' },
-  { label: 'الغياب بدون عذر مقبول عبر منصة مدرستي', value: '1201153,' }
+// ═══ خريطة IDs في نور ═══
+var NOOR_IDS = {
+  system:    'ctl00_PlaceHolderMain_ddlSystemStyudy',
+  grade:     'ctl00_PlaceHolderMain_oDistributionSearch_ddlClass',
+  specialty: 'ctl00_PlaceHolderMain_oDistributionSearch_ddlSpecialty',
+  section:   'ctl00_PlaceHolderMain_oDistributionSearch_ddlSection',
+  mowadaba:  'ctl00_PlaceHolderMain_ddlMowadaba',
+  deductType:'ctl00_PlaceHolderMain_ddlDeductType',
+  students:  'ctl00_PlaceHolderMain_ddlStudents',
+  violation: 'ctl00_PlaceHolderMain_ddlViolation',
+  btnSearch: 'ctl00_PlaceHolderMain_ibtnSearch',
+  btnSave:   'ctl00_PlaceHolderMain_ibtnSave',
+  grid:      'ctl00_PlaceHolderMain_gvClassStudentsAttendance'
+};
+
+// ═══ حالة الاتصال ═══
+var NOOR_STATE = {
+  connected: false,
+  extensionReady: false,
+  // ★ v4: حذف noorWindow — التواصل عبر الجسر فقط
+  userName: '',
+  currentOp: null,
+  pendingData: null,
+  working: false,
+  progress: { done: 0, total: 0 }
+};
+
+// ═══ تعريفات التبويبات الخمسة ═══
+var NOOR_TABS = {
+  violations:   { id: 'violations',   icon: 'gavel',       label: 'مخالفات',       color: '#ef4444', type: 'violations',   mow: '1', deduct: '1', desc: 'المخالفات السلوكية المعلقة للتوثيق في نور' },
+  tardiness:    { id: 'tardiness',    icon: 'schedule',    label: 'تأخر',          color: '#f59e0b', type: 'tardiness',    mow: '1', deduct: '1', desc: 'سجلات التأخر الصباحي — تُدخل كمخالفة الدرجة الأولى' },
+  compensation: { id: 'compensation', icon: 'autorenew',   label: 'تعويضية',       color: '#3b82f6', type: 'compensation', mow: '1', deduct: '2', desc: 'درجات التعويض — فرص تعويض للطلاب المخصوم منهم' },
+  excellent:    { id: 'excellent',    icon: 'stars',       label: 'سلوك متمايز',   color: '#22c55e', type: 'excellent',    mow: '1', deduct: '2', desc: 'السلوك المتمايز للطلاب المتميزين' },
+  absence:      { id: 'absence',     icon: 'event_busy',  label: 'غياب يومي',     color: '#f97316', type: 'absence',      mow: '2', deduct: null, desc: 'سجلات الغياب اليومي — يُدخل في نفس اليوم فقط' }
+};
+var NOOR_TAB_ORDER = ['violations', 'tardiness', 'compensation', 'excellent', 'absence'];
+
+// ═══ خيارات القائمة المنسدلة لنوع الغياب ═══
+var ABSENCE_TYPE_OPTIONS = [
+  { label: 'غياب بعذر',         value: '141,' },
+  { label: 'غياب بدون عذر',     value: '48,' },
+  { label: 'غياب منصة بعذر',    value: '800667,' },
+  { label: 'غياب منصة بدون عذر', value: '1201153,' }
 ];
 
-function diagInit() {
-  var existing = document.getElementById('diag-overlay');
-  if (existing) existing.remove();
 
-  // تحديد المرحلة الافتراضية
-  var defStage = typeof currentStage !== 'undefined' ? currentStage : 'ثانوي';
+// ═══════════════════════════════════════════════════════════════
+// ★ v4: الجسر — التواصل مع إضافة كروم (من التجريبي v7)
+// بدل window.open + postMessage
+// ═══════════════════════════════════════════════════════════════
+var _noorInbox = null, _noorOutbox = null;
 
-  var stageOpts = ['ابتدائي','متوسط','ثانوي'].map(function(s) {
-    return '<option value="' + s + '"' + (s === defStage ? ' selected' : '') + '>' + s + '</option>';
-  }).join('');
+/**
+ * البحث عن عناصر الجسر في الصفحة
+ * الإضافة تنشئ div#noor-bridge-inbox و div#noor-bridge-outbox
+ */
+function _noorFindBridge() {
+  _noorInbox = document.getElementById('noor-bridge-inbox');
+  _noorOutbox = document.getElementById('noor-bridge-outbox');
 
-  var absOpts = ABSENCE_TYPES.map(function(a, i) {
-    return '<option value="' + a.value + '"' + (i === 0 ? ' selected' : '') + '>' + a.label + '</option>';
-  }).join('');
+  // محاولة البحث في parent (لو التطبيق في iframe)
+  if (!_noorInbox) { try { _noorInbox = window.parent.document.getElementById('noor-bridge-inbox'); } catch(e) {} }
+  if (!_noorOutbox) { try { _noorOutbox = window.parent.document.getElementById('noor-bridge-outbox'); } catch(e) {} }
 
-  var overlay = document.createElement('div');
-  overlay.id = 'diag-overlay';
-  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:999999;background:#fff;overflow-y:auto;direction:rtl;font-family:Segoe UI,Tahoma,sans-serif;padding:16px';
-  overlay.innerHTML = ''
-    + '<h2 style="text-align:center;color:#00695c;margin-bottom:12px">🔧 اختبار الغياب v7 — إدخال يدوي</h2>'
-    + '<div style="max-width:800px;margin:0 auto">'
-
-    // حالة
-    + '<div id="d-status" style="background:#f0f0f0;border-radius:10px;padding:10px;margin-bottom:8px;font-size:13px"></div>'
-
-    // Ping
-    + '<div style="text-align:center;margin-bottom:10px">'
-    + '<button onclick="dPing()" style="padding:8px 20px;border:none;border-radius:8px;background:#00695c;color:#fff;font-size:13px;cursor:pointer;font-weight:600">١. Ping (فحص الاتصال)</button>'
-    + '</div>'
-
-    // إدخال الطالب
-    + '<div style="background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:14px;margin-bottom:10px">'
-    + '<div style="font-weight:700;margin-bottom:8px;font-size:14px;color:#166534">📝 إدخال طالب غائب يدوياً</div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
-    + '  <div><label style="font-size:11px;color:#555;display:block;margin-bottom:2px">المرحلة</label>'
-    + '  <select id="d-stage" style="width:100%;padding:6px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px" onchange="dUpdateGrades()">' + stageOpts + '</select></div>'
-    + '  <div><label style="font-size:11px;color:#555;display:block;margin-bottom:2px">الصف</label>'
-    + '  <select id="d-grade" style="width:100%;padding:6px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px"></select></div>'
-    + '  <div><label style="font-size:11px;color:#555;display:block;margin-bottom:2px">الفصل</label>'
-    + '  <input id="d-section" value="1" style="width:100%;padding:6px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;box-sizing:border-box"></div>'
-    + '  <div><label style="font-size:11px;color:#555;display:block;margin-bottom:2px">نوع الغياب</label>'
-    + '  <select id="d-abstype" style="width:100%;padding:6px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px">' + absOpts + '</select></div>'
-    + '</div>'
-    + '<div style="margin-bottom:8px"><label style="font-size:11px;color:#555;display:block;margin-bottom:2px">اسم الطالب (أو عدة أسماء — كل سطر اسم)</label>'
-    + '<textarea id="d-names" rows="3" placeholder="أحمد محمد العلي&#10;خالد عبدالله السعيد" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical;box-sizing:border-box"></textarea></div>'
-    + '<div style="display:flex;gap:8px;justify-content:center">'
-    + '<button onclick="dAddStudents()" style="padding:8px 16px;border:none;border-radius:8px;background:#7c3aed;color:#fff;font-size:12px;cursor:pointer;font-weight:600">➕ إضافة للقائمة</button>'
-    + '<button onclick="dClearList()" style="padding:8px 16px;border:none;border-radius:8px;background:#dc2626;color:#fff;font-size:12px;cursor:pointer">🗑️ مسح القائمة</button>'
-    + '</div>'
-    + '</div>'
-
-    // قائمة الطلاب المضافين
-    + '<div id="d-list-box" style="background:#f8f9fa;border-radius:10px;padding:10px;margin-bottom:10px;display:none">'
-    + '<div style="font-weight:700;margin-bottom:6px;font-size:13px">📋 الطلاب المضافين:</div>'
-    + '<div id="d-list-body"></div>'
-    + '<div style="text-align:center;margin-top:8px">'
-    + '<button onclick="dSendToNoor()" id="btn-send" style="padding:10px 24px;border:none;border-radius:8px;background:#f97316;color:#fff;font-size:14px;cursor:pointer;font-weight:700">🚀 إرسال لنور</button>'
-    + '</div>'
-    + '</div>'
-
-    // سجل
-    + '<div style="background:#1a1a2e;border-radius:10px;padding:12px">'
-    + '<div style="color:#fff;font-weight:700;margin-bottom:6px;font-size:13px">📜 سجل الأحداث</div>'
-    + '<div id="d-log" style="font-size:11px;font-family:monospace;color:#a8dadc;max-height:350px;overflow-y:auto;line-height:1.5"></div>'
-    + '</div>'
-
-    + '<div style="text-align:center;margin-top:10px"><button onclick="document.getElementById(\'diag-overlay\').remove()" style="padding:8px 20px;border:none;border-radius:8px;background:#c62828;color:#fff;font-size:12px;cursor:pointer">✕ إغلاق</button></div>'
-    + '</div>';
-
-  document.body.appendChild(overlay);
-  findElements();
-  dUpdateGrades();
-  dRefresh();
-}
-
-function dUpdateGrades() {
-  var stage = document.getElementById('d-stage').value;
-  var gradeMap = GRADE_MAPS[stage] || {};
-  var sel = document.getElementById('d-grade');
-  sel.innerHTML = Object.keys(gradeMap).map(function(g) {
-    return '<option value="' + g + '">' + g + ' ' + stage + '</option>';
-  }).join('');
-}
-
-function findElements() {
-  _inbox = document.getElementById('noor-bridge-inbox');
-  _outbox = document.getElementById('noor-bridge-outbox');
-  if (!_inbox) { try { _inbox = window.parent.document.getElementById('noor-bridge-inbox'); } catch(e) {} }
-  if (!_outbox) { try { _outbox = window.parent.document.getElementById('noor-bridge-outbox'); } catch(e) {} }
-
-  if (_outbox && !_outbox._watched) {
-    _outbox._watched = true;
+  // مراقبة الردود من الإضافة عبر MutationObserver
+  if (_noorOutbox && !_noorOutbox._noorWatched) {
+    _noorOutbox._noorWatched = true;
     new MutationObserver(function() {
-      if (!_outbox.textContent) return;
+      if (!_noorOutbox.textContent) return;
       try {
-        var data = JSON.parse(_outbox.textContent);
-        _outbox.textContent = '';
-        handleResponse(data);
+        var data = JSON.parse(_noorOutbox.textContent);
+        _noorOutbox.textContent = '';
+        _noorHandleExtMessage(data);
       } catch(e) {}
-    }).observe(_outbox, { childList: true, characterData: true, subtree: true });
+    }).observe(_noorOutbox, { childList: true, characterData: true, subtree: true });
   }
 }
 
-function handleResponse(data) {
-  dLog('📩 رد: ' + data.action, '#06d6a0');
-  if (data.action === 'connected') {
-    _noorConnected = true; _noorUser = data.userName || ''; _noorRole = data.role || ''; _noorStages = data.stages || [];
-    dLog('    ✅ ' + _noorUser + ' — ' + _noorRole + ' — ' + (_noorStages.join('+') || ''), '#06d6a0');
-    dRefresh();
+/** إرسال رسالة للإضافة عبر الجسر */
+function _noorSendToExt(data) {
+  _noorFindBridge();
+  if (!_noorInbox) return false;
+  _noorInbox.textContent = JSON.stringify(data);
+  return true;
+}
+
+/** فحص اتصال الإضافة */
+function _noorPing() {
+  _noorSendToExt({ source: 'school-system', action: 'ping' });
+}
+
+/**
+ * ★ v4: معالجة موحدة للردود من الإضافة
+ * تستقبل من الجسر (MutationObserver) ومن postMessage (fallback)
+ * بدل noorMessageHandler_ القديمة
+ */
+function _noorHandleExtMessage(data) {
+  if (!data || !data.action) return;
+
+  switch (data.action) {
+    case 'connected':
+      NOOR_STATE.connected = true;
+      NOOR_STATE.extensionReady = true;
+      NOOR_STATE.userName = data.userName || '';
+      if (NOOR_STATE._connectTimer) { clearTimeout(NOOR_STATE._connectTimer); NOOR_STATE._connectTimer = null; }
+      renderNoorPage();
+      showEnhancedToast('success', 'تم الاتصال بنور عبر الإضافة — جاهز للتوثيق');
+      break;
+    case 'progress':
+      NOOR_STATE.progress = { done: data.done, total: data.total, current: data.current };
+      noorUpdateProgress_();
+      break;
+    case 'done':
+      NOOR_STATE.working = false;
+      noorOnComplete_(data.results);
+      break;
+    case 'error':
+      NOOR_STATE.working = false;
+      showEnhancedToast('danger', 'خطأ: ' + (data.message || ''));
+      noorSwitchTab_(NOOR_STATE.currentOp);
+      break;
+    case 'disconnected':
+      NOOR_STATE.connected = false;
+      NOOR_STATE.extensionReady = false;
+      renderNoorPage();
+      break;
   }
-  if (data.action === 'progress') {
-    dLog('    📊 ' + data.done + '/' + data.total + ' — ' + (data.current || '') + ' ' + (data.detail || ''), '#ffd166');
-  }
-  if (data.action === 'done') {
-    var r = data.results || {};
-    dLog('    🎉 اكتمل! نجح: ' + (r.success||0) + ' فشل: ' + (r.failed||0), '#06d6a0');
-    if (r.updates) r.updates.forEach(function(u,i) {
-      dLog('       ' + (u.status==='تم'?'✅':'❌') + ' ' + (u.type||'') + ' — ' + u.status + (u.error?' — '+u.error:''), u.status==='تم'?'#06d6a0':'#ef476f');
-    });
-  }
-  if (data.action === 'error') dLog('    ❌ ' + (data.message||''), '#ef476f');
-  if (data.action === 'disconnected') { _noorConnected = false; dRefresh(); }
 }
 
-function dLog(msg, color) {
-  var el = document.getElementById('d-log');
-  if (!el) return;
-  var t = new Date().toLocaleTimeString('ar-SA');
-  el.innerHTML = '<div style="color:' + (color||'#a8dadc') + '">[' + t + '] ' + msg + '</div>' + el.innerHTML;
-}
-
-function dRefresh() {
-  findElements();
-  var el = document.getElementById('d-status');
-  if (!el) return;
-  el.innerHTML = '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:center">'
-    + '<span>' + ((_inbox&&_outbox)?'✅':'❌') + ' جسر</span>'
-    + '<span>' + (_noorConnected?'🟢 متصل ('+_noorUser+')':'🔴 غير متصل') + '</span>'
-    + '<span>📋 ' + _manualStudents.length + ' طالب</span>'
-    + '</div>';
-}
-
-function sendToExt(data) {
-  findElements();
-  if (!_inbox) { dLog('❌ inbox غير موجود!', '#ef476f'); return; }
-  dLog('📤 ' + data.action, '#118ab2');
-  _inbox.textContent = JSON.stringify(data);
-}
-
-function dPing() {
-  dLog('━━━ Ping ━━━', '#fff');
-  sendToExt({ source: 'school-system', action: 'ping' });
-}
-
-function dAddStudents() {
-  var names = document.getElementById('d-names').value.trim();
-  if (!names) { dLog('⚠️ أدخل اسم طالب واحد على الأقل', '#ffd166'); return; }
-
-  var stage = document.getElementById('d-stage').value;
-  var grade = document.getElementById('d-grade').value;
-  var section = document.getElementById('d-section').value || '1';
-  var absVal = document.getElementById('d-abstype').value;
-  var absLabel = '';
-  ABSENCE_TYPES.forEach(function(a) { if (a.value === absVal) absLabel = a.label; });
-
-  var lines = names.split('\n').filter(function(l) { return l.trim(); });
-  lines.forEach(function(name) {
-    _manualStudents.push({
-      name: name.trim(),
-      stage: stage,
-      grade: grade,
-      section: section,
-      absValue: absVal,
-      absLabel: absLabel
-    });
-  });
-
-  document.getElementById('d-names').value = '';
-  dLog('✅ أضفت ' + lines.length + ' طالب', '#06d6a0');
-  dRenderList();
-  dRefresh();
-}
-
-function dRemoveStudent(idx) {
-  _manualStudents.splice(idx, 1);
-  dRenderList();
-  dRefresh();
-}
-
-function dClearList() {
-  _manualStudents = [];
-  dRenderList();
-  dRefresh();
-}
-
-function dRenderList() {
-  var box = document.getElementById('d-list-box');
-  var body = document.getElementById('d-list-body');
-  if (_manualStudents.length === 0) { box.style.display = 'none'; return; }
-
-  box.style.display = 'block';
-  var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff;border-radius:8px;overflow:hidden">'
-    + '<tr style="background:#00695c;color:#fff"><th style="padding:6px">#</th><th>الاسم</th><th>الصف</th><th>الفصل</th><th>نوع الغياب</th><th>حذف</th></tr>';
-  _manualStudents.forEach(function(s, i) {
-    html += '<tr style="border-bottom:1px solid #eee">'
-      + '<td style="padding:4px;text-align:center">' + (i+1) + '</td>'
-      + '<td style="padding:4px">' + s.name + '</td>'
-      + '<td style="padding:4px">' + s.grade + ' ' + s.stage + '</td>'
-      + '<td style="padding:4px">' + s.section + '</td>'
-      + '<td style="padding:4px;font-size:11px">' + s.absLabel + '</td>'
-      + '<td style="padding:4px;text-align:center"><button onclick="dRemoveStudent(' + i + ')" style="border:none;background:#fee2e2;color:#dc2626;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:11px">✕</button></td>'
-      + '</tr>';
-  });
-  html += '</table>';
-  body.innerHTML = html;
-}
-
-function dSendToNoor() {
-  if (!_noorConnected) { dLog('⚠️ اضغط Ping أولاً', '#ffd166'); return; }
-  if (_manualStudents.length === 0) { dLog('⚠️ أضف طالب واحد على الأقل', '#ffd166'); return; }
-
-  var stage = _manualStudents[0].stage;
-  var gradeMap = GRADE_MAPS[stage] || {};
-
-  var records = _manualStudents.map(function(s, i) {
-    return {
-      'اسم_الطالب': s.name,
-      'اسم الطالب': s.name,
-      'الصف': s.grade + ' ' + s.stage,
-      'الفصل': s.section,
-      'نوع_الغياب': s.absLabel,
-      '_noorValue': s.absValue,
-      '_noorText': s.absLabel,
-      '_noorMode': { mowadaba: '2', deductType: null },
-      '_type': 'absence',
-      '_rowIndex': i
-    };
-  });
-
-  dLog('━━━ إرسال ' + records.length + ' سجل غياب لنور ━━━', '#fff');
-  records.forEach(function(r,i) {
-    dLog('    [' + i + '] ' + r['اسم_الطالب'] + ' — ' + r['الصف'] + '/' + r['الفصل'] + ' — ' + r._noorValue, '#a8dadc');
-  });
-
-  sendToExt({
-    source: 'school-system',
-    action: 'execute',
-    operation: 'absence',
-    records: records,
-    stage: stage,
-    gradeMap: gradeMap
-  });
-
-  dLog('⏳ ننتظر الرد من نور...', '#ffd166');
-}
-
+// fallback: استقبال من postMessage أيضاً
 window.addEventListener('message', function(e) {
-  if (e.data && e.data.source === 'noor-extension') handleResponse(e.data);
+  if (e.data && e.data.source === 'noor-extension') _noorHandleExtMessage(e.data);
 });
 
-if (document.body) diagInit();
-else document.addEventListener('DOMContentLoaded', diagInit);
+
+// ═══════════════════════════════════════════════════════════════
+// الصفحة الرئيسية
+// ═══════════════════════════════════════════════════════════════
+function renderNoorPage() {
+  var mc = document.getElementById('main-content');
+  if (!mc) return;
+
+  var connected = NOOR_STATE.connected;
+  var dotClr = connected ? '#22c55e' : '#ef4444';
+  var dotTxt = connected ? 'متصل بنور' : 'غير متصل';
+  var userName = NOOR_STATE.userName || '';
+
+  mc.innerHTML = '<div class="sec-noor">'
+    // ═══ بانر البطل ═══
+    + '<div class="page-hero"><div class="hero-content">'
+    + '<div class="hero-info">'
+    + '  <h1><span class="material-symbols-outlined" style="font-size:28px;vertical-align:middle;margin-left:8px">cloud_sync</span>التوثيق في نور</h1>'
+    + '  <p>إدارة المخالفات والتأخر والسلوك الإيجابي والغياب — ربط مباشر مع نظام نور</p>'
+    + '</div>'
+    + '<div class="hero-stats" style="flex-wrap:wrap;gap:8px">'
+    + '  <div class="hero-stat" id="noor-stat-viol"><div class="hero-stat-icon">🔴</div><div class="hero-stat-num" id="ns-viol">-</div><div class="hero-stat-label">مخالفات</div></div>'
+    + '  <div class="hero-stat" id="noor-stat-tard"><div class="hero-stat-icon">⏰</div><div class="hero-stat-num" id="ns-tard">-</div><div class="hero-stat-label">تأخر</div></div>'
+    + '  <div class="hero-stat" id="noor-stat-comp"><div class="hero-stat-icon">🔄</div><div class="hero-stat-num" id="ns-comp">-</div><div class="hero-stat-label">تعويضية</div></div>'
+    + '  <div class="hero-stat" id="noor-stat-exc"><div class="hero-stat-icon">⭐</div><div class="hero-stat-num" id="ns-exc">-</div><div class="hero-stat-label">متمايز</div></div>'
+    + '  <div class="hero-stat" id="noor-stat-abs"><div class="hero-stat-icon">📋</div><div class="hero-stat-num" id="ns-abs">-</div><div class="hero-stat-label">غياب</div></div>'
+    + '  <div class="hero-stat"><div class="hero-stat-icon">\u2705</div><div class="hero-stat-num" id="ns-documented">-</div><div class="hero-stat-label">موثق اليوم</div></div>'
+    + '</div>'
+    + '</div></div>'
+
+    // ═══ شريط الاتصال ═══
+    + '<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-3 flex items-center justify-between">'
+    + '<div class="flex items-center gap-3">'
+    + '  <span style="width:12px;height:12px;border-radius:50%;background:' + dotClr + ';display:inline-block;box-shadow:0 0 8px ' + dotClr + '50"></span>'
+    + '  <div>'
+    + '    <span class="font-bold text-sm" style="color:var(--c-text)">' + dotTxt + '</span>'
+    + (userName ? '<span class="text-xs text-gray-400 mr-2">(' + escapeHtml(userName) + ')</span>' : '')
+    + '  </div>'
+    + '</div>'
+    + '<div class="flex gap-2">'
+    // ★ v4: أزرار الاتصال تستخدم الجسر
+    + (connected
+      ? '<button onclick="_noorPing()" class="btn-hero btn-hero-outline text-xs" title="تحديث حالة الاتصال"><span class="material-symbols-outlined text-[16px]">refresh</span>تحديث الحالة</button>'
+        + '<button onclick="noorDisconnect_()" class="btn-hero btn-hero-outline text-xs"><span class="material-symbols-outlined text-[16px]">link_off</span>قطع الاتصال</button>'
+      : '<button onclick="noorConnect_()" class="btn-hero btn-hero-primary text-xs"><span class="material-symbols-outlined text-[16px]">link</span>فحص الاتصال</button>')
+    + '</div>'
+    + '</div>'
+
+    // ═══ التبويبات (5 تبويبات) ═══
+    + '<div class="tabs-bar" id="noor-tabs">'
+    + NOOR_TAB_ORDER.map(function(key, i) {
+        var t = NOOR_TABS[key];
+        return '<button class="tab-item' + (i === 0 ? ' active' : '') + '" data-tab="' + key + '" onclick="noorSwitchTab_(\'' + key + '\')">'
+          + '<span class="material-symbols-outlined">' + t.icon + '</span>' + t.label + '</button>';
+      }).join('')
+    + '</div>'
+
+    // ═══ المحتوى ═══
+    + '<div id="noor-content"></div>'
+    + '</div>';
+
+  // ★ v4: تهيئة الجسر + Ping بدل أي window.open
+  _noorFindBridge();
+  _noorPing();
+
+  noorLoadStats_();
+  noorSwitchTab_('violations');
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// ★ v4: الاتصال / قطع الاتصال — عبر الجسر
+// ═══════════════════════════════════════════════════════════════
+function noorConnect_() {
+  _noorFindBridge();
+  var sent = _noorSendToExt({ source: 'school-system', action: 'ping' });
+
+  if (!sent) {
+    showEnhancedToast('warning', 'الجسر غير موجود — تأكد أن إضافة نور مفعّلة ونور مفتوح في تبويب آخر');
+    return;
+  }
+
+  showEnhancedToast('info', 'جاري فحص الاتصال بالإضافة...');
+
+  // ★ تنبيه إذا لم ترد الإضافة خلال 8 ثواني
+  NOOR_STATE._connectTimer = setTimeout(function() {
+    if (!NOOR_STATE.extensionReady) {
+      showEnhancedToast('warning', 'لم يتم الكشف عن الإضافة. تأكد من: 1) تثبيت الإضافة 2) فتح نور في تبويب آخر 3) تسجيل الدخول في نور');
+    }
+  }, 8000);
+}
+
+function noorDisconnect_() {
+  NOOR_STATE.connected = false;
+  NOOR_STATE.userName = '';
+  NOOR_STATE.extensionReady = false;
+  renderNoorPage();
+  showEnhancedToast('info', 'تم قطع الاتصال بنور');
+}
+
+// ★ v4: حذف noorRefreshWindow_ — لا حاجة لها مع الجسر
+
+
+// ═══════════════════════════════════════════════════════════════
+// التبويبات — بدون تغيير من v3
+// ═══════════════════════════════════════════════════════════════
+function noorSwitchTab_(tab) {
+  NOOR_STATE.currentOp = tab;
+
+  // تفعيل التبويب
+  document.querySelectorAll('#noor-tabs .tab-item').forEach(function(el) {
+    el.classList.toggle('active', el.dataset.tab === tab);
+  });
+
+  var ct = document.getElementById('noor-content');
+  if (!ct) return;
+
+  // حالة العمل
+  if (NOOR_STATE.working) {
+    noorRenderProgress_(ct);
+    return;
+  }
+
+  var c = NOOR_TABS[tab] || NOOR_TABS.violations;
+
+  ct.innerHTML = ''
+    // ═══ شريط إجراءات ═══
+    + '<div class="action-bar">'
+    + '<div class="action-group">'
+    + '  <button onclick="noorLoadRecords_(\'' + c.type + '\')" class="btn-hero btn-hero-outline"><span class="material-symbols-outlined text-[18px]">refresh</span>تحديث السجلات</button>'
+    + '  <span class="text-xs text-gray-400" id="noor-record-count"></span>'
+    + '</div>'
+    + '<div class="action-group">'
+    + (NOOR_STATE.connected
+      ? '<button onclick="noorStartExec_(\'' + tab + '\')" class="btn-hero btn-hero-primary" id="noor-start-btn"><span class="material-symbols-outlined text-[18px]">play_arrow</span>بدء التوثيق في نور</button>'
+      : '<button disabled class="btn-hero btn-hero-outline opacity-50 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">link_off</span>اتصل بنور أولاً</button>')
+    + '</div>'
+    + '</div>'
+
+    // ═══ شريط تحديد نوع الغياب (لتبويب الغياب فقط) ═══
+    + (tab === 'absence'
+      ? '<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-3 mb-3 flex items-center gap-4 flex-wrap">'
+        + '<span class="text-sm font-bold" style="color:var(--c-text)"><span class="material-symbols-outlined text-[16px] align-middle">checklist</span> نوع الغياب للجميع:</span>'
+        + '<select id="noor-absence-type-all" onchange="noorApplyAbsenceTypeAll_(this.value)" '
+        + 'style="padding:6px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;min-width:170px;background:#fff">'
+        + '<option value="">— الافتراضي حسب البيانات —</option>'
+        + ABSENCE_TYPE_OPTIONS.map(function(o) { return '<option value="' + o.value + '">' + o.label + '</option>'; }).join('')
+        + '</select>'
+        + '<span class="text-xs text-gray-400">يُطبّق على جميع الطلاب</span>'
+        + '</div>'
+      : '')
+
+    // ═══ حاوية الجدول ═══
+    + '<div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">'
+    + '<div class="px-4 py-3 border-b border-gray-100 flex items-center gap-3">'
+    + '  <span class="material-symbols-outlined" style="color:' + c.color + '">' + c.icon + '</span>'
+    + '  <div><span class="font-bold text-sm" style="color:var(--c-text)">' + c.label + '</span>'
+    + '  <span class="text-xs text-gray-400 mr-2">' + c.desc + '</span></div>'
+    + '</div>'
+    + '<div id="noor-table-body">'
+    + noorEmptyState_('جاري التحميل...', 'hourglass_empty')
+    + '</div>'
+    + '</div>';
+
+  noorLoadRecords_(c.type);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// جلب السجلات — بدون تغيير من v3
+// ═══════════════════════════════════════════════════════════════
+function noorLoadRecords_(type) {
+  var tbody = document.getElementById('noor-table-body');
+  if (tbody) tbody.innerHTML = noorSkeletonRows_(5);
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      try {
+        noorRenderRecords_(res, type);
+      } catch(e) {
+        var tb = document.getElementById('noor-table-body');
+        if (tb) tb.innerHTML = noorEmptyState_('خطأ في العرض: ' + e.message, 'error');
+      }
+    })
+    .withFailureHandler(function(err) {
+      var tb = document.getElementById('noor-table-body');
+      if (tb) tb.innerHTML = noorEmptyState_('خطأ في جلب البيانات: ' + err, 'error');
+    })
+    .getNoorPendingRecords(currentStage, type);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// عرض السجلات في الجدول — بدون تغيير من v3
+// ═══════════════════════════════════════════════════════════════
+function noorRenderRecords_(res, type) {
+  var tbody = document.getElementById('noor-table-body');
+  var countEl = document.getElementById('noor-record-count');
+  if (!tbody) return;
+
+  if (!res || !res.success) {
+    var errMsg = (res && res.error) ? ('خطأ: ' + res.error) : 'لا توجد سجلات معلقة';
+    var errIcon = (res && res.error) ? 'error' : 'check_circle';
+    tbody.innerHTML = noorEmptyState_(errMsg, errIcon);
+    if (countEl) countEl.textContent = '';
+    return;
+  }
+  if (!res.records || res.records.length === 0) {
+    tbody.innerHTML = noorEmptyState_('لا توجد سجلات معلقة', 'check_circle');
+    if (countEl) countEl.textContent = '';
+    return;
+  }
+
+  var records = res.records;
+  if (countEl) countEl.textContent = toArabicNum_(records.length) + ' سجل';
+
+  var sorted = sortRecordsByClass_(records);
+  NOOR_STATE.pendingData = sorted;
+  var groupInfo = sheetGroupInfo_(sorted);
+
+  var degreeColors = {
+    'الأولى': 'bg-degree-1', 'الثانية': 'bg-degree-2', 'الثالثة': 'bg-degree-3',
+    'الرابعة': 'bg-degree-4', 'الخامسة': 'bg-degree-5'
+  };
+
+  // ═══ بناء رأس الجدول حسب النوع ═══
+  var html = '<div style="overflow-x:auto"><table class="sht"><thead><tr style="background:var(--sec-clr,#00695c)">'
+    + '<th style="width:40px"><input type="checkbox" id="noor-select-all" onchange="noorToggleAll_(this.checked)"></th>'
+    + '<th>اسم الطالب</th>'
+    + '<th>الصف</th><th>الفصل</th>';
+
+  if (type === 'violations') {
+    html += '<th>المخالفة</th><th>الدرجة</th><th>التاريخ</th><th>نور</th>';
+  } else if (type === 'tardiness') {
+    html += '<th>نوع التأخر</th><th>التاريخ</th><th>نور</th>';
+  } else if (type === 'compensation') {
+    html += '<th>السلوك التعويضي</th><th>التاريخ</th><th>نور</th>';
+  } else if (type === 'excellent') {
+    html += '<th>السلوك المتمايز</th><th>المعلم</th><th>التاريخ</th><th>نور</th>';
+  } else if (type === 'absence') {
+    html += '<th>نوع الغياب \u25BC</th><th>التاريخ</th><th>نور</th>';
+  }
+  html += '</tr></thead><tbody>';
+
+  // ═══ بناء صفوف الجدول ═══
+  sorted.forEach(function(rec, idx) {
+    var gi = groupInfo[idx];
+
+    if (gi.border) {
+      html += '<tr class="sht-sep"><td colspan="10"></td></tr>';
+    }
+    if (gi.first) {
+      html += '<tr class="sht-gh"><td colspan="10"><span class="sht-gl">' + escapeHtml(getF_(rec, 'الصف')) + ' / ' + escapeHtml(getF_(rec, 'الفصل')) + '</span>'
+        + '<span class="sht-gc mr-3">' + toArabicNum_(gi.span) + ' سجل</span></td></tr>';
+    }
+
+    var name = getF_(rec, 'اسم_الطالب') || getF_(rec, 'اسم الطالب') || '';
+    var grade = getF_(rec, 'الصف') || '';
+    var section = getF_(rec, 'الفصل') || '';
+    var rowClass = idx % 2 === 0 ? 'rw' : 'rg';
+
+    var noorVal = noorResolveValue_(rec, type);
+    var noorBadge = noorVal
+      ? '<span class="inline-block px-2 py-1 text-xs font-bold rounded bg-green-100 text-green-700" title="' + escapeHtml(noorVal) + '">\u2713 مطابق</span>'
+      : '<span class="inline-block px-2 py-1 text-xs font-bold rounded bg-red-100 text-red-700">\u2717 غير مطابق</span>';
+
+    html += '<tr class="' + rowClass + '">'
+      + '<td><input type="checkbox" class="noor-cb" data-idx="' + idx + '" ' + (noorVal ? 'checked' : '') + '></td>'
+      + '<td class="nm">' + escapeHtml(name) + '</td>'
+      + '<td>' + escapeHtml(grade) + '</td>'
+      + '<td>' + escapeHtml(section) + '</td>';
+
+    if (type === 'violations') {
+      var vName = getF_(rec, 'نص_المخالفة') || getF_(rec, 'نص المخالفة') || getF_(rec, 'المخالفة') || getF_(rec, 'نوع_المخالفة') || '';
+      var degree = String(getF_(rec, 'الدرجة') || getF_(rec, 'درجة_المخالفة') || '');
+      var degCls = '';
+      for (var dk in degreeColors) { if (degree.indexOf(dk) >= 0) { degCls = degreeColors[dk]; break; } }
+      var date = getF_(rec, 'التاريخ_الهجري') || getF_(rec, 'التاريخ الهجري') || getF_(rec, 'التاريخ هجري') || '';
+      html += '<td class="text-right text-xs">' + escapeHtml(String(vName)).substring(0, 40) + '</td>'
+        + '<td><span class="inline-block px-2 py-1 text-xs font-bold rounded ' + degCls + '">' + escapeHtml(degree) + '</span></td>'
+        + '<td class="text-xs">' + escapeHtml(String(date)) + '</td>'
+        + '<td>' + noorBadge + '</td>';
+
+    } else if (type === 'tardiness') {
+      var lateType = getF_(rec, 'نوع_التأخر') || getF_(rec, 'نوع التأخر') || 'تأخر صباحي';
+      var lateDate = getF_(rec, 'التاريخ_هجري') || getF_(rec, 'التاريخ هجري') || '';
+      html += '<td class="text-xs">' + escapeHtml(String(lateType)) + '</td>'
+        + '<td class="text-xs">' + escapeHtml(String(lateDate)) + '</td>'
+        + '<td>' + noorBadge + '</td>';
+
+    } else if (type === 'compensation') {
+      var compName = getF_(rec, 'السلوك_المتمايز') || getF_(rec, 'السلوك المتمايز') || '';
+      var compDate = noorFindDate_(rec);
+      html += '<td class="text-right text-xs">' + escapeHtml(String(compName)).substring(0, 40) + '</td>'
+        + '<td class="text-xs">' + escapeHtml(String(compDate)) + '</td>'
+        + '<td>' + noorBadge + '</td>';
+
+    } else if (type === 'excellent') {
+      var excName = getF_(rec, 'السلوك_المتمايز') || getF_(rec, 'السلوك المتمايز') || '';
+      var excTeacher = getF_(rec, 'المعلم') || '';
+      var excDate = noorFindDate_(rec);
+      html += '<td class="text-right text-xs">' + escapeHtml(String(excName)).substring(0, 40) + '</td>'
+        + '<td class="text-xs">' + escapeHtml(String(excTeacher)) + '</td>'
+        + '<td class="text-xs">' + escapeHtml(String(excDate)) + '</td>'
+        + '<td>' + noorBadge + '</td>';
+
+    } else if (type === 'absence') {
+      var absDate = getF_(rec, 'التاريخ_هجري') || getF_(rec, 'التاريخ هجري') || '';
+      var currentAbsVal = noorResolveValue_(rec, type);
+      var absSel = '<select class="noor-absence-select" data-idx="' + idx + '" '
+        + 'onchange="noorSetAbsenceOverride_(' + idx + ',this.value)" '
+        + 'style="font-size:12px;padding:4px 8px;border:1px solid #ddd;border-radius:6px;min-width:130px;background:#fff">';
+      ABSENCE_TYPE_OPTIONS.forEach(function(opt) {
+        absSel += '<option value="' + opt.value + '"' + (currentAbsVal === opt.value ? ' selected' : '') + '>' + opt.label + '</option>';
+      });
+      absSel += '</select>';
+      html += '<td>' + absSel + '</td>'
+        + '<td class="text-xs">' + escapeHtml(String(absDate)) + '</td>'
+        + '<td>' + noorBadge + '</td>';
+    }
+
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+
+  // فوتر
+  var matchCount = sorted.filter(function(r) { return !!noorResolveValue_(r, type); }).length;
+  html += '<div class="tbl-footer">'
+    + '<span class="s"><span class="d" style="background:#22c55e"></span> مطابق (' + toArabicNum_(matchCount) + ')</span>'
+    + '<span class="s"><span class="d" style="background:#ef4444"></span> غير مطابق (' + toArabicNum_(records.length - matchCount) + ')</span>'
+    + '<span class="s" style="margin-right:auto">الإجمالي: <strong>' + toArabicNum_(records.length) + '</strong> سجل</span>'
+    + '</div>';
+
+  tbody.innerHTML = html;
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// استخراج التاريخ من السجل — بدون تغيير من v3
+// ═══════════════════════════════════════════════════════════════
+function noorFindDate_(rec) {
+  var candidates = [
+    'التاريخ_الهجري', 'التاريخ الهجري', 'التاريخ هجري',
+    'التاريخ', 'وقت_الإدخال', 'وقت الإدخال',
+    'التاريخ_الميلادي', 'التاريخ الميلادي'
+  ];
+  for (var i = 0; i < candidates.length; i++) {
+    var val = getF_(rec, candidates[i]);
+    if (val && String(val).trim() !== '') return String(val);
+  }
+  return '';
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// منطق المطابقة مع نور — بدون تغيير من v3
+// ═══════════════════════════════════════════════════════════════
+function noorResolveValue_(record, type) {
+  switch (type) {
+    case 'violations':
+      var violationId = getF_(record, 'رقم_المخالفة') || getF_(record, 'رقم المخالفة') || '';
+      var id = parseInt(String(violationId), 10);
+      var stageOverrides = NOOR_MAPPING['violations_' + currentStage];
+      if (stageOverrides && stageOverrides.hasOwnProperty(id)) {
+        return stageOverrides[id];
+      }
+      return NOOR_MAPPING.violations[id] || null;
+
+    case 'tardiness':
+      return '1601174,الدرجة الأولى';
+
+    case 'compensation':
+      var compText = getF_(record, 'السلوك_المتمايز') || getF_(record, 'السلوك المتمايز') || '';
+      return noorMatchPositive_(compText, 'تعويض');
+
+    case 'excellent':
+      var excText = getF_(record, 'السلوك_المتمايز') || getF_(record, 'السلوك المتمايز') || '';
+      return noorMatchPositive_(excText, 'متميز');
+
+    case 'absence':
+      if (record._absenceOverride) return record._absenceOverride;
+      var absType = getF_(record, 'نوع_الغياب') || getF_(record, 'نوع الغياب') || '';
+      var excuseType = getF_(record, 'نوع_العذر') || getF_(record, 'نوع العذر') || '';
+      return noorMapAbsence_(absType, excuseType);
+
+    default:
+      return null;
+  }
+}
+
+function noorMatchPositive_(behaviorText, category) {
+  if (!behaviorText) return null;
+  var text = String(behaviorText).trim();
+  var map = NOOR_MAPPING.positive[category];
+  if (!map) return null;
+
+  if (map[text]) return map[text];
+
+  var keys = Object.keys(map);
+  for (var i = 0; i < keys.length; i++) {
+    if (keys[i] !== 'أخرى' && text.indexOf(keys[i]) >= 0) return map[keys[i]];
+  }
+  for (var j = 0; j < keys.length; j++) {
+    if (keys[j] !== 'أخرى' && keys[j].indexOf(text) >= 0) return map[keys[j]];
+  }
+
+  return map['أخرى'] || null;
+}
+
+function noorMapAbsence_(absenceType, excuseType) {
+  var type = String(absenceType || '').trim();
+  var excuse = String(excuseType || '').trim();
+
+  if (excuse.indexOf('منصة') > -1 || excuse.indexOf('مدرستي') > -1 || type.indexOf('منصة') > -1) {
+    if (excuse.indexOf('بدون') > -1 || type.indexOf('بدون') > -1) return '1201153,';
+    return '800667,';
+  }
+
+  if (NOOR_MAPPING.absence[type]) return NOOR_MAPPING.absence[type];
+
+  if (!excuse || excuse === 'بدون عذر' || excuse === 'بدون' || excuse === 'مرفوض') {
+    return '48,';
+  }
+  if (excuse === 'بعذر' || excuse === 'معذور' || excuse === 'مقبول') {
+    return '141,';
+  }
+
+  return '48,';
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// تحديد/إلغاء + تجاوز الغياب — بدون تغيير من v3
+// ═══════════════════════════════════════════════════════════════
+function noorToggleAll_(checked) {
+  document.querySelectorAll('.noor-cb').forEach(function(cb) { cb.checked = checked; });
+}
+
+function noorSetAbsenceOverride_(idx, noorValue) {
+  if (!NOOR_STATE.pendingData || !NOOR_STATE.pendingData[idx]) return;
+  NOOR_STATE.pendingData[idx]._absenceOverride = noorValue;
+  var cb = document.querySelector('.noor-cb[data-idx="' + idx + '"]');
+  if (cb) {
+    var tr = cb.closest('tr');
+    if (tr && noorValue) {
+      var noorTd = tr.querySelector('td:last-child');
+      if (noorTd) noorTd.innerHTML = '<span class="inline-block px-2 py-1 text-xs font-bold rounded bg-green-100 text-green-700">\u2713 مطابق</span>';
+      cb.checked = true;
+    }
+  }
+}
+
+function noorApplyAbsenceTypeAll_(noorValue) {
+  if (!noorValue) return;
+  document.querySelectorAll('.noor-absence-select').forEach(function(sel) {
+    sel.value = noorValue;
+    var idx = parseInt(sel.dataset.idx);
+    noorSetAbsenceOverride_(idx, noorValue);
+  });
+  showEnhancedToast('success', 'تم تطبيق نوع الغياب على جميع السجلات');
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// ★ v4: بدء التنفيذ — عبر الجسر بدل postMessage
+// ═══════════════════════════════════════════════════════════════
+function noorStartExec_(tab) {
+  if (!NOOR_STATE.connected) {
+    showEnhancedToast('warning', 'يجب الاتصال بنور أولاً');
+    return;
+  }
+
+  // جمع السجلات المحددة مع قيم نور
+  var selected = [];
+  document.querySelectorAll('.noor-cb:checked').forEach(function(cb) {
+    var idx = parseInt(cb.dataset.idx);
+    if (NOOR_STATE.pendingData && NOOR_STATE.pendingData[idx]) {
+      var rec = NOOR_STATE.pendingData[idx];
+      var noorVal = noorResolveValue_(rec, tab);
+      if (noorVal) {
+        rec._noorValue = noorVal;
+        var tabConfig = NOOR_TABS[tab];
+        rec._noorMode = {
+          mowadaba: tabConfig.mow,
+          deductType: tabConfig.deduct
+        };
+        selected.push(rec);
+      }
+    }
+  });
+
+  if (selected.length === 0) {
+    showEnhancedToast('warning', 'لم يتم تحديد سجلات مطابقة لنور');
+    return;
+  }
+
+  showStyledConfirm_({
+    title: 'تأكيد التوثيق في نور',
+    message: 'سيتم توثيق ' + selected.length + ' سجل في نظام نور. هل تريد المتابعة؟',
+    icon: 'cloud_sync',
+    color: 'emerald',
+    onConfirm: function() {
+      NOOR_STATE.working = true;
+      NOOR_STATE.progress = { done: 0, total: selected.length };
+
+      // ★ v4: إرسال عبر الجسر (inbox/outbox)
+      var sent = _noorSendToExt({
+        source: 'school-system',
+        action: 'execute',
+        operation: tab,
+        records: selected,
+        stage: currentStage,
+        gradeMap: NOOR_MAPPING.grades[currentStage] || {}
+      });
+
+      if (!sent) {
+        NOOR_STATE.working = false;
+        showEnhancedToast('danger', 'الجسر غير متصل — تأكد من فتح نور في تبويب آخر مع تفعيل الإضافة');
+        return;
+      }
+
+      noorRenderProgress_(document.getElementById('noor-content'));
+      showEnhancedToast('info', 'بدء التوثيق...');
+    }
+  });
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// شاشة التقدم — بدون تغيير من v3
+// ═══════════════════════════════════════════════════════════════
+function noorRenderProgress_(container) {
+  if (!container) return;
+  var p = NOOR_STATE.progress;
+  var pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
+
+  container.innerHTML = ''
+    + '<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-8 text-center">'
+    + '<div style="width:120px;height:120px;margin:0 auto 20px;position:relative">'
+    + '  <svg viewBox="0 0 120 120" style="transform:rotate(-90deg)">'
+    + '    <circle cx="60" cy="60" r="52" fill="none" stroke="#e5e7eb" stroke-width="8"/>'
+    + '    <circle cx="60" cy="60" r="52" fill="none" stroke="var(--sec-clr,#00695c)" stroke-width="8" stroke-linecap="round"'
+    + '      stroke-dasharray="' + (2 * Math.PI * 52) + '" stroke-dashoffset="' + (2 * Math.PI * 52 * (1 - pct / 100)) + '" style="transition:stroke-dashoffset 0.5s"/>'
+    + '  </svg>'
+    + '  <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:900;color:var(--c-text)">'
+    + toArabicNum_(pct) + '<span style="font-size:14px;font-weight:600">%</span></div>'
+    + '</div>'
+    + '<h3 class="text-lg font-bold mb-2" style="color:var(--c-text)">جاري التوثيق في نور...</h3>'
+    + '<p class="text-sm text-gray-400 mb-4">' + toArabicNum_(p.done) + ' من ' + toArabicNum_(p.total) + ' سجل</p>'
+    + (p.current ? '<p class="text-xs text-gray-500 bg-gray-50 rounded-lg px-4 py-2 inline-block">' + escapeHtml(p.current) + '</p>' : '')
+    + '<div class="mt-6">'
+    + '<button onclick="noorCancelExec_()" class="btn-hero btn-hero-danger"><span class="material-symbols-outlined text-[18px]">stop</span>إيقاف</button>'
+    + '</div>'
+    + '</div>';
+}
+
+function noorUpdateProgress_() {
+  var container = document.getElementById('noor-content');
+  if (container && NOOR_STATE.working) {
+    noorRenderProgress_(container);
+  }
+}
+
+// ★ v4: الإلغاء عبر الجسر
+function noorCancelExec_() {
+  NOOR_STATE.working = false;
+  _noorSendToExt({ source: 'school-system', action: 'cancel' });
+  showEnhancedToast('warning', 'تم إيقاف التوثيق');
+  noorSwitchTab_(NOOR_STATE.currentOp);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// إكمال التنفيذ — بدون تغيير من v3
+// ═══════════════════════════════════════════════════════════════
+function noorOnComplete_(results) {
+  var container = document.getElementById('noor-content');
+  if (!container) return;
+
+  var success = results ? results.success || 0 : 0;
+  var failed = results ? results.failed || 0 : 0;
+  var total = success + failed;
+  var updates = results ? results.updates || [] : [];
+
+  // جدول تفصيلي بنتائج كل طالب
+  var typeLabels = { violation: 'مخالفة', tardiness: 'تأخر', compensation: 'تعويضية', excellent: 'متمايز', absence: 'غياب' };
+  var detailsHtml = '';
+  if (NOOR_STATE.pendingData && updates.length > 0) {
+    detailsHtml = '<div class="mt-6 text-right">'
+      + '<h4 class="text-sm font-bold mb-3" style="color:var(--c-text)">تفاصيل التوثيق:</h4>'
+      + '<div style="max-height:300px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:12px">'
+      + '<table class="sht"><thead><tr style="background:var(--sec-clr,#00695c)">'
+      + '<th>#</th><th>اسم الطالب</th><th>الصف / الفصل</th><th>النوع</th><th>الحالة</th>'
+      + '</tr></thead><tbody>';
+    updates.forEach(function(u, i) {
+      var rec = null;
+      for (var j = 0; j < NOOR_STATE.pendingData.length; j++) {
+        if (NOOR_STATE.pendingData[j]._rowIndex === u.rowIndex) { rec = NOOR_STATE.pendingData[j]; break; }
+      }
+      var name = rec ? (getF_(rec, 'اسم_الطالب') || getF_(rec, 'اسم الطالب') || '\u2014') : '\u2014';
+      var grade = rec ? (getF_(rec, 'الصف') || '') : '';
+      var section = rec ? (getF_(rec, 'الفصل') || '') : '';
+      var gs = grade + (section ? ' / ' + section : '');
+      var statusBadge = (u.status === 'تم')
+        ? '<span class="inline-block px-2 py-1 text-xs font-bold rounded bg-green-100 text-green-700">\u2713 نجح</span>'
+        : '<span class="inline-block px-2 py-1 text-xs font-bold rounded bg-red-100 text-red-700">\u2717 فشل</span>';
+      detailsHtml += '<tr class="' + (i % 2 === 0 ? 'rw' : 'rg') + '">'
+        + '<td class="text-xs">' + toArabicNum_(i + 1) + '</td>'
+        + '<td class="nm">' + escapeHtml(name) + '</td>'
+        + '<td class="text-xs">' + escapeHtml(gs) + '</td>'
+        + '<td class="text-xs">' + escapeHtml(typeLabels[u.type] || u.type || '') + '</td>'
+        + '<td>' + statusBadge + '</td></tr>';
+    });
+    detailsHtml += '</tbody></table></div></div>';
+  }
+
+  container.innerHTML = ''
+    + '<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-8">'
+    + '<div class="text-center">'
+    + '<div style="width:80px;height:80px;margin:0 auto 16px;background:#ecfdf5;border-radius:50%;display:flex;align-items:center;justify-content:center">'
+    + '  <span class="material-symbols-outlined" style="font-size:40px;color:#22c55e">check_circle</span>'
+    + '</div>'
+    + '<h3 class="text-xl font-bold mb-2" style="color:var(--c-text)">تم التوثيق بنجاح!</h3>'
+    + '<div class="flex items-center justify-center gap-8 my-6">'
+    + '  <div class="text-center"><div class="text-3xl font-black" style="color:#22c55e">' + toArabicNum_(success) + '</div><div class="text-xs text-gray-400">نجح</div></div>'
+    + (failed > 0 ? '  <div class="text-center"><div class="text-3xl font-black" style="color:#ef4444">' + toArabicNum_(failed) + '</div><div class="text-xs text-gray-400">فشل</div></div>' : '')
+    + '  <div class="text-center"><div class="text-3xl font-black" style="color:var(--c-text)">' + toArabicNum_(total) + '</div><div class="text-xs text-gray-400">الإجمالي</div></div>'
+    + '</div></div>'
+    + detailsHtml
+    + '<div class="flex items-center justify-center gap-3 mt-6">'
+    + '<button onclick="noorSwitchTab_(NOOR_STATE.currentOp)" class="btn-hero btn-hero-outline"><span class="material-symbols-outlined text-[18px]">arrow_back</span>عودة</button>'
+    + '</div></div>';
+
+  if (results && results.updates) {
+    google.script.run.updateNoorStatus(currentStage, results.updates);
+  }
+
+  noorLoadStats_();
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// الإحصائيات — بدون تغيير من v3
+// ═══════════════════════════════════════════════════════════════
+function noorLoadStats_() {
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (!res || !res.success) return;
+      var p = res.pending;
+      var el;
+      el = document.getElementById('ns-viol'); if (el) el.textContent = toArabicNum_(p.violations || 0);
+      el = document.getElementById('ns-tard'); if (el) el.textContent = toArabicNum_(p.tardiness || 0);
+      el = document.getElementById('ns-comp'); if (el) el.textContent = toArabicNum_(p.compensation || 0);
+      el = document.getElementById('ns-exc');  if (el) el.textContent = toArabicNum_(p.excellent || 0);
+      el = document.getElementById('ns-abs');  if (el) el.textContent = toArabicNum_(p.absence || 0);
+      el = document.getElementById('ns-documented'); if (el) el.textContent = toArabicNum_(p.documentedToday || 0);
+    })
+    .getNoorStats(currentStage);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// مكونات مساعدة — بدون تغيير من v3
+// ═══════════════════════════════════════════════════════════════
+function noorEmptyState_(text, icon) {
+  return '<div class="empty-state">'
+    + '<div class="empty-state-icon"><span class="material-symbols-outlined">' + (icon || 'inbox') + '</span></div>'
+    + '<h3>' + escapeHtml(text) + '</h3></div>';
+}
+
+function noorSkeletonRows_(n) {
+  var html = '';
+  for (var i = 0; i < n; i++) {
+    html += '<div class="skeleton-row">'
+      + '<div class="skeleton skeleton-cell" style="width:24px;height:14px"></div>'
+      + '<div class="skeleton skeleton-cell" style="flex:2"></div>'
+      + '<div class="skeleton skeleton-cell" style="flex:1"></div>'
+      + '<div class="skeleton skeleton-cell" style="flex:1"></div>'
+      + '<div class="skeleton skeleton-cell" style="flex:2"></div>'
+      + '<div class="skeleton skeleton-cell" style="width:60px"></div>'
+      + '</div>';
+  }
+  return html;
+}
 </script>
