@@ -40,7 +40,7 @@ function getDashboardData() {
       recentActivity: [],
       semesterTotals: { violations: 0, absence: 0, permissions: 0, tardiness: 0 },
       needsPrinting: [],
-      hijriOffset: getHijriOffset_(),
+      hijriOffset: 0,
       hijriDate: getHijriDateFull_(new Date())
     };
 

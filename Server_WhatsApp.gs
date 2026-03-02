@@ -835,7 +835,7 @@ function getConnectedSessionsByStage(stage) {
 }
 
 /**
- * جلب QR Code لربط جديد
+ * جلب QR Code لربط جديد — يستخرج صورة QR كـ base64 من السيرفر
  */
 function getWhatsAppQR() {
   try {
@@ -846,15 +846,108 @@ function getWhatsAppQR() {
       muteHttpExceptions: true,
       followRedirects: true
     });
-    
-    var finalUrl = response.getAllHeaders()['Location'] || WHATSAPP_SERVER_URL + "/qr";
-    
-    return { 
-      success: true, 
-      qrUrl: finalUrl,
-      message: 'افتح الرابط في المتصفح لمسح الباركود'
+
+    var statusCode = response.getResponseCode();
+    var content = response.getContentText();
+
+    // ★ استخراج صورة QR كـ base64 من الـ HTML
+    var imgMatch = content.match(/<img[^>]+src=["'](data:image\/png;base64,[^"']+)["']/i);
+    if (imgMatch && imgMatch[1]) {
+      return {
+        success: true,
+        qrImage: imgMatch[1],
+        qrUrl: WHATSAPP_SERVER_URL + "/qr"
+      };
+    }
+
+    // fallback: لو لم نجد صورة base64
+    return {
+      success: true,
+      qrImage: null,
+      qrUrl: WHATSAPP_SERVER_URL + "/qr"
     };
   } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+/**
+ * ★ دالة تشخيصية مؤقتة: فحص محتوى صفحة /qr من السيرفر
+ * هذه قراءة فقط (GET) - لا تؤثر على الاتصال الحالي
+ */
+function inspectQREndpoint() {
+  try {
+    if (!WHATSAPP_SERVER_URL) {
+      return { success: false, error: 'رابط سيرفر الواتساب غير مُعيّن' };
+    }
+
+    var response = UrlFetchApp.fetch(WHATSAPP_SERVER_URL + "/qr", {
+      muteHttpExceptions: true,
+      followRedirects: true
+    });
+
+    var contentType = response.getHeaders()['Content-Type'] || 'unknown';
+    var statusCode = response.getResponseCode();
+    var content = response.getContentText();
+    var contentLength = content.length;
+
+    // فحص أنواع المحتوى
+    var analysis = {
+      isHTML: contentType.indexOf('text/html') !== -1,
+      isJSON: contentType.indexOf('application/json') !== -1,
+      isImage: contentType.indexOf('image/') !== -1,
+      hasBase64Image: content.indexOf('data:image') !== -1,
+      hasImgTag: content.indexOf('<img') !== -1,
+      hasCanvasTag: content.indexOf('<canvas') !== -1,
+      hasSVG: content.indexOf('<svg') !== -1,
+      hasQRText: content.indexOf('qr') !== -1 || content.indexOf('QR') !== -1
+    };
+
+    // استخراج أول 2000 حرف كعيّنة
+    var preview = content.substring(0, 2000);
+
+    // محاولة استخراج src من أي img tag
+    var imgSrcMatch = content.match(/<img[^>]+src=["']([^"']+)["']/i);
+    var imgSrc = imgSrcMatch ? imgSrcMatch[1] : null;
+
+    // فحص endpoints إضافية محتملة
+    var extraEndpoints = [];
+    var endpoints = ['/qr/image', '/api/qr', '/qr?format=base64', '/qr?format=json', '/pair'];
+    for (var i = 0; i < endpoints.length; i++) {
+      try {
+        var testResp = UrlFetchApp.fetch(WHATSAPP_SERVER_URL + endpoints[i], {
+          muteHttpExceptions: true,
+          followRedirects: true
+        });
+        extraEndpoints.push({
+          endpoint: endpoints[i],
+          status: testResp.getResponseCode(),
+          contentType: testResp.getHeaders()['Content-Type'] || 'unknown',
+          contentLength: testResp.getContentText().length,
+          preview: testResp.getContentText().substring(0, 200)
+        });
+      } catch (e) {
+        extraEndpoints.push({ endpoint: endpoints[i], status: 'error', error: e.toString() });
+      }
+    }
+
+    var result = {
+      success: true,
+      serverUrl: WHATSAPP_SERVER_URL,
+      statusCode: statusCode,
+      contentType: contentType,
+      contentLength: contentLength,
+      analysis: analysis,
+      imgSrc: imgSrc,
+      preview: preview,
+      extraEndpoints: extraEndpoints
+    };
+    console.log('=== نتيجة فحص QR ===');
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  } catch (e) {
+    console.log('=== خطأ في فحص QR ===');
+    console.log(e.toString());
     return { success: false, error: e.toString() };
   }
 }

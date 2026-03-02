@@ -9,8 +9,9 @@
  * @param {string} type  - النوع: violations | tardiness | compensation | excellent | absence | all
  * @return {Object} { success, records[], stats{}, total }
  */
-function getNoorPendingRecords(stage, type) {
+function getNoorPendingRecords(stage, type, filterMode) {
   try {
+    filterMode = filterMode || 'today';
     var ss = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
     var result = {
       records: [],
@@ -19,21 +20,21 @@ function getNoorPendingRecords(stage, type) {
 
     // ═══ 1. المخالفات السلوكية ═══
     if (type === 'violations' || type === 'all') {
-      var vRecords = getNoorViolationRecords_(ss, stage);
+      var vRecords = getNoorViolationRecords_(ss, stage, filterMode);
       result.records = result.records.concat(vRecords);
       result.stats.violations = vRecords.length;
     }
 
     // ═══ 2. التأخر الصباحي ═══
     if (type === 'tardiness' || type === 'all') {
-      var tRecords = getNoorTardinessRecords_(ss, stage);
+      var tRecords = getNoorTardinessRecords_(ss, stage, filterMode);
       result.records = result.records.concat(tRecords);
       result.stats.tardiness = tRecords.length;
     }
 
     // ═══ 3. السلوك الإيجابي (تعويضية + متمايز) ═══
     if (type === 'compensation' || type === 'excellent' || type === 'positive' || type === 'all') {
-      var pRecords = getNoorPositiveRecords_(ss, stage);
+      var pRecords = getNoorPositiveRecords_(ss, stage, filterMode);
 
       if (type === 'compensation') {
         var compRecords = pRecords.filter(function(r) { return r._type === 'compensation'; });
@@ -55,7 +56,7 @@ function getNoorPendingRecords(stage, type) {
 
     // ═══ 4. الغياب اليومي ═══
     if (type === 'absence' || type === 'all') {
-      var aRecords = getNoorAbsenceRecords_(ss, stage);
+      var aRecords = getNoorAbsenceRecords_(ss, stage, filterMode);
       result.records = result.records.concat(aRecords);
       result.stats.absence = aRecords.length;
     }
@@ -84,24 +85,27 @@ function getNoorPendingRecords(stage, type) {
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * جلب المخالفات المعلقة — فلتر: حالة_نور فارغة/معلق + آخر 14 يوم
+ * جلب المخالفات المعلقة — فلتر: حالة_نور فارغة/معلق
+ * filterMode: 'today' = اليوم فقط، 'all' = كل غير الموثق
  */
-function getNoorViolationRecords_(ss, stage) {
+function getNoorViolationRecords_(ss, stage, filterMode) {
   var sheetName = getSheetName_('المخالفات', stage);
   var sheet = findSheet_(ss, sheetName);
   if (!sheet || sheet.getLastRow() < 2) return [];
 
   var records = getSheetAsRecords_(sheet);
-  var cutoff = getDateCutoff_(14);
+  var cutoff = (filterMode === 'today') ? getDateCutoff_(0) : null;
 
   return records.filter(function(r) {
     var noorStatus = String(r['حالة_نور'] || '').trim();
     if (noorStatus !== '' && noorStatus !== 'معلق') return false;
-    // فلتر 14 يوم
-    var dateStr = String(r['التاريخ_الميلادي'] || r['التاريخ الميلادي'] || '');
-    if (dateStr && cutoff) {
-      var recDate = parseDateSafe_(dateStr);
-      if (recDate && recDate < cutoff) return false;
+    // فلتر التاريخ حسب الوضع
+    if (cutoff) {
+      var dateStr = String(r['التاريخ_الميلادي'] || r['التاريخ الميلادي'] || '');
+      if (dateStr) {
+        var recDate = parseDateSafe_(dateStr);
+        if (recDate && recDate < cutoff) return false;
+      }
     }
     return true;
   }).map(function(r) {
@@ -128,25 +132,28 @@ function getNoorViolationRecords_(ss, stage) {
 }
 
 /**
- * جلب سجلات التأخر المعلقة — فلتر: حالة_نور فارغة/معلق + آخر 14 يوم
+ * جلب سجلات التأخر المعلقة — فلتر: حالة_نور فارغة/معلق
+ * filterMode: 'today' = اليوم فقط، 'all' = كل غير الموثق
  * التأخر يُدخل في نور كمخالفة سلوكية: التأخر الصباحي (الدرجة الأولى)
  */
-function getNoorTardinessRecords_(ss, stage) {
+function getNoorTardinessRecords_(ss, stage, filterMode) {
   var sheetName = getSheetName_('التأخر', stage);
   var sheet = findSheet_(ss, sheetName);
   if (!sheet || sheet.getLastRow() < 2) return [];
 
   var records = getSheetAsRecords_(sheet);
-  var cutoff = getDateCutoff_(14);
+  var cutoff = (filterMode === 'today') ? getDateCutoff_(0) : null;
 
   return records.filter(function(r) {
     var noorStatus = String(r['حالة_نور'] || '').trim();
     if (noorStatus !== '' && noorStatus !== 'معلق') return false;
-    // فلتر 14 يوم (التأخر يستخدم التاريخ_هجري فقط، لذا نتحقق من وقت_الإدخال)
-    var dateStr = String(r['وقت_الإدخال'] || r['وقت الإدخال'] || '');
-    if (dateStr && cutoff) {
-      var recDate = parseDateSafe_(dateStr);
-      if (recDate && recDate < cutoff) return false;
+    // فلتر التاريخ حسب الوضع
+    if (cutoff) {
+      var dateStr = String(r['وقت_الإدخال'] || r['وقت الإدخال'] || '');
+      if (dateStr) {
+        var recDate = parseDateSafe_(dateStr);
+        if (recDate && recDate < cutoff) return false;
+      }
     }
     return true;
   }).map(function(r) {
@@ -160,24 +167,26 @@ function getNoorTardinessRecords_(ss, stage) {
 
 /**
  * جلب السلوك الإيجابي المعلق — يُقسم إلى: تعويضية / متمايز
- * فلتر: حالة_نور فارغة/معلق + آخر 14 يوم
+ * filterMode: 'today' = اليوم فقط، 'all' = كل غير الموثق
  */
-function getNoorPositiveRecords_(ss, stage) {
+function getNoorPositiveRecords_(ss, stage, filterMode) {
   var sheetName = getSheetName_('السلوك_الإيجابي', stage);
   var sheet = findSheet_(ss, sheetName);
   if (!sheet || sheet.getLastRow() < 2) return [];
 
   var records = getSheetAsRecords_(sheet);
-  var cutoff = getDateCutoff_(14);
+  var cutoff = (filterMode === 'today') ? getDateCutoff_(0) : null;
 
   return records.filter(function(r) {
     var noorStatus = String(r['حالة_نور'] || '').trim();
     if (noorStatus !== '' && noorStatus !== 'معلق') return false;
-    // فلتر 14 يوم
-    var dateStr = String(r['التاريخ_الميلادي'] || r['التاريخ الميلادي'] || r['وقت_الإدخال'] || r['وقت الإدخال'] || '');
-    if (dateStr && cutoff) {
-      var recDate = parseDateSafe_(dateStr);
-      if (recDate && recDate < cutoff) return false;
+    // فلتر التاريخ حسب الوضع
+    if (cutoff) {
+      var dateStr = String(r['التاريخ_الميلادي'] || r['التاريخ الميلادي'] || r['وقت_الإدخال'] || r['وقت الإدخال'] || '');
+      if (dateStr) {
+        var recDate = parseDateSafe_(dateStr);
+        if (recDate && recDate < cutoff) return false;
+      }
     }
     return true;
   }).map(function(r) {
@@ -200,34 +209,57 @@ function getNoorPositiveRecords_(ss, stage) {
 }
 
 /**
- * جلب الغياب اليومي المعلق — فلتر: حالة_نور فارغة/معلق + اليوم فقط
+ * جلب الغياب اليومي المعلق — فلتر: حالة_نور فارغة/معلق
+ * filterMode: 'today' = اليوم فقط، 'all' = كل غير الموثق
  */
-function getNoorAbsenceRecords_(ss, stage) {
+function getNoorAbsenceRecords_(ss, stage, filterMode) {
   var sheetName = getSheetName_('الغياب_اليومي', stage);
   var sheet = findSheet_(ss, sheetName);
   if (!sheet || sheet.getLastRow() < 2) return [];
 
   var records = getSheetAsRecords_(sheet);
-  var today = getTodayHijriDate_();
+
+  // فلتر التاريخ حسب الوضع
+  var today = (filterMode === 'today') ? getTodayHijriDate_() : null;
 
   return records.filter(function(r) {
     var noorStatus = String(r['حالة_نور'] || '').trim();
     if (noorStatus !== '' && noorStatus !== 'معلق') return false;
-    // فلتر اليوم فقط (الغياب يُدخل في نفس اليوم قبل 11:59)
-    var dateStr = String(r['التاريخ_هجري'] || r['التاريخ هجري'] || '');
-    if (today && dateStr) {
-      if (normalizeHijriDate_(dateStr) !== normalizeHijriDate_(today)) return false;
+    // فلتر اليوم فقط إذا كان الوضع 'today'
+    if (today) {
+      var dateStr = String(r['التاريخ_هجري'] || r['التاريخ هجري'] || '');
+      if (dateStr && normalizeHijriDate_(dateStr) !== normalizeHijriDate_(today)) return false;
     }
     return true;
   }).map(function(r) {
     r._type = 'absence';
     r._noorMode = NOOR_DROPDOWN_MAP.modes.absence;
 
-    var absType = String(r['نوع_الغياب'] || r['نوع الغياب'] || '').trim();
-    var mapping = NOOR_DROPDOWN_MAP.absence[absType];
+    // ★ نوع_الغياب يخزّن "يوم كامل" أو "حصة" — ليس نوع العذر
+    // المطلوب لنور هو نوع العذر (بعذر/بدون عذر) وليس نوع الغياب
+    var excuseType = String(r['نوع_العذر'] || r['نوع العذر'] || '').trim();
+    var absStatus = String(r['حالة_التأخر'] || r['حالة التأخر'] || '').trim();
+
+    // تحديد قيمة نور بناءً على نوع العذر
+    var absKey = '';
+    if (excuseType === 'مقبول' || excuseType === 'بعذر' || excuseType === 'معذور') {
+      absKey = 'غياب بعذر';
+    } else if (excuseType === 'منصة بعذر' || excuseType.indexOf('منصة') >= 0 && excuseType.indexOf('بدون') === -1) {
+      absKey = 'غياب منصة بعذر';
+    } else if (excuseType === 'منصة بدون عذر' || excuseType.indexOf('منصة') >= 0 && excuseType.indexOf('بدون') >= 0) {
+      absKey = 'غياب منصة بدون عذر';
+    } else {
+      absKey = 'غياب بدون عذر';
+    }
+
+    var mapping = NOOR_DROPDOWN_MAP.absence[absKey];
     if (mapping) {
       r._noorValue = mapping.noorValue;
       r._noorText = mapping.noorText;
+    } else {
+      // قيمة افتراضية: غياب بدون عذر
+      r._noorValue = '48,';
+      r._noorText = 'الغياب بدون عذر مقبول';
     }
     return r;
   });
@@ -308,28 +340,61 @@ function updateNoorStatus(stage, updates) {
 
 /**
  * جلب إحصائيات السجلات المعلقة لكل نوع
+ * يرجع إحصائيات مزدوجة: today (اليوم) + all (كل غير الموثق)
+ * @param {string} stage - المرحلة
+ * @param {string} filterMode - اختياري: 'today'/'all' — إذا لم يحدد يرجع الاثنين
  */
-function getNoorStats(stage) {
+function getNoorStats(stage, filterMode) {
   try {
-    var pending = getNoorPendingRecords(stage, 'all');
     var documentedToday = countDocumentedToday_(stage);
+
+    // إذا طُلب وضع محدد فقط
+    if (filterMode === 'today' || filterMode === 'all') {
+      var pending = getNoorPendingRecords(stage, 'all', filterMode);
+      return {
+        success: true,
+        pending: {
+          violations:   pending.stats.violations   || 0,
+          tardiness:    pending.stats.tardiness    || 0,
+          compensation: pending.stats.compensation || 0,
+          excellent:    pending.stats.excellent    || 0,
+          absence:      pending.stats.absence      || 0,
+          total:        pending.total              || 0,
+          documentedToday: documentedToday
+        }
+      };
+    }
+
+    // الافتراضي: إرجاع إحصائيات اليوم + كل غير الموثق معاً
+    var todayPending = getNoorPendingRecords(stage, 'all', 'today');
+    var allPending   = getNoorPendingRecords(stage, 'all', 'all');
+
     return {
       success: true,
       pending: {
-        violations:   pending.stats.violations   || 0,
-        tardiness:    pending.stats.tardiness    || 0,
-        compensation: pending.stats.compensation || 0,
-        excellent:    pending.stats.excellent    || 0,
-        absence:      pending.stats.absence      || 0,
-        total:        pending.total              || 0,
+        violations:   todayPending.stats.violations   || 0,
+        tardiness:    todayPending.stats.tardiness    || 0,
+        compensation: todayPending.stats.compensation || 0,
+        excellent:    todayPending.stats.excellent    || 0,
+        absence:      todayPending.stats.absence      || 0,
+        total:        todayPending.total              || 0,
         documentedToday: documentedToday
+      },
+      allPending: {
+        violations:   allPending.stats.violations   || 0,
+        tardiness:    allPending.stats.tardiness    || 0,
+        compensation: allPending.stats.compensation || 0,
+        excellent:    allPending.stats.excellent    || 0,
+        absence:      allPending.stats.absence      || 0,
+        total:        allPending.total              || 0
       }
     };
   } catch (e) {
     return {
       success: false,
       error: e.message,
-      pending: { violations: 0, tardiness: 0, compensation: 0, excellent: 0, absence: 0, total: 0, documentedToday: 0 }
+      pending: { violations: 0, tardiness: 0, compensation: 0, excellent: 0, absence: 0, total: 0, documentedToday: 0 },
+      allPending: { violations: 0, tardiness: 0, compensation: 0, excellent: 0, absence: 0, total: 0 }
     };
   }
 }
@@ -445,6 +510,9 @@ function getTodayHijriDate_() {
 function normalizeHijriDate_(dateStr) {
   if (!dateStr) return '';
   var s = String(dateStr).trim();
+  // إزالة لاحقة "هـ" والأحرف غير المرئية (zero-width)
+  s = s.replace(/[\u200F\u200E\u061C]/g, '');
+  s = s.replace(/\s*هـ\s*$/, '').trim();
   // تحويل الأرقام العربية إلى إنجليزية
   s = s.replace(/[٠-٩]/g, function(d) {
     return '٠١٢٣٤٥٦٧٨٩'.indexOf(d);

@@ -1296,7 +1296,7 @@ function printAttList(type) {
         ? '<th>م</th><th>اسم الطالب</th><th>الصف</th><th>اليوم والتاريخ</th><th>نوع التأخر</th><th>الحصة</th>'
         : '<th>م</th><th>اسم الطالب</th><th>الصف</th><th>اليوم والتاريخ</th><th>وقت الخروج</th><th>السبب</th><th>المستلم</th>';
     
-    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var colCount = type === 'late' ? 6 : 7;
     var headersFormatted = headers.replace(/<th>/g, '<th class="col-header">');
     
@@ -1328,7 +1328,7 @@ function printArchive() {
         }
         
         var title = type === 'late' ? 'أرشيف التأخر' : 'أرشيف الاستئذان';
-        var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+        var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
         
         // Extract rows from existing table
         var tbody = table.querySelector('tbody');

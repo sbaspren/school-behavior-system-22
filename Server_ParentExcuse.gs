@@ -101,9 +101,8 @@ function getParentExcusePageData_(token) {
 
     // جلب تاريخ اليوم هجري
     var now = new Date();
-    var hijriDate = '';
-    try { hijriDate = now.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }); } catch(e) { hijriDate = Utilities.formatDate(now, 'Asia/Riyadh', 'yyyy/MM/dd'); }
-    var dayName = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'][now.getDay()];
+    var hijriDate = getHijriDateFull_(now).hijriStr || Utilities.formatDate(now, 'Asia/Riyadh', 'yyyy/MM/dd');
+    var dayName = getDayNameAr_(now);
 
     // جلب اسم المدرسة من الإعدادات
     var schoolName = '';
@@ -300,8 +299,7 @@ function submitParentExcuse(data) {
     }
 
     var now = new Date();
-    var hijriDate = '';
-    try { hijriDate = now.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }); } catch(e) { hijriDate = Utilities.formatDate(now, 'Asia/Riyadh', 'yyyy/MM/dd'); }
+    var hijriDate = getHijriDateFull_(now).hijriStr || Utilities.formatDate(now, 'Asia/Riyadh', 'yyyy/MM/dd');
 
     // ★ تاريخ الغياب من النموذج (أو اليوم كافتراضي)
     var absenceDate = data.absenceDate || Utilities.formatDate(now, 'Asia/Riyadh', 'yyyy-MM-dd');

@@ -430,7 +430,7 @@ function printPositiveBehaviorList() {
     
     if (filtered.length === 0) { showEnhancedToast('warning', 'لا توجد بيانات للطباعة'); return; }
     
-    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     
     // ترتيب
     var gradeOrder = ['أول', 'ثاني', 'ثالث', 'رابع', 'خامس', 'سادس'];

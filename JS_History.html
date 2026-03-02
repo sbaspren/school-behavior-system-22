@@ -272,6 +272,7 @@
             class: record['الفصل'],
             violationDate: record['التاريخ الهجري'],
             violationDegree: record['الدرجة'],
+            violationDay: record['التاريخ الميلادي'] ? new Date(record['التاريخ الميلادي']).toLocaleDateString('ar-SA', { weekday: 'long' }) : '',
             violationText: record['نص المخالفة'],
             procedures: record['الإجراءات'] ? record['الإجراءات'].split('\n') : []
         };
@@ -449,7 +450,7 @@
                             <th colspan="7" style="border:none; padding-bottom:10px; background:none;">
                                 ${getLetterheadHtml_()}
                                 <div style="text-align:center; font-size:18pt; font-weight:bold; margin:5px 0;">${title}</div>
-                                <div style="text-align:center; font-size:12pt;">تاريخ الطباعة: ${tools.toIndic(new Date().toLocaleDateString('ar-SA-u-ca-islamic'))}</div>
+                                <div style="text-align:center; font-size:12pt;">تاريخ الطباعة: ${tools.toIndic(new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura'))}</div>
                             </th>
                         </tr>
                         <tr>

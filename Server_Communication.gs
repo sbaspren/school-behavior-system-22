@@ -47,7 +47,10 @@ function getCommunicationSheet(stage) {
     
     // تجميد الصف الأول
     sheet.setFrozenRows(1);
-    
+
+    // حماية عمود التاريخ الهجري من التحويل التلقائي
+    sheet.getRange(1, 2, sheet.getMaxRows(), 1).setNumberFormat('@');
+
     // ضبط عرض الأعمدة
     sheet.setColumnWidth(1, 40);   // م
     sheet.setColumnWidth(2, 100);  // التاريخ الهجري
@@ -462,7 +465,7 @@ function loadCommRecords(stage) {
     var time = row[3];
     
     if (hijriDate instanceof Date) {
-      hijriDate = Utilities.formatDate(hijriDate, Session.getScriptTimeZone(), 'yyyy/MM/dd');
+      hijriDate = readHijriCellValue_(hijriDate);
     }
     if (miladiDate instanceof Date) {
       miladiDate = Utilities.formatDate(miladiDate, Session.getScriptTimeZone(), 'yyyy/MM/dd');

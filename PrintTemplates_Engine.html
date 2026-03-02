@@ -157,7 +157,7 @@
             case 'ishar_wali_amr':
                 fillField('studentName', data.studentName);
                 fillField('studentName_2', data.studentName);
-                fillField('grade', data.grade);
+                fillField('grade', data.grade, true);
                 fillField('violationDay', data.violationDay);
                 fillField('violationDate', data.violationDate, true);
                 fillField('violationDegree', data.violationDegree, true);
@@ -173,7 +173,7 @@
             // ===== نموذج 2: تعهد سلوكي =====
             case 'tahood_slooki':
                 fillField('tahood_studentName', data.studentName);
-                fillField('tahood_grade', data.grade);
+                fillField('tahood_grade', data.grade, true);
                 fillField('tahood_day', data.violationDay);
                 fillField('tahood_date', data.violationDate, true);
                 fillField('tahood_degree', data.violationDegree, true);
@@ -183,7 +183,7 @@
             // ===== نموذج 3: دعوة ولي أمر =====
             case 'dawat_wali_amr':
                 fillField('dawat_studentName', data.studentName);
-                fillField('dawat_grade', data.grade);
+                fillField('dawat_grade', data.grade, true);
                 fillField('dawat_deputyName', data.deputyName);
                 // ★ بيانات من المنبثقة
                 if (data.visitDay) fillField('dawat_day', data.visitDay);
@@ -196,7 +196,7 @@
             // ===== نموذج 4: محضر ضبط واقعة =====
             case 'mahdar_dab_wakea':
                 fillField('mahdar_studentName', data.studentName);
-                fillField('mahdar_grade', data.grade);
+                fillField('mahdar_grade', data.grade, true);
                 fillField('mahdar_day', data.violationDay);
                 fillField('mahdar_date', data.violationDate, true);
                 fillField('mahdar_problem', '● ' + (data.violationText || ''));
@@ -240,7 +240,7 @@
             // ===== نموذج 5: محضر لجنة (مخالفة) =====
             case 'mahdar_lajnah':
                 fillField('lajnah_studentName', data.studentName);
-                fillField('lajnah_grade', data.grade);
+                fillField('lajnah_grade', data.grade, true);
                 fillField('lajnah_day', data.violationDay);
                 fillField('lajnah_date', data.violationDate, true);
                 fillField('lajnah_degree', data.violationDegree, true);
@@ -265,7 +265,7 @@
             // ===== نموذج 6: محضر لجنة (غياب) =====
             case 'mahdar_lajnah_absence':
                 fillField('lajnah_abs_studentName', data.studentName);
-                fillField('lajnah_abs_grade', data.grade);
+                fillField('lajnah_abs_grade', data.grade, true);
                 fillField('lajnah_abs_day', data.violationDay);
                 fillField('lajnah_abs_date', data.violationDate, true);
                 // الحقول الجديدة بعد سطر "وصول غيابه إلى:"
@@ -292,11 +292,11 @@
             // ===== نموذج 7: إحالة طالب =====
             case 'ehalat_talib':
                 fillField('ehala_studentName', data.studentName);
-                fillField('ehala_grade', data.grade);
+                fillField('ehala_grade', data.grade, true);
                 fillField('ehala_text', '● ' + (data.violationText || ''));
 
                 // ✅ التاريخ - إذا لم يكن موجوداً، استخدم تاريخ اليوم الهجري
-                const ehalaDate = data.violationDate || new Date().toLocaleDateString('ar-SA-u-ca-islamic');
+                const ehalaDate = data.violationDate || new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura');
                 fillField('ehala_date', ehalaDate, true);
 
                 fillField('ehala_degree', data.violationDegree, true);
@@ -316,7 +316,7 @@
                 // 1. تعبئة التاريخ
                 const d = new Date();
                 const dayName = d.toLocaleDateString('ar-SA', { weekday: 'long' });
-                const dateStr = data.violationDate || d.toLocaleDateString('ar-SA-u-ca-islamic');
+                const dateStr = data.violationDate || d.toLocaleDateString('ar-SA-u-ca-islamic-umalqura');
                 fillField('ge_date', dayName + ' ' + dateStr, true);
 
                 // 2. تعبئة اسم الوكيل
@@ -339,7 +339,7 @@
                             <td style="text-align: right; padding-right:5px; font-weight:bold;">
                                 ${escapeHtml(shortName)}
                             </td>
-                            <td>${escapeHtml(s.grade)}</td>
+                            <td>${escapeHtml(toIndic(s.grade))}</td>
                             <td class="indic-num">${toIndic(s.unexcused)}</td>
                             <td class="indic-num">${toIndic(s.excused)}</td>
                             <td></td>
@@ -353,8 +353,8 @@
             case 'rasd_slooki':
                 // 1. تعبئة بيانات الطالب
                 fillField('rasd_s_studentName', data.studentName);
-                fillField('rasd_s_grade', data.grade);
-                fillField('rasd_s_class', data.class);
+                fillField('rasd_s_grade', data.grade, true);
+                fillField('rasd_s_class', data.class, true);
 
                 // 2. تعبئة اسم الوكيل
                 if (data.deputyName) {
@@ -399,8 +399,8 @@
             case 'tawid_darajat':
                 // 1. البيانات الأساسية للطالب
                 fillField('tawid_studentName', data.studentName);
-                fillField('tawid_grade', data.grade);
-                fillField('tawid_class', data.class);
+                fillField('tawid_grade', data.grade, true);
+                fillField('tawid_class', data.class, true);
 
                 // 2. بيانات المخالفة (تأتي من الواجهة الفخمة أو زر المخالفة)
                 if (data.violationInfo) {
@@ -422,13 +422,13 @@
             // ===== نموذج 11: سلوك متميز =====
             case 'rasd_tamayuz':
                 fillField('rasd_studentName', data.studentName);
-                fillField('rasd_grade', data.grade);
+                fillField('rasd_grade', data.grade, true);
                 break;
 
             // ===== نموذج 12: غياب بدون عذر =====
             case 'ghiab_bidon_ozr':
                 fillField('ghiab_no_studentName', data.studentName);
-                fillField('ghiab_no_grade', data.grade);
+                fillField('ghiab_no_grade', data.grade, true);
                 if (data.deputyName) {
                     fillField('ghiab_no_deputy', data.deputyName);
                 }
@@ -437,7 +437,7 @@
             // ===== نموذج 13: غياب بعذر =====
             case 'ghiab_ozr':
                 fillField('ghiab_ozr_studentName', data.studentName);
-                fillField('ghiab_ozr_grade', data.grade);
+                fillField('ghiab_ozr_grade', data.grade, true);
                 if (data.deputyName) {
                     fillField('ghiab_ozr_deputy', data.deputyName);
                 }
@@ -446,7 +446,7 @@
             // ===== نموذج 14: تعهد حضور (المطور) =====
             case 'tahood_hodoor':
                 fillField('tahood_h_studentName', data.studentName);
-                fillField('tahood_h_grade', data.grade);
+                fillField('tahood_h_grade', data.grade, true);
 
                 // استقبال الرقمين بشكل منفصل كما في الإحالة
                 fillField('tahood_h_unexcused', data.unexcusedDays, true); // true للأرقام الهندية
@@ -460,7 +460,7 @@
                 // 1. تعبئة التاريخ
                 const d_gt = new Date();
                 const dayName_gt = d_gt.toLocaleDateString('ar-SA', { weekday: 'long' });
-                const dateStr_gt = data.violationDate || d_gt.toLocaleDateString('ar-SA-u-ca-islamic');
+                const dateStr_gt = data.violationDate || d_gt.toLocaleDateString('ar-SA-u-ca-islamic-umalqura');
                 fillField('gt_date', dayName_gt + ' ' + dateStr_gt, true);
 
                 // 2. تعبئة اسم الوكيل
@@ -482,7 +482,7 @@
                             <td style="text-align: right; padding-right:5px; font-weight:bold;">
                                 ${escapeHtml(shortName)}
                             </td>
-                            <td>${escapeHtml(s.grade)}</td>
+                            <td>${escapeHtml(toIndic(s.grade))}</td>
                             <td class="indic-num">${toIndic(s.unexcused)}</td>
                             <td class="indic-num">${toIndic(s.excused)}</td>
                             <td></td> `;
@@ -494,7 +494,7 @@
             // ===== نموذج 16: عقد التزام مدرسي =====
             case 'iltizam_madrasi':
                 fillField('iltizam_name', data.studentName);
-                fillField('iltizam_grade', data.grade);
+                fillField('iltizam_grade', data.grade, true);
                 fillField('iltizam_date', data.violationDate, true);
                 fillField('iltizam_student_sign', data.studentName);
                 break;
@@ -502,7 +502,7 @@
             // ===== نموذج 18: حالة عالية الخطورة =====
             case 'high_risk':
                 fillField('risk_studentName', data.studentName);
-                fillField('risk_grade', data.grade);
+                fillField('risk_grade', data.grade, true);
                 // ★ نوع الخطر — تفعيل ✓
                 if (data.riskTypes && data.riskTypes.length > 0) {
                     var riskLabels = ['حيازة سلاح','مخدرات','تهديد بالعنف','مضاربة جماعية','تحرش'];
@@ -536,8 +536,8 @@
             // ===== نموذج 19: إبلاغ إيذاء =====
             case 'eblagh_etha':
                 fillField('eblagh_victim_name', data.studentName);
-                fillField('eblagh_grade', data.grade);
-                const eblaghDate = data.violationDate || new Date().toLocaleDateString('ar-SA-u-ca-islamic');
+                fillField('eblagh_grade', data.grade, true);
+                const eblaghDate = data.violationDate || new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura');
                 fillField('eblagh_date', eblaghDate, true);
                 // ★ بيانات المبلغ
                 if (data.eblaghReporter) fillField('eblagh_reporter', data.eblaghReporter);
@@ -558,15 +558,15 @@
             // ===== نموذج 20: خطة تعديل سلوك =====
             case 'khota_tadeel':
                 fillField('khota_studentName', data.studentName);
-                fillField('khota_grade', data.grade);
-                fillField('khota_class', data.class);
+                fillField('khota_grade', data.grade, true);
+                fillField('khota_class', data.class, true);
                 // ★ بيانات من المنبثقة
                 if (data.khotaDob) fillField('khota_dob', data.khotaDob, true);
-                if (data.khotaAge) fillField('khota_age', data.khotaAge);
+                if (data.khotaAge) fillField('khota_age', data.khotaAge, true);
                 if (data.khotaStart) fillField('khota_start', data.khotaStart, true);
                 if (data.khotaEnd) fillField('khota_end', data.khotaEnd, true);
                 if (data.khotaProblem) fillField('khota_problem', data.khotaProblem);
-                if (data.khotaDegree) fillField('khota_degree', data.khotaDegree);
+                if (data.khotaDegree) fillField('khota_degree', data.khotaDegree, true);
                 if (data.khotaDesc) fillField('khota_desc', data.khotaDesc);
                 // ★ المظاهر السلوكية
                 if (data.khotaManifestations && data.khotaManifestations.length > 0) {
@@ -579,7 +579,7 @@
             // ===== نموذج 17: سجل متابعة ورصد مخالفات (للمعلم) =====
             case 'rasd_moalem':
                 if (data.subject) fillField('rasd_m_subject', data.subject);
-                if (data.grade) fillField('rasd_m_grade', data.grade);
+                if (data.grade) fillField('rasd_m_grade', data.grade, true);
                 if (data.teacherName) fillField('rasd_m_teacher', data.teacherName);
                 // ★ تعبئة جدول المخالفات ديناميكياً
                 if (data.violations && data.violations.length > 0) {
@@ -609,15 +609,15 @@
             // ===== حالة جديدة: نموذج إحالة غياب =====
             case 'ehalat_absence':
                 fillField('ehala_abs_studentName', data.studentName);
-                fillField('ehala_abs_grade', data.grade);
+                fillField('ehala_abs_grade', data.grade, true);
                 fillField('ehala_abs_unexcused', data.unexcusedDays, true);
                 fillField('ehala_abs_excused', data.excusedDays, true);
                 break;
             case 'tawtheeq_tawasol':
                 fillField('tawtheeq_studentName', data.studentName);
-                fillField('tawtheeq_grade', data.grade);
+                fillField('tawtheeq_grade', data.grade, true);
                 fillField('tawtheeq_day', data.contactDay || data.violationDay);
-                fillField('tawtheeq_date', data.contactDate || data.violationDate);
+                fillField('tawtheeq_date', data.contactDate || data.violationDate, true);
                 fillField('tawtheeq_contactType', data.contactType);
                 fillField('tawtheeq_contactReason', data.contactReason);
                 fillField('tawtheeq_contactResult', data.contactResult || 'تم التواصل بنجاح');
@@ -628,7 +628,7 @@
             case 'mashajara':
                 fillField('mashajara_day', data.day);
                 fillField('mashajara_date', data.date, true);
-                fillField('mashajara_time', data.time);
+                fillField('mashajara_time', data.time, true);
                 fillField('mashajara_location', data.location);
                 fillField('mashajara_initiator', data.initiator);
                 fillField('mashajara_desc', data.description);

@@ -43,7 +43,7 @@ function getDailyAbsenceHeaders_() {
     'رقم_الطالب', 'اسم_الطالب', 'الصف', 'الفصل', 'رقم_الجوال',
     'نوع_الغياب', 'الحصة', 'التاريخ_هجري', 'اليوم', 'المسجل',
     'وقت_الإدخال', 'حالة_الاعتماد', 'نوع_العذر', 'تم_الإرسال',
-    'حالة_التأخر', 'وقت_الحضور', 'ملاحظات'
+    'حالة_التأخر', 'وقت_الحضور', 'ملاحظات', 'حالة_نور'
   ];
 }
 
@@ -135,7 +135,8 @@ function buildDailyAbsenceRow_(params) {
     'لا',                                               // 14: تم_الإرسال
     'غائب',                                             // 15: حالة_التأخر
     '',                                                 // 16: وقت_الحضور
-    sanitizeInput_(String(params.notes       || ''))   // 17: ملاحظات
+    sanitizeInput_(String(params.notes       || '')),  // 17: ملاحظات
+    ''                                                  // 18: حالة_نور (فارغ = معلق)
   ];
 }
 
@@ -147,7 +148,7 @@ function writeDailyAbsenceRows_(sheet, rows) {
   var startRow = sheet.getLastRow() + 1;
   // ★ تنسيق عمود التاريخ الهجري كنص قبل الكتابة (يمنع Sheets من تحويله لـ Date)
   sheet.getRange(startRow, 8, rows.length, 1).setNumberFormat('@');
-  sheet.getRange(startRow, 1, rows.length, 17).setValues(rows);
+  sheet.getRange(startRow, 1, rows.length, 18).setValues(rows);
   return rows.length;
 }
 
@@ -267,7 +268,11 @@ function getAbsenceArchive(stage, dateFrom, dateTo) {
       for (var j in headerMap) {
         var value = row[j];
         if (value instanceof Date) {
-          value = Utilities.formatDate(value, tz, 'yyyy/MM/dd HH:mm');
+          if (headerMap[j] === 'التاريخ_هجري') {
+            value = readHijriCellValue_(value);
+          } else {
+            value = Utilities.formatDate(value, tz, 'yyyy/MM/dd HH:mm');
+          }
         }
         record[headerMap[j]] = String(value || '');
       }
@@ -642,9 +647,8 @@ function sendAbsenceNotifications(stage, rowIndices) {
     
     var today = new Date();
     var dayName = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'][today.getDay()];
-    var hijriDate = '';
-    try { hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }); } catch(e) { hijriDate = Utilities.formatDate(today, 'Asia/Riyadh', 'yyyy/MM/dd'); }
-    
+    var hijriDate = getHijriDateFull_(today).hijriStr || Utilities.formatDate(today, 'Asia/Riyadh', 'yyyy/MM/dd');
+
     var sentCount = 0;
     var failCount = 0;
     var noPhoneCount = 0;
@@ -684,7 +688,7 @@ function sendAbsenceNotifications(stage, rowIndices) {
       var message = '📋 *إشعار غياب*\n\nالسلام عليكم ورحمة الله وبركاته\nولي أمر الطالب: *' + studentName + '*\n\nنفيدكم بأن ابنكم *' + studentName + '* غائب اليوم\n📅 ' + dayName + ' - ' + hijriDate + '\nالصف: ' + grade + ' - الفصل: ' + cls;
 
       if (parentLink) {
-        message += '\n\n📝 لكتابة العذر:\n' + parentLink + '\n(صالح لمدة ٢٤ ساعة)';
+        message += '\n\n📝 *لتقديم عذر الغياب:*\nاضغط على الرابط التالي لكتابة عذر الغياب:\n' + parentLink + '\n⏳ الرابط صالح لمدة ٢٤ ساعة فقط';
       }
 
       var _schoolName = '';
@@ -746,7 +750,9 @@ function getParentExcuseLinkForStudent(studentId, stage) {
 // =================================================================
 // ★ إرسال فردي كامل من السيرفر (يبني الرسالة + الرابط + يرسل)
 // =================================================================
-function sendSingleAbsenceWithLink(stage, rowIndex) {
+function sendSingleAbsenceWithLink(stage, rowIndex, includeLink) {
+  // includeLink: true (افتراضي) = مع رابط العذر، false = نص فقط
+  if (includeLink === undefined || includeLink === null) includeLink = true;
   try {
     var ss = getSpreadsheet_();
     var sheetName = "سجل_الغياب_اليومي_" + stage;
@@ -782,25 +788,25 @@ function sendSingleAbsenceWithLink(stage, rowIndex) {
 
     var today = new Date();
     var dayName = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'][today.getDay()];
-    var hijriDate = '';
-    try { hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }); } catch(e) { hijriDate = Utilities.formatDate(today, 'Asia/Riyadh', 'yyyy/MM/dd'); }
+    var hijriDate = getHijriDateFull_(today).hijriStr || Utilities.formatDate(today, 'Asia/Riyadh', 'yyyy/MM/dd');
 
-    // ★ توليد رابط ولي الأمر
+    // ★ توليد رابط ولي الأمر (فقط إذا مطلوب)
     var parentLink = '';
-    try {
-      if (studentId) {
-        parentLink = getParentExcuseLink_(studentId, stage);
-        Logger.log('sendSingleAbsenceWithLink: link = ' + parentLink);
+    if (includeLink) {
+      try {
+        if (studentId) {
+          parentLink = getParentExcuseLink_(studentId, stage);
+        }
+      } catch(linkErr) {
+        Logger.log('sendSingleAbsenceWithLink: link error: ' + linkErr.toString());
       }
-    } catch(linkErr) {
-      Logger.log('sendSingleAbsenceWithLink: link error: ' + linkErr.toString());
     }
 
     // ★ بناء الرسالة
     var message = '📋 *إشعار غياب*\n\nالسلام عليكم ورحمة الله وبركاته\nولي أمر الطالب: *' + studentName + '*\n\nنفيدكم بأن ابنكم *' + studentName + '* غائب اليوم\n📅 ' + dayName + ' - ' + hijriDate + '\nالصف: ' + grade + ' - الفصل: ' + cls;
 
     if (parentLink) {
-      message += '\n\n📝 لكتابة العذر:\n' + parentLink + '\n(صالح لمدة ٢٤ ساعة)';
+      message += '\n\n📝 *لتقديم عذر الغياب:*\nاضغط على الرابط التالي لكتابة عذر الغياب:\n' + parentLink + '\n⏳ الرابط صالح لمدة ٢٤ ساعة فقط';
     }
 
     var _schoolName2 = '';

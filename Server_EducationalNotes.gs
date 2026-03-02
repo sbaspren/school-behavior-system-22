@@ -36,7 +36,10 @@ function getEducationalNotesSheet(stage) {
       .setFontWeight('bold')
       .setHorizontalAlignment('center');
     sheet.setFrozenRows(1);
-    
+
+    // حماية عمود التاريخ من التحويل التلقائي
+    sheet.getRange(1, 9, sheet.getMaxRows(), 1).setNumberFormat('@');
+
     // ضبط عرض الأعمدة
     sheet.setColumnWidth(1, 100);  // رقم الطالب
     sheet.setColumnWidth(2, 150);  // اسم الطالب
@@ -82,7 +85,11 @@ function getEducationalNotesRecords(stage) {
       if (!key) continue;
       var value = row[j];
       if (value instanceof Date) {
-        value = Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy/MM/dd HH:mm');
+        if (key === 'التاريخ') {
+          value = readHijriCellValue_(value);
+        } else {
+          value = Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy/MM/dd HH:mm');
+        }
       }
       record[key] = String(value || '');
     }
@@ -148,6 +155,52 @@ function saveEducationalNote(noteData) {
 }
 
 // =================================================================
+// BATCH SAVE - حفظ ملاحظة لعدة طلاب دفعة واحدة
+// =================================================================
+function saveEducationalNotesBatch(data) {
+  try {
+    var stage = data.stage;
+    if (!stage) throw new Error("المرحلة الدراسية مطلوبة");
+    var sheet = getEducationalNotesSheet(stage);
+
+    var currentUser = 'الوكيل';
+    var now = new Date();
+    var hijriDate = getHijriDate_(now);
+
+    var students = data.students || [];
+    if (students.length === 0) throw new Error("لم يتم اختيار طلاب");
+
+    var rows = [];
+    for (var i = 0; i < students.length; i++) {
+      var s = students[i];
+      rows.push([
+        s.studentId,
+        sanitizeInput_(s.studentName),
+        sanitizeInput_(s.grade),
+        sanitizeInput_(s.class),
+        s.phone || '',
+        sanitizeInput_(data.noteType),
+        sanitizeInput_(data.details || ''),
+        currentUser,
+        hijriDate,
+        now,
+        'لا'
+      ]);
+    }
+
+    if (rows.length > 0) {
+      var startRow = sheet.getLastRow() + 1;
+      sheet.getRange(startRow, 9, rows.length, 1).setNumberFormat('@');
+      sheet.getRange(startRow, 1, rows.length, 11).setValues(rows);
+    }
+
+    return { success: true, message: 'تم حفظ ' + rows.length + ' ملاحظة بنجاح', count: rows.length };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+// =================================================================
 // تحديث حالة الإرسال
 // =================================================================
 function updateEduNoteSentStatus(stage, rowIndicesOrStudentId, noteType, date) {
@@ -162,11 +215,13 @@ function updateEduNoteSentStatus(stage, rowIndicesOrStudentId, noteType, date) {
     
     // دعم الطريقتين: row indices (array) أو student ID (string/number)
     if (Array.isArray(rowIndicesOrStudentId)) {
-      // طريقة row indices (مثل المخالفات)
+      // طريقة row indices — الفهرس + 1 = رقم الصف الفعلي في الشيت
       var rowIndices = rowIndicesOrStudentId;
+      var lastRow = sheet.getLastRow();
       for (var i = 0; i < rowIndices.length; i++) {
-        var row = rowIndices[i];
-        if (row >= 2) sheet.getRange(row, sentCol + 1).setValue('نعم');
+        var row = parseInt(rowIndices[i]);
+        if (isNaN(row) || row < 1 || row + 1 > lastRow) continue;
+        sheet.getRange(row + 1, sentCol + 1).setValue('نعم');
       }
     } else {
       // طريقة student ID القديمة (للتوافقية)

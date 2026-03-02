@@ -396,7 +396,7 @@ function buildDashboardSkeleton_() {
   var dayNames = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
   var dayName = dayNames[now.getDay()];
   var dateStr = '', dateStrM = '';
-  try { dateStr = now.toLocaleDateString('ar-SA-u-ca-islamic', {day:'numeric',month:'long',year:'numeric'}); } catch(e) {}
+  try { dateStr = now.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', {day:'numeric',month:'long',year:'numeric'}); } catch(e) {}
   try { dateStrM = now.toLocaleDateString('ar-EG', {day:'numeric',month:'long',year:'numeric'}); } catch(e) {}
 
   var semProg = getSemesterProgress_();
@@ -784,7 +784,7 @@ function buildCalendarCard_() {
   var now = new Date(), year = now.getFullYear(), month = now.getMonth(), today = now.getDate();
   var daysInMonth = new Date(year, month + 1, 0).getDate(), firstDay = new Date(year, month, 1).getDay();
   var monthNames = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-  var hijriMonth = ''; try { hijriMonth = now.toLocaleDateString('ar-SA-u-ca-islamic', {month:'long',year:'numeric'}); } catch(e) {}
+  var hijriMonth = ''; try { hijriMonth = now.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', {month:'long',year:'numeric'}); } catch(e) {}
   var holidays = getHolidayDays_(month), monthEvents = getMonthEvents_(month);
   var eventDays = {}; for (var ei = 0; ei < monthEvents.length; ei++) { if (!monthEvents[ei].holiday) eventDays[monthEvents[ei].d] = monthEvents[ei]; }
 
@@ -1043,7 +1043,7 @@ function buildPrintItem_(item, idx) {
   h += '<div id="dash-pi-detail-' + idx + '" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9">';
 
   // النماذج المطلوبة
-  h += '<div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:6px">📋 النماذج المطلوبة:</div>';
+  h += '<div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:6px"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">assignment</span> النماذج المطلوبة:</div>';
   h += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">';
   for (var f = 0; f < item.neededForms.length; f++) {
     h += '<span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca">' + escapeHtml(item.neededForms[f]) + '</span>';
@@ -1051,7 +1051,7 @@ function buildPrintItem_(item, idx) {
   h += '</div>';
 
   // معلومات إضافية
-  if (item.date) h += '<div style="font-size:11px;color:var(--c-text-muted,#9da3b8);margin-bottom:6px">📅 ' + item.date + ' · ' + item.stage + '</div>';
+  if (item.date) h += '<div style="font-size:11px;color:var(--c-text-muted,#9da3b8);margin-bottom:6px"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">calendar_today</span> ' + item.date + ' · ' + item.stage + '</div>';
 
   // الأزرار
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap">';

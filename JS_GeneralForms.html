@@ -383,7 +383,7 @@
             studentName: studentName,
             grade: grade,
             class: cls,
-            violationDate: new Date().toLocaleDateString('ar-SA-u-ca-islamic'),
+            violationDate: new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura'),
             violationDay: new Date().toLocaleDateString('ar-SA', { weekday: 'long' })
         };
         
@@ -458,7 +458,7 @@
         var dayNames = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
         var defaultDay = dayNames[tomorrow.getDay()];
         var defaultHijri = '';
-        try { defaultHijri = tomorrow.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }) + ' هـ'; } catch(e) { defaultHijri = ''; }
+        try { defaultHijri = tomorrow.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' }) + ' هـ'; } catch(e) { defaultHijri = ''; }
 
         var old = document.getElementById('dawat-modal-overlay');
         if (old) old.remove();
@@ -506,13 +506,13 @@
             var d = new Date(this.value);
             if (!isNaN(d)) {
                 document.getElementById('dawat-day').value = dayNames[d.getDay()];
-                try { document.getElementById('dawat-hijri-preview').textContent = d.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }) + ' هـ'; } catch(e) {}
+                try { document.getElementById('dawat-hijri-preview').textContent = d.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' }) + ' هـ'; } catch(e) {}
             }
         });
         document.getElementById('dawat-submit-btn').addEventListener('click', function() {
             var student = _getPickedStudent(); if (!student) return;
             var hijriDate = '';
-            try { var d = new Date(document.getElementById('dawat-date').value); hijriDate = d.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }); } catch(e) { hijriDate = document.getElementById('dawat-date').value; }
+            try { var d = new Date(document.getElementById('dawat-date').value); hijriDate = d.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' }); } catch(e) { hijriDate = document.getElementById('dawat-date').value; }
             var finalData = Object.assign({}, student, {
                 visitDay: document.getElementById('dawat-day').value,
                 visitDate: hijriDate,
@@ -683,14 +683,14 @@ function _btnPrint(label, onclick) {
 function _hijriFromInput(inputId) {
     try {
         var d=new Date(document.getElementById(inputId).value);
-        var y=d.toLocaleDateString('ar-SA-u-ca-islamic',{year:'numeric'}).replace(/[^\u0660-\u0669\d]/g,'');
-        var m=d.toLocaleDateString('ar-SA-u-ca-islamic',{month:'numeric'}).replace(/[^\u0660-\u0669\d]/g,'');
-        var day=d.toLocaleDateString('ar-SA-u-ca-islamic',{day:'numeric'}).replace(/[^\u0660-\u0669\d]/g,'');
+        var y=d.toLocaleDateString('ar-SA-u-ca-islamic-umalqura',{year:'numeric'}).replace(/[^\u0660-\u0669\d]/g,'');
+        var m=d.toLocaleDateString('ar-SA-u-ca-islamic-umalqura',{month:'numeric'}).replace(/[^\u0660-\u0669\d]/g,'');
+        var day=d.toLocaleDateString('ar-SA-u-ca-islamic-umalqura',{day:'numeric'}).replace(/[^\u0660-\u0669\d]/g,'');
         return y+'/'+m+'/'+day;
     } catch(e){ return ''; }
 }
 function _hijriDate() {
-    try { return new Date().toLocaleDateString('ar-SA-u-ca-islamic'); } catch(e){ return ''; }
+    try { return new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura'); } catch(e){ return ''; }
 }
 function _dayName(d) { var n=['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت']; return n[(d||new Date()).getDay()]; }
 function _todayStr() { return new Date().toISOString().split('T')[0]; }
@@ -735,7 +735,7 @@ function _getPickedStudent() {
     if(!ss||!ss.value){ showEnhancedToast('warning','اختر طالباً أولاً'); return null; }
     var opt=ss.options[ss.selectedIndex];
     var today=new Date(), dayNames=['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
-    var hijri=''; try{hijri=today.toLocaleDateString('ar-SA-u-ca-islamic',{day:'numeric',month:'long',year:'numeric'})+' هـ';}catch(e){}
+    var hijri=''; try{hijri=today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura',{day:'numeric',month:'long',year:'numeric'})+' هـ';}catch(e){}
     return {
         studentName: opt.dataset.name||opt.text,
         grade: opt.dataset.grade||'',

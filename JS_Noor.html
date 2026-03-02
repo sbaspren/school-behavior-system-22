@@ -232,6 +232,9 @@ var NOOR_TABS = {
 };
 var NOOR_TAB_ORDER = ['violations', 'tardiness', 'compensation', 'excellent', 'absence'];
 
+// ═══ وضع الفلتر: 'today' = اليوم فقط (افتراضي)، 'all' = كل غير الموثق ═══
+var NOOR_FILTER_MODE = 'today';
+
 // ═══ خيارات القائمة المنسدلة لنوع الغياب ═══
 var ABSENCE_TYPE_OPTIONS = [
   { label: 'غياب بعذر',         value: '141,' },
@@ -268,7 +271,10 @@ function _noorFindBridge() {
         var data = JSON.parse(_noorOutbox.textContent);
         _noorOutbox.textContent = '';
         _noorHandleExtMessage(data);
-      } catch(e) {}
+      } catch(e) {
+        console.warn('Noor bridge: invalid message', e);
+        _noorOutbox.textContent = '';
+      }
     }).observe(_noorOutbox, { childList: true, characterData: true, subtree: true });
   }
 }
@@ -296,12 +302,15 @@ function _noorHandleExtMessage(data) {
 
   switch (data.action) {
     case 'connected':
+      var wasConnected = NOOR_STATE.connected;
       NOOR_STATE.connected = true;
       NOOR_STATE.extensionReady = true;
       NOOR_STATE.userName = data.userName || '';
       if (NOOR_STATE._connectTimer) { clearTimeout(NOOR_STATE._connectTimer); NOOR_STATE._connectTimer = null; }
-      renderNoorPage();
-      showEnhancedToast('success', 'تم الاتصال بنور عبر الإضافة — جاهز للتوثيق');
+      if (!wasConnected) {
+        renderNoorPage();
+        showEnhancedToast('success', 'تم الاتصال بنور عبر الإضافة — جاهز للتوثيق');
+      }
       break;
     case 'progress':
       NOOR_STATE.progress = { done: data.done, total: data.total, current: data.current };
@@ -317,9 +326,11 @@ function _noorHandleExtMessage(data) {
       noorSwitchTab_(NOOR_STATE.currentOp);
       break;
     case 'disconnected':
-      NOOR_STATE.connected = false;
-      NOOR_STATE.extensionReady = false;
-      renderNoorPage();
+      if (NOOR_STATE.connected) {
+        NOOR_STATE.connected = false;
+        NOOR_STATE.extensionReady = false;
+        renderNoorPage();
+      }
       break;
   }
 }
@@ -349,15 +360,27 @@ function renderNoorPage() {
     + '  <h1><span class="material-symbols-outlined" style="font-size:28px;vertical-align:middle;margin-left:8px">cloud_sync</span>التوثيق في نور</h1>'
     + '  <p>إدارة المخالفات والتأخر والسلوك الإيجابي والغياب — ربط مباشر مع نظام نور</p>'
     + '</div>'
-    + '<div class="hero-stats" style="flex-wrap:wrap;gap:8px">'
-    + '  <div class="hero-stat" id="noor-stat-viol"><div class="hero-stat-icon">🔴</div><div class="hero-stat-num" id="ns-viol">-</div><div class="hero-stat-label">مخالفات</div></div>'
-    + '  <div class="hero-stat" id="noor-stat-tard"><div class="hero-stat-icon">⏰</div><div class="hero-stat-num" id="ns-tard">-</div><div class="hero-stat-label">تأخر</div></div>'
-    + '  <div class="hero-stat" id="noor-stat-comp"><div class="hero-stat-icon">🔄</div><div class="hero-stat-num" id="ns-comp">-</div><div class="hero-stat-label">تعويضية</div></div>'
-    + '  <div class="hero-stat" id="noor-stat-exc"><div class="hero-stat-icon">⭐</div><div class="hero-stat-num" id="ns-exc">-</div><div class="hero-stat-label">متمايز</div></div>'
-    + '  <div class="hero-stat" id="noor-stat-abs"><div class="hero-stat-icon">📋</div><div class="hero-stat-num" id="ns-abs">-</div><div class="hero-stat-label">غياب</div></div>'
-    + '  <div class="hero-stat"><div class="hero-stat-icon">\u2705</div><div class="hero-stat-num" id="ns-documented">-</div><div class="hero-stat-label">موثق اليوم</div></div>'
+    + '<div class="hero-stats">'
+    + '  <div class="hero-stat" id="noor-stat-viol"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#ef4444">gavel</span></div><div class="hero-stat-num" id="ns-viol">-</div><div class="hero-stat-label">مخالفات</div></div>'
+    + '  <div class="hero-stat" id="noor-stat-tard"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#f59e0b">schedule</span></div><div class="hero-stat-num" id="ns-tard">-</div><div class="hero-stat-label">تأخر</div></div>'
+    + '  <div class="hero-stat" id="noor-stat-comp"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#3b82f6">autorenew</span></div><div class="hero-stat-num" id="ns-comp">-</div><div class="hero-stat-label">تعويضية</div></div>'
+    + '  <div class="hero-stat" id="noor-stat-exc"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#22c55e">stars</span></div><div class="hero-stat-num" id="ns-exc">-</div><div class="hero-stat-label">متمايز</div></div>'
+    + '  <div class="hero-stat" id="noor-stat-abs"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#f97316">event_busy</span></div><div class="hero-stat-num" id="ns-abs">-</div><div class="hero-stat-label">غياب</div></div>'
+    + '  <div class="hero-stat"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#10b981">task_alt</span></div><div class="hero-stat-num" id="ns-documented">-</div><div class="hero-stat-label">موثق اليوم</div></div>'
     + '</div>'
     + '</div></div>'
+
+    // ═══ فلتر العرض: اليوم / كل غير الموثق ═══
+    + '<div class="noor-filter-bar">'
+    + '  <div class="noor-filter-toggle">'
+    + '    <button id="noor-filter-today" class="noor-filter-btn active" onclick="noorSetFilter_(\'today\')">'
+    + '      <span class="material-symbols-outlined" style="font-size:16px">today</span>اليوم'
+    + '    </button>'
+    + '    <button id="noor-filter-all" class="noor-filter-btn" onclick="noorSetFilter_(\'all\')">'
+    + '      <span class="material-symbols-outlined" style="font-size:16px">history</span>كل غير الموثق'
+    + '    </button>'
+    + '  </div>'
+    + '</div>'
 
     // ═══ شريط الاتصال ═══
     + '<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-3 flex items-center justify-between">'
@@ -392,7 +415,10 @@ function renderNoorPage() {
 
   // ★ v4: تهيئة الجسر + Ping بدل أي window.open
   _noorFindBridge();
-  _noorPing();
+  if (!NOOR_STATE._skipNextPing) {
+    _noorPing();
+  }
+  NOOR_STATE._skipNextPing = false;
 
   noorLoadStats_();
   noorSwitchTab_('violations');
@@ -425,6 +451,7 @@ function noorDisconnect_() {
   NOOR_STATE.connected = false;
   NOOR_STATE.userName = '';
   NOOR_STATE.extensionReady = false;
+  NOOR_STATE._skipNextPing = true;
   renderNoorPage();
   showEnhancedToast('info', 'تم قطع الاتصال بنور');
 }
@@ -498,7 +525,27 @@ function noorSwitchTab_(tab) {
 
 
 // ═══════════════════════════════════════════════════════════════
-// جلب السجلات — بدون تغيير من v3
+// تبديل فلتر العرض (اليوم / كل غير الموثق)
+// ═══════════════════════════════════════════════════════════════
+function noorSetFilter_(mode) {
+  NOOR_FILTER_MODE = mode || 'today';
+  // تحديث أزرار الفلتر
+  var btnToday = document.getElementById('noor-filter-today');
+  var btnAll   = document.getElementById('noor-filter-all');
+  if (btnToday) btnToday.classList.toggle('active', mode === 'today');
+  if (btnAll)   btnAll.classList.toggle('active', mode === 'all');
+  // إعادة تحميل الإحصائيات والسجلات
+  noorLoadStats_();
+  var activeTab = document.querySelector('.tab-item.active');
+  if (activeTab) {
+    var tabKey = activeTab.getAttribute('data-tab');
+    var c = NOOR_TABS[tabKey];
+    if (c) noorLoadRecords_(c.type);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// جلب السجلات — مع filterMode
 // ═══════════════════════════════════════════════════════════════
 function noorLoadRecords_(type) {
   var tbody = document.getElementById('noor-table-body');
@@ -517,7 +564,7 @@ function noorLoadRecords_(type) {
       var tb = document.getElementById('noor-table-body');
       if (tb) tb.innerHTML = noorEmptyState_('خطأ في جلب البيانات: ' + err, 'error');
     })
-    .getNoorPendingRecords(currentStage, type);
+    .getNoorPendingRecords(currentStage, type, NOOR_FILTER_MODE);
 }
 
 
@@ -786,7 +833,7 @@ function noorApplyAbsenceTypeAll_(noorValue) {
   if (!noorValue) return;
   document.querySelectorAll('.noor-absence-select').forEach(function(sel) {
     sel.value = noorValue;
-    var idx = parseInt(sel.dataset.idx);
+    var idx = parseInt(sel.dataset.idx, 10);
     noorSetAbsenceOverride_(idx, noorValue);
   });
   showEnhancedToast('success', 'تم تطبيق نوع الغياب على جميع السجلات');
@@ -805,7 +852,7 @@ function noorStartExec_(tab) {
   // جمع السجلات المحددة مع قيم نور
   var selected = [];
   document.querySelectorAll('.noor-cb:checked').forEach(function(cb) {
-    var idx = parseInt(cb.dataset.idx);
+    var idx = parseInt(cb.dataset.idx, 10);
     if (NOOR_STATE.pendingData && NOOR_STATE.pendingData[idx]) {
       var rec = NOOR_STATE.pendingData[idx];
       var noorVal = noorResolveValue_(rec, tab);
@@ -964,7 +1011,12 @@ function noorOnComplete_(results) {
     + '</div></div>';
 
   if (results && results.updates) {
-    google.script.run.updateNoorStatus(currentStage, results.updates);
+    google.script.run
+      .withFailureHandler(function(err) {
+        console.error('updateNoorStatus failed:', err);
+        showEnhancedToast('warning', 'تم التوثيق لكن تعذّر تحديث الحالة في الجدول');
+      })
+      .updateNoorStatus(currentStage, results.updates);
   }
 
   noorLoadStats_();
@@ -972,20 +1024,27 @@ function noorOnComplete_(results) {
 
 
 // ═══════════════════════════════════════════════════════════════
-// الإحصائيات — بدون تغيير من v3
+// الإحصائيات — مع فلتر مزدوج (اليوم + كل غير الموثق)
 // ═══════════════════════════════════════════════════════════════
 function noorLoadStats_() {
   google.script.run
     .withSuccessHandler(function(res) {
       if (!res || !res.success) return;
+      // عرض إحصائيات الوضع الحالي
       var p = res.pending;
+      var a = res.allPending || p; // fallback إذا لم يأتِ allPending
+      // استخدم p (اليوم) أو a (الكل) حسب الفلتر الحالي
+      var show = (NOOR_FILTER_MODE === 'all') ? a : p;
       var el;
-      el = document.getElementById('ns-viol'); if (el) el.textContent = toArabicNum_(p.violations || 0);
-      el = document.getElementById('ns-tard'); if (el) el.textContent = toArabicNum_(p.tardiness || 0);
-      el = document.getElementById('ns-comp'); if (el) el.textContent = toArabicNum_(p.compensation || 0);
-      el = document.getElementById('ns-exc');  if (el) el.textContent = toArabicNum_(p.excellent || 0);
-      el = document.getElementById('ns-abs');  if (el) el.textContent = toArabicNum_(p.absence || 0);
+      el = document.getElementById('ns-viol'); if (el) el.textContent = toArabicNum_(show.violations || 0);
+      el = document.getElementById('ns-tard'); if (el) el.textContent = toArabicNum_(show.tardiness || 0);
+      el = document.getElementById('ns-comp'); if (el) el.textContent = toArabicNum_(show.compensation || 0);
+      el = document.getElementById('ns-exc');  if (el) el.textContent = toArabicNum_(show.excellent || 0);
+      el = document.getElementById('ns-abs');  if (el) el.textContent = toArabicNum_(show.absence || 0);
       el = document.getElementById('ns-documented'); if (el) el.textContent = toArabicNum_(p.documentedToday || 0);
+    })
+    .withFailureHandler(function(err) {
+      console.error('getNoorStats failed:', err);
     })
     .getNoorStats(currentStage);
 }

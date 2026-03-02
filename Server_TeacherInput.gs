@@ -951,7 +951,14 @@ function createSheet_(ss, sheetName, inputType) {
     .setFontColor('#ffffff')
     .setFontWeight('bold');
   sheet.setFrozenRows(1);
-  
+
+  // حماية عمود التاريخ الهجري من التحويل التلقائي
+  var hijriColMap = { 'violation': 9, 'positive': 10, 'note': 9, 'custom': 9, 'absence': 8 };
+  var hijriCol = hijriColMap[inputType];
+  if (hijriCol) {
+    sheet.getRange(1, hijriCol, sheet.getMaxRows(), 1).setNumberFormat('@');
+  }
+
   return sheet;
 }
 
@@ -959,11 +966,11 @@ function getSheetHeaders_(inputType) {
   // ★ يجب أن تتطابق مع أعمدة الواجهة الرئيسية (الوكيل)
   switch (inputType) {
     case 'absence':
-      // ★ الغياب اليومي - 17 عمود (مطابق لـ Server_Absence_Daily)
+      // ★ الغياب اليومي - 18 عمود (مطابق لـ getDailyAbsenceHeaders_ في Server_Absence_Daily)
       return ['رقم_الطالب', 'اسم_الطالب', 'الصف', 'الفصل', 'رقم_الجوال',
         'نوع_الغياب', 'الحصة', 'التاريخ_هجري', 'اليوم', 'المسجل',
         'وقت_الإدخال', 'حالة_الاعتماد', 'نوع_العذر', 'تم_الإرسال',
-        'حالة_التأخر', 'وقت_الحضور', 'ملاحظات'];
+        'حالة_التأخر', 'وقت_الحضور', 'ملاحظات', 'حالة_نور'];
     case 'violation':
       // ★ المخالفات - 18 عمود (مطابق لـ Server_Actions)
       return ['رقم الطالب', 'اسم الطالب', 'الصف', 'الفصل',

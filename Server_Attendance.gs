@@ -23,7 +23,10 @@ function getLateSheet(stage) {
       .setFontWeight('bold')
       .setHorizontalAlignment('center');
     sheet.setFrozenRows(1);
-    
+
+    // حماية عمود التاريخ الهجري من التحويل التلقائي
+    sheet.getRange(1, 8, sheet.getMaxRows(), 1).setNumberFormat('@');
+
     // ضبط عرض الأعمدة
     sheet.setColumnWidth(1, 100);  // رقم الطالب
     sheet.setColumnWidth(2, 150);  // اسم الطالب
@@ -65,7 +68,10 @@ function getPermissionSheet(stage) {
       .setFontWeight('bold')
       .setHorizontalAlignment('center');
     sheet.setFrozenRows(1);
-    
+
+    // حماية عمود التاريخ الهجري من التحويل التلقائي
+    sheet.getRange(1, 10, sheet.getMaxRows(), 1).setNumberFormat('@');
+
     // ضبط عرض الأعمدة
     sheet.setColumnWidth(1, 100);  // رقم الطالب
     sheet.setColumnWidth(2, 150);  // اسم الطالب
@@ -281,13 +287,17 @@ function getLateArchive(stage, dateFrom, dateTo) {
     for (var j = 0; j < headers.length; j++) {
       var value = row[j];
       if (value instanceof Date) {
-        value = Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy/MM/dd HH:mm');
+        if (headers[j] === 'التاريخ_هجري') {
+          value = readHijriCellValue_(value);
+        } else {
+          value = Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy/MM/dd HH:mm');
+        }
       }
       record[headers[j]] = String(value || '');
     }
     records.push(record);
   }
-  
+
   return { success: true, records: records };
 }
 
@@ -323,7 +333,9 @@ function getPermissionArchive(stage, dateFrom, dateTo) {
     for (var j = 0; j < headers.length; j++) {
       var value = row[j];
       if (value instanceof Date) {
-        if (headers[j] === 'وقت_الخروج' || headers[j] === 'وقت_التأكيد') {
+        if (headers[j] === 'التاريخ_هجري') {
+          value = readHijriCellValue_(value);
+        } else if (headers[j] === 'وقت_الخروج' || headers[j] === 'وقت_التأكيد') {
           value = Utilities.formatDate(value, Session.getScriptTimeZone(), 'HH:mm');
         } else {
           value = Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy/MM/dd HH:mm');
@@ -333,7 +345,7 @@ function getPermissionArchive(stage, dateFrom, dateTo) {
     }
     records.push(record);
   }
-  
+
   return { success: true, records: records };
 }
 
@@ -371,11 +383,33 @@ function updateLateSentStatus(stage, rowIndex) {
     var sheet = getLateSheet(stage);
     var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     var sentCol = headers.indexOf('تم_الإرسال') + 1;
-    
+
     if (sentCol > 0) {
       sheet.getRange(rowIndex + 1, sentCol).setValue('نعم');
     }
-    
+
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+// =================================================================
+// تحديث حالة الإرسال - تأخر (جماعي)
+// =================================================================
+function updateLateSentStatusBatch(stage, rowIndices) {
+  try {
+    if (!rowIndices || rowIndices.length === 0) return { success: true };
+    var sheet = getLateSheet(stage);
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var sentCol = headers.indexOf('تم_الإرسال') + 1;
+    if (sentCol <= 0) return { success: false, error: 'عمود تم_الإرسال غير موجود' };
+    var lastRow = sheet.getLastRow();
+    for (var i = 0; i < rowIndices.length; i++) {
+      var row = parseInt(rowIndices[i]);
+      if (isNaN(row) || row < 1 || row + 1 > lastRow) continue;
+      sheet.getRange(row + 1, sentCol).setValue('نعم');
+    }
     return { success: true };
   } catch (e) {
     return { success: false, error: e.toString() };
@@ -390,11 +424,33 @@ function updatePermissionSentStatus(stage, rowIndex) {
     var sheet = getPermissionSheet(stage);
     var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     var sentCol = headers.indexOf('تم_الإرسال') + 1;
-    
+
     if (sentCol > 0) {
       sheet.getRange(rowIndex + 1, sentCol).setValue('نعم');
     }
-    
+
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+// =================================================================
+// تحديث حالة الإرسال - استئذان (جماعي)
+// =================================================================
+function updatePermissionSentStatusBatch(stage, rowIndices) {
+  try {
+    if (!rowIndices || rowIndices.length === 0) return { success: true };
+    var sheet = getPermissionSheet(stage);
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var sentCol = headers.indexOf('تم_الإرسال') + 1;
+    if (sentCol <= 0) return { success: false, error: 'عمود تم_الإرسال غير موجود' };
+    var lastRow = sheet.getLastRow();
+    for (var i = 0; i < rowIndices.length; i++) {
+      var row = parseInt(rowIndices[i]);
+      if (isNaN(row) || row < 1 || row + 1 > lastRow) continue;
+      sheet.getRange(row + 1, sentCol).setValue('نعم');
+    }
     return { success: true };
   } catch (e) {
     return { success: false, error: e.toString() };

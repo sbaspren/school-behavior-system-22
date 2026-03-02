@@ -18,7 +18,7 @@ let selected_edu = new Set();
 function renderEducationalNotesPage() {
     const main = document.getElementById('main-content');
     var _hd = new Date();
-    var _hjri = _hd.toLocaleDateString('ar-SA-u-ca-islamic', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    var _hjri = _hd.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
     main.innerHTML = `
         <div class="sec-notes">
             <div class="page-hero">
@@ -28,9 +28,9 @@ function renderEducationalNotesPage() {
                         <p>${_hjri}</p>
                     </div>
                     <div class="hero-stats">
-                        <div class="hero-stat"><div class="hero-stat-icon">📝</div><div class="hero-stat-num" id="edu-today-count">٠</div><div class="hero-stat-label">ملاحظات اليوم</div></div>
-                        <div class="hero-stat"><div class="hero-stat-icon">📊</div><div class="hero-stat-num" id="edu-total-count">٠</div><div class="hero-stat-label">إجمالي الملاحظات</div></div>
-                        <div class="hero-stat"><div class="hero-stat-icon">📤</div><div class="hero-stat-num" id="edu-unsent-count">٠</div><div class="hero-stat-label">لم تُرسل</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#22c55e">edit_note</span></div><div class="hero-stat-num" id="edu-today-count">٠</div><div class="hero-stat-label">ملاحظات اليوم</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#8b5cf6">bar_chart</span></div><div class="hero-stat-num" id="edu-total-count">٠</div><div class="hero-stat-label">إجمالي الملاحظات</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#3b82f6">send</span></div><div class="hero-stat-num" id="edu-unsent-count">٠</div><div class="hero-stat-label">لم تُرسل</div></div>
                     </div>
                 </div>
             </div>
@@ -71,7 +71,7 @@ function switchEduTab(tab) {
 // =================================================================
 function renderEduTodayTab() {
     const today = new Date();
-    const hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    const hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     const miladiDate = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
     const dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
     
@@ -200,7 +200,7 @@ function printEduTodayDoc(formId, idx) {
     var printData = {
         studentName: _gE(rec, 'اسم الطالب') || '',
         grade: (_gE(rec, 'الصف') || '') + ' / ' + (_gE(rec, 'الفصل') || ''),
-        violationDate: today.toLocaleDateString('ar-SA-u-ca-islamic'),
+        violationDate: today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura'),
         violationDay: today.toLocaleDateString('ar-SA', {weekday: 'long'}),
         contactType: 'ملاحظة تربوية',
         contactReason: (_gE(rec, 'نوع الملاحظة') || '') + ' - ' + (_gE(rec, 'التفاصيل') || ''),
@@ -241,12 +241,11 @@ function displayEduTodayTable() {
     var html = '<table class="sht"><thead><tr style="background:#059669">';
     html += '<th style="width:36px"><input type="checkbox" id="sel-all-edu" onchange="toggleSelectAll_edu(this)" class="w-4 h-4 rounded accent-emerald-600 cursor-pointer"></th>';
     html += '<th style="width:36px">#</th>';
-    html += '<th style="min-width:130px">اسم الطالب</th>';
+    html += '<th style="min-width:120px">اسم الطالب</th>';
     html += '<th>نوع الملاحظة</th>';
-    html += '<th style="min-width:150px">التفاصيل</th>';
+    html += '<th style="min-width:130px">التفاصيل</th>';
     html += '<th>المسجّل</th>';
-    html += '<th style="width:80px">التواصل</th>';
-    html += '<th style="width:60px">نماذج</th>';
+    html += '<th style="min-width:130px">الإجراءات والتواصل</th>';
     html += '</tr></thead><tbody>';
 
     sorted.forEach(function(rec, idx) {
@@ -258,8 +257,8 @@ function displayEduTodayTable() {
 
         if (g.first) {
             var classLabel = escapeHtml((_gE(rec, 'الصف') || '') + ' / ' + (_gE(rec, 'الفصل') || ''));
-            if (idx > 0) html += '<tr class="sht-sep"><td colspan="8"></td></tr>';
-            html += '<tr class="sht-gh"><td colspan="8"><span class="sht-gl">' + classLabel + '</span> <span class="sht-gc">(' + g.span + ')</span></td></tr>';
+            if (idx > 0) html += '<tr class="sht-sep"><td colspan="7"></td></tr>';
+            html += '<tr class="sht-gh"><td colspan="7"><span class="sht-gl">' + classLabel + '</span> <span class="sht-gc">(' + g.span + ')</span></td></tr>';
         }
 
         if (isSent) cntSent++; else cntUnsent++;
@@ -275,8 +274,10 @@ function displayEduTodayTable() {
         html += '<td>' + typeBadge + '</td>';
         html += '<td style="text-align:right;max-width:200px"><p class="truncate" title="' + escapeHtml(_gE(rec, 'التفاصيل') || '') + '">' + escapeHtml(_gE(rec, 'التفاصيل') || '-') + '</p></td>';
         html += '<td class="text-xs text-gray-500">' + escapeHtml(_gE(rec, 'المعلم/المسجل') || '-') + '</td>';
-        html += '<td>' + countBadge_edu_(isSent, 'sendEduTodayWhatsApp(' + origIdx + ')') + '</td>';
-        html += '<td><div class="flex gap-0.5 justify-center"><button onclick="printEduTodayDoc(\'tawtheeq_tawasol\',' + origIdx + ')" class="p-1 text-green-500 hover:bg-green-50 rounded" title="توثيق تواصل"><span class="material-symbols-outlined text-[15px]">contact_phone</span></button></div></td>';
+        html += '<td><div class="flex gap-1.5 justify-center flex-wrap items-center">';
+        html += countBadge_edu_(isSent, 'sendEduTodayWhatsApp(' + origIdx + ')');
+        html += '<button onclick="printEduTodayDoc(\'tawtheeq_tawasol\',' + origIdx + ')" class="p-1.5 text-green-500 hover:bg-green-50 rounded-lg" title="توثيق تواصل"><span class="material-symbols-outlined text-[20px]">contact_phone</span></button>';
+        html += '</div></td>';
         html += '</tr>';
     });
     
@@ -319,7 +320,7 @@ function sendEduTodayWhatsApp(idx) {
     
     const today = new Date();
     const dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
-    const hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    const hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     
     const studentName = _gE(rec, 'اسم الطالب');
     const grade = _gE(rec, 'الصف');
@@ -445,7 +446,7 @@ function sendSelectedTodayEdu() {
                 
                 var today = new Date();
                 var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
-                var hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+                var hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
                 var studentName = _gE(rec, 'اسم الطالب');
                 var noteType = _gE(rec, 'نوع الملاحظة') || '';
                 var details = _gE(rec, 'التفاصيل') || '';
@@ -524,7 +525,7 @@ function printTodayEduNotes() {
         return;
     }
     var today = new Date();
-    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var miladi = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
     var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
     var stageName = getStageName_(currentStage);
@@ -872,7 +873,20 @@ function openEduDetailModal(groupIndex) {
         var sentBadge = _gE(n, 'تم الإرسال') === 'نعم'
             ? '<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">تم ✓</span>'
             : '<span class="px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full text-[10px] font-bold">لم يُرسل</span>';
-        
+
+        // بناء بيانات الطباعة لتوثيق التواصل
+        var eduPrintData = {
+            studentName: _gE(n, 'اسم الطالب') || '',
+            grade: (_gE(n, 'الصف') || '') + ' / ' + (_gE(n, 'الفصل') || ''),
+            contactType: 'ملاحظة تربوية',
+            contactReason: noteType + ' - ' + (_gE(n, 'التفاصيل') || ''),
+            violationDate: _gE(n, 'التاريخ') || '',
+            violationDay: _gE(n, 'التاريخ الميلادي') ? new Date(_gE(n, 'التاريخ الميلادي')).toLocaleDateString('ar-SA', { weekday: 'long' }) : '',
+            contactResult: _gE(n, 'تم الإرسال') === 'نعم' ? 'تم التواصل عبر الواتساب' : 'لم يتم الإرسال بعد',
+            notes: 'المسجّل: ' + (_gE(n, 'المعلم/المسجل') || _gE(n, 'المسجل') || '-')
+        };
+        var eduDataStr = escapeHtml(encodeURIComponent(JSON.stringify(eduPrintData)));
+
         html += `
             <div class="border border-gray-200 rounded-xl p-4 hover:bg-gray-50 transition-colors border-r-4 border-r-${color}-500">
                 <div class="flex justify-between items-start mb-2">
@@ -887,7 +901,7 @@ function openEduDetailModal(groupIndex) {
                     <span class="text-[10px] text-gray-400">${escapeHtml(_gE(n, 'المعلم/المسجل') || _gE(n, 'المسجل') || '')}</span>
                 </div>
                 <div class="flex gap-1.5 flex-wrap mt-2">
-                    <button onclick="printFormDirectly('tawtheeq_tawasol','${escapeHtml(encodeURIComponent(JSON.stringify({studentName:_gE(n,'اسم الطالب')||'', grade:_gE(n,'الصف')||'', class:_gE(n,'الفصل')||'', noteType:noteType, details:_gE(n,'التفاصيل')||''})))}')" class="flex items-center gap-1 px-2.5 py-1.5 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 text-[11px] font-bold border border-green-200"><span class="material-symbols-outlined text-[13px]">contact_phone</span> توثيق تواصل</button>
+                    <button onclick="printFormDirectly('tawtheeq_tawasol','${eduDataStr}')" class="flex items-center gap-1 px-2.5 py-1.5 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 text-[11px] font-bold border border-green-200"><span class="material-symbols-outlined text-[13px]">contact_phone</span> توثيق تواصل</button>
                 </div>
             </div>
         `;
@@ -965,7 +979,7 @@ function printEduApprovedList() {
     }
     
     var today = new Date();
-    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var miladi = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
     var stageName = getStageName_(currentStage);
     var titleText = 'سجل الملاحظات التربوية' + (grade ? ' - ' + grade : '') + (cls ? ' / ' + cls : '');
@@ -1217,7 +1231,7 @@ function getAddEduNoteModalHTML() {
                     </button>
                 </div>
                 <div class="p-6 space-y-4">
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-bold text-gray-700 mb-1">الصف</label>
                             <select id="edu-add-grade" onchange="handleEduAddGradeChange()" class="w-full border-gray-300 rounded-lg text-sm h-10">
@@ -1230,12 +1244,20 @@ function getAddEduNoteModalHTML() {
                                 <option value="">اختر الفصل</option>
                             </select>
                         </div>
-                        <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-1">الطالب</label>
-                            <select id="edu-add-student" class="w-full border-gray-300 rounded-lg text-sm h-10" disabled>
-                                <option value="">اختر الطالب</option>
-                            </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">
+                            الطلاب <span class="text-gray-400 font-normal text-xs">(يمكنك اختيار أكثر من طالب)</span>
+                        </label>
+                        <div class="flex items-center gap-3 mb-2">
+                            <button type="button" onclick="toggleSelectAllEduStudents()" class="text-xs px-3 py-1 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 font-bold flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[14px]">select_all</span> تحديد الكل
+                            </button>
+                            <span id="edu-student-count" class="text-xs text-gray-400"></span>
                         </div>
+                        <select id="edu-add-student" multiple class="w-full h-48 border-gray-300 rounded-lg text-sm" disabled>
+                        </select>
+                        <p class="text-[11px] text-gray-400 mt-1">اضغط Ctrl للاختيار المتعدد</p>
                     </div>
                     <div>
                         <label class="block text-sm font-bold text-gray-700 mb-1">نوع الملاحظة</label>
@@ -1350,6 +1372,20 @@ function getEduSendWhatsAppModalHTML() {
 // 10. دوال النوافذ والإدخال
 // =================================================================
 function openAddEduNoteModal() {
+    // إعادة تهيئة النموذج
+    var gradeSel = document.getElementById('edu-add-grade');
+    if (gradeSel) gradeSel.value = '';
+    var classSel = document.getElementById('edu-add-class');
+    if (classSel) { classSel.innerHTML = '<option value="">اختر الفصل</option>'; classSel.disabled = true; }
+    var studentSel = document.getElementById('edu-add-student');
+    if (studentSel) { studentSel.innerHTML = ''; studentSel.disabled = true; }
+    var noteType = document.getElementById('edu-note-type');
+    if (noteType) noteType.value = '';
+    var details = document.getElementById('edu-note-details');
+    if (details) details.value = '';
+    var countEl = document.getElementById('edu-student-count');
+    if (countEl) countEl.textContent = '';
+
     document.getElementById('edu-add-modal').classList.remove('hidden');
     populateEduAddGrades();
     populateEduTypesInModal();
@@ -1419,9 +1455,10 @@ function handleEduAddGradeChange() {
     const classSelect = document.getElementById('edu-add-class');
     const studentSelect = document.getElementById('edu-add-student');
     classSelect.innerHTML = '<option value="">اختر الفصل</option>';
-    studentSelect.innerHTML = '<option value="">اختر الطالب</option>';
+    studentSelect.innerHTML = '';
     classSelect.disabled = !grade;
     studentSelect.disabled = true;
+    updateEduStudentCount();
     if (grade) {
         const classes = [...new Set(APP_DATA.students.filter(s => s['المرحلة'] === currentStage && s['الصف'] === grade).map(s => s['الفصل']))];
         classes.sort((a, b) => String(a).localeCompare(String(b), 'ar', {numeric: true}));
@@ -1433,38 +1470,57 @@ function handleEduAddClassChange() {
     const grade = document.getElementById('edu-add-grade').value;
     const cls = document.getElementById('edu-add-class').value;
     const studentSelect = document.getElementById('edu-add-student');
-    studentSelect.innerHTML = '<option value="">اختر الطالب</option>';
+    studentSelect.innerHTML = '';
     studentSelect.disabled = !cls;
     if (grade && cls) {
         const students = APP_DATA.students.filter(s => s['المرحلة'] === currentStage && s['الصف'] === grade && s['الفصل'] == cls);
         students.sort((a, b) => a['اسم الطالب'].localeCompare(b['اسم الطالب'], 'ar'));
-        students.forEach(s => studentSelect.add(new Option(s['اسم الطالب'], s['رقم الطالب'] || s['رقم_الطالب'])));
+        students.forEach(s => {
+            var opt = new Option(s['اسم الطالب'], s['رقم الطالب'] || s['رقم_الطالب']);
+            opt.dataset.name = s['اسم الطالب'] || '';
+            opt.dataset.grade = s['الصف'] || '';
+            opt.dataset.class = s['الفصل'] || '';
+            opt.dataset.phone = s['رقم الجوال'] || '';
+            studentSelect.add(opt);
+        });
     }
+    updateEduStudentCount();
+}
+
+function toggleSelectAllEduStudents() {
+    var select = document.getElementById('edu-add-student');
+    if (select.disabled) return;
+    var allSelected = select.options.length > 0 && Array.from(select.options).every(o => o.selected);
+    Array.from(select.options).forEach(o => o.selected = !allSelected);
+    updateEduStudentCount();
+}
+
+function updateEduStudentCount() {
+    var select = document.getElementById('edu-add-student');
+    var count = select ? Array.from(select.selectedOptions).length : 0;
+    var el = document.getElementById('edu-student-count');
+    if (el) el.textContent = count > 0 ? ('تم اختيار ' + count + ' طالب') : '';
 }
 
 function saveEduNote() {
-    const studentId = document.getElementById('edu-add-student').value;
-    const noteType = document.getElementById('edu-note-type').value;
-    const details = document.getElementById('edu-note-details').value;
+    var studentSelect = document.getElementById('edu-add-student');
+    var selectedOpts = Array.from(studentSelect.selectedOptions);
+    var noteType = document.getElementById('edu-note-type').value;
+    var details = document.getElementById('edu-note-details').value;
 
-    if (!studentId) { showEnhancedToast('warning', 'يرجى اختيار الطالب'); return; }
+    if (selectedOpts.length === 0) { showEnhancedToast('warning', 'يرجى اختيار طالب واحد على الأقل'); return; }
     if (!noteType) { showEnhancedToast('warning', 'يرجى اختيار نوع الملاحظة'); return; }
 
-    const student = APP_DATA.students.find(s => String(s['رقم الطالب'] || s['رقم_الطالب']) === String(studentId));
-    if (!student) { showEnhancedToast('danger', 'لم يتم العثور على الطالب'); return; }
+    var students = selectedOpts.map(function(opt) {
+        return { studentId: opt.value, studentName: opt.dataset.name, grade: opt.dataset.grade, class: opt.dataset.class, phone: opt.dataset.phone };
+    });
 
-    const noteData = {
-        studentId, studentName: student['اسم الطالب'],
-        grade: student['الصف'], class: student['الفصل'],
-        phone: getStudentPhone(student),
-        noteType, details, stage: currentStage
-    };
-
-    showEnhancedToast('info', 'جاري الحفظ...');
+    var countLabel = selectedOpts.length > 1 ? (' (' + selectedOpts.length + ' طلاب)') : '';
+    showEnhancedToast('info', 'جاري الحفظ...' + countLabel);
 
     google.script.run.withSuccessHandler(res => {
         if (res.success) {
-            showEnhancedToast('success', 'تم حفظ الملاحظة بنجاح');
+            showEnhancedToast('success', res.message || 'تم الحفظ بنجاح');
             closeAddEduNoteModal();
             if (eduNotesCurrentTab === 'today') loadEduTodayRecords();
             else if (eduNotesCurrentTab === 'approved') loadEduApprovedRecords();
@@ -1473,7 +1529,7 @@ function saveEduNote() {
         }
     }).withFailureHandler(err => {
         showEnhancedToast('danger', 'خطأ: ' + err);
-    }).saveEducationalNote(noteData);
+    }).saveEducationalNotesBatch({ students: students, noteType: noteType, details: details, stage: currentStage });
 }
 
 // =================================================================

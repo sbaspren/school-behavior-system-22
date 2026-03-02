@@ -24,7 +24,7 @@ function renderAbsencePage() {
   try {
     const main = document.getElementById('main-content');
     var _hd = new Date();
-    var _hjri = _hd.toLocaleDateString('ar-SA-u-ca-islamic', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    var _hjri = _hd.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
     main.innerHTML = `
         <div class="sec-absence" style="position:relative">
             <div id="loading-overlay" style="position:absolute;inset:0;background:rgba(255,255,255,0.9);z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;border-radius:16px">
@@ -40,9 +40,9 @@ function renderAbsencePage() {
                         <p>${_hjri}</p>
                     </div>
                     <div class="hero-stats">
-                        <div class="hero-stat"><div class="hero-stat-icon">📋</div><div class="hero-stat-num" id="abs-today-count">٠</div><div class="hero-stat-label">غياب اليوم</div></div>
-                        <div class="hero-stat"><div class="hero-stat-icon">📄</div><div class="hero-stat-num" id="abs-excuses-count">٠</div><div class="hero-stat-label">أعذار معلقة</div></div>
-                        <div class="hero-stat"><div class="hero-stat-icon">🛡️</div><div class="hero-stat-num" id="abs-critical-count">٠</div><div class="hero-stat-label">حماية (10+)</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#f97316">event_busy</span></div><div class="hero-stat-num" id="abs-today-count">٠</div><div class="hero-stat-label">غياب اليوم</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#8b5cf6">description</span></div><div class="hero-stat-num" id="abs-excuses-count">٠</div><div class="hero-stat-label">أعذار معلقة</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#ef4444">shield</span></div><div class="hero-stat-num" id="abs-critical-count">٠</div><div class="hero-stat-label">حماية (10+)</div></div>
                     </div>
                 </div>
             </div>
@@ -92,7 +92,7 @@ function switchAbsenceTab(tab) {
 function renderAbsenceTodayTab() {
   try {
     const today = new Date();
-    const hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    const hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     const miladiDate = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
     const dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
     
@@ -223,11 +223,10 @@ function displayAbsenceTodayTable() {
     
     var html = '<table class="sht"><thead><tr style="background:#ea580c">';
     html += '<th style="width:36px">#</th>';
-    html += '<th style="min-width:130px">اسم الطالب</th>';
+    html += '<th style="min-width:120px">اسم الطالب</th>';
     html += '<th>المعلم</th>';
     html += '<th style="width:80px">الحالة</th>';
-    html += '<th style="width:80px">الإرسال</th>';
-    html += '<th style="width:80px">طباعة</th>';
+    html += '<th style="min-width:160px">الإجراءات والتواصل</th>';
     html += '<th style="width:36px"></th>';
     html += '</tr></thead><tbody>';
 
@@ -244,8 +243,8 @@ function displayAbsenceTodayTable() {
 
         if (g.first) {
             var classLabel = escapeHtml((getF_(record, 'الصف') || '') + ' / ' + (getF_(record, 'الفصل') || ''));
-            if (idx > 0) html += '<tr class="sht-sep"><td colspan="7"></td></tr>';
-            html += '<tr class="sht-gh"><td colspan="7"><span class="sht-gl">' + classLabel + '</span> <span class="sht-gc">(' + g.span + ')</span></td></tr>';
+            if (idx > 0) html += '<tr class="sht-sep"><td colspan="6"></td></tr>';
+            html += '<tr class="sht-gh"><td colspan="6"><span class="sht-gl">' + classLabel + '</span> <span class="sht-gc">(' + g.span + ')</span></td></tr>';
         }
 
         if (isSent) cntSent++;
@@ -265,11 +264,11 @@ function displayAbsenceTodayTable() {
         html += '<td class="nm">' + escapeHtml(getF_(record, 'اسم_الطالب') || '-') + '</td>';
         html += '<td class="text-xs" style="color:' + (teacher === '-' ? '#9ca3af' : '#374151') + '">' + escapeHtml(teacher) + '</td>';
         html += '<td>' + statusBadge + '</td>';
-        html += '<td>' + countBadge_(isSent, 'sendSingleAbsence(' + origIdx + ')') + '</td>';
-        html += '<td><div class="flex gap-0.5 justify-center">';
-        html += '<button onclick="printAbsTodayDoc(\'tahood_hodoor\',' + origIdx + ')" class="p-1 text-indigo-500 hover:bg-indigo-50 rounded" title="تعهد حضور"><span class="material-symbols-outlined text-[15px]">verified</span></button>';
-        html += '<button onclick="printAbsTodayDoc(\'ehalat_absence\',' + origIdx + ')" class="p-1 text-blue-500 hover:bg-blue-50 rounded" title="إحالة غياب"><span class="material-symbols-outlined text-[15px]">forward_to_inbox</span></button>';
-        html += '<button onclick="printAbsTodayDoc(\'tawtheeq_tawasol\',' + origIdx + ')" class="p-1 text-green-500 hover:bg-green-50 rounded" title="توثيق تواصل"><span class="material-symbols-outlined text-[15px]">contact_phone</span></button>';
+        html += '<td><div class="flex gap-1.5 justify-center flex-wrap items-center">';
+        html += countBadge_(isSent, 'sendSingleAbsence(' + origIdx + ')');
+        html += '<button onclick="printAbsTodayDoc(\'tahood_hodoor\',' + origIdx + ')" class="p-1.5 text-indigo-500 hover:bg-indigo-50 rounded-lg" title="تعهد حضور"><span class="material-symbols-outlined text-[20px]">verified</span></button>';
+        html += '<button onclick="printAbsTodayDoc(\'ehalat_absence\',' + origIdx + ')" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg" title="إحالة غياب"><span class="material-symbols-outlined text-[20px]">forward_to_inbox</span></button>';
+        html += '<button onclick="printAbsTodayDoc(\'tawtheeq_tawasol\',' + origIdx + ')" class="p-1.5 text-green-500 hover:bg-green-50 rounded-lg" title="توثيق تواصل"><span class="material-symbols-outlined text-[20px]">contact_phone</span></button>';
         html += '</div></td>';
         html += '<td><button onclick="deleteTodayRecord(' + record.rowIndex + ')" class="p-1.5 text-red-500 hover:bg-red-50 rounded-lg" title="حذف"><span class="material-symbols-outlined text-[18px]">delete</span></button></td>';
         html += '</tr>';
@@ -731,6 +730,9 @@ function saveLateStatus() {
                     showEnhancedToast('error', result.error || 'فشل التحديث');
                 }
             })
+            .withFailureHandler(function(err) {
+                showEnhancedToast('error', 'خطأ في التحديث: ' + err.message);
+            })
             .updateAbsenceLateStatus(currentStage, parseInt(rowIndex), status, lateTime);
     } else {
         showEnhancedToast('success', 'تم التحديث (وضع تجريبي)');
@@ -781,6 +783,9 @@ function deleteTodayRecord(rowIndex) {
                     showEnhancedToast('error', result.error || 'فشل الحذف');
                 }
             })
+            .withFailureHandler(function(err) {
+                showEnhancedToast('error', 'خطأ في الحذف: ' + err.message);
+            })
             .deleteAbsenceRecord(currentStage, rowIndex);
     } else {
         showEnhancedToast('success', 'تم الحذف (وضع تجريبي)');
@@ -798,28 +803,98 @@ function sendSingleAbsenceWhatsApp(idx) {
 }
 
 function sendAllTodayAbsence() {
-    const unsent = absenceTodayRecords.filter(r => r['تم_الإرسال'] !== 'نعم' && r['تم_الإرسال'] !== true);
-    
+    var unsent = absenceTodayRecords.filter(function(r) { return r['تم_الإرسال'] !== 'نعم' && r['تم_الإرسال'] !== true; });
+
     if (unsent.length === 0) {
         showEnhancedToast('info', 'تم إرسال جميع الإشعارات سابقاً');
         return;
     }
-    
-    showStyledConfirm_({title: 'إرسال إشعارات', message: 'سيتم إرسال إشعارات لـ ' + unsent.length + ' ولي أمر.\n⏱️ التقدير: ~' + Math.ceil(unsent.length * 15 / 60) + ' دقائق\nمتابعة؟', icon: 'send', color: 'orange', onConfirm: function() {
-        showEnhancedToast('info', 'جاري إرسال ' + unsent.length + ' إشعار... (تقريباً ' + Math.ceil(unsent.length * 15 / 60) + ' دقائق)');
-        if (typeof google !== 'undefined' && google.script && google.script.run) {
-            google.script.run
-                .withSuccessHandler(function(result) {
-                    if (result && result.success) {
-                        showEnhancedToast('success', result.message || 'تم الإرسال بنجاح');
-                        loadAbsenceTodayRecords();
-                    } else {
-                        showEnhancedToast('error', result.error || 'فشل الإرسال');
-                    }
-                })
-                .sendAbsenceNotifications(currentStage, unsent.map(function(r){ return r.rowIndex; }));
+
+    // ★ قراءة حالة التبديل المحفوظة
+    var savedLinkPref = localStorage.getItem('absence_include_link');
+    var linkOn = savedLinkPref === null ? true : savedLinkPref === 'true';
+
+    // ★ منبثق مخصص مع Toggle
+    var existing = document.getElementById('abs-send-confirm');
+    if (existing) existing.remove();
+
+    var modal = document.createElement('div');
+    modal.id = 'abs-send-confirm';
+    modal.className = 'fixed inset-0 bg-gray-900/50 z-[999] flex items-center justify-center backdrop-blur-sm';
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+    modal.innerHTML = '<div class="bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 w-full max-w-md mx-4 overflow-hidden">'
+        + '<div class="px-5 py-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white flex items-center gap-3">'
+        + '<span class="material-symbols-outlined text-2xl">send</span>'
+        + '<h3 class="font-bold text-lg">إرسال إشعارات</h3></div>'
+        + '<div class="p-6">'
+        + '<p class="text-gray-700 text-base leading-relaxed mb-4">سيتم إرسال إشعارات لـ <b>' + unsent.length + '</b> ولي أمر.<br>⏱️ التقدير: ~' + Math.ceil(unsent.length * 10 / 60) + ' دقائق</p>'
+        + '<div class="flex items-center justify-between p-3 rounded-xl border ' + (linkOn ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200') + '" id="abs-link-toggle-wrap">'
+        + '<div class="flex items-center gap-2">'
+        + '<span class="material-symbols-outlined text-lg ' + (linkOn ? 'text-green-600' : 'text-gray-400') + '" id="abs-link-icon">link</span>'
+        + '<span class="text-sm font-bold ' + (linkOn ? 'text-green-700' : 'text-gray-500') + '" id="abs-link-label">إرفاق رابط إدخال العذر</span></div>'
+        + '<label class="relative inline-flex items-center cursor-pointer">'
+        + '<input type="checkbox" id="abs-link-toggle" class="sr-only peer" ' + (linkOn ? 'checked' : '') + '>'
+        + '<div class="w-11 h-6 bg-gray-300 peer-focus:ring-2 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>'
+        + '</label></div></div>'
+        + '<div class="px-5 py-3 bg-gray-50 flex justify-end gap-3">'
+        + '<button id="abs-send-cancel" class="px-5 py-2.5 text-gray-600 hover:bg-gray-200 rounded-lg text-sm font-bold transition">إلغاء</button>'
+        + '<button id="abs-send-go" class="px-6 py-2.5 bg-orange-600 text-white rounded-lg text-sm font-bold hover:bg-orange-700 flex items-center gap-2 shadow-md transition">'
+        + '<span class="material-symbols-outlined text-[18px]">check</span> إرسال</button>'
+        + '</div></div>';
+    document.body.appendChild(modal);
+
+    // ★ تحديث مظهر التبديل عند النقر
+    var toggle = document.getElementById('abs-link-toggle');
+    toggle.addEventListener('change', function() {
+        var on = toggle.checked;
+        localStorage.setItem('absence_include_link', String(on));
+        var wrap = document.getElementById('abs-link-toggle-wrap');
+        var icon = document.getElementById('abs-link-icon');
+        var label = document.getElementById('abs-link-label');
+        wrap.className = 'flex items-center justify-between p-3 rounded-xl border ' + (on ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200');
+        icon.className = 'material-symbols-outlined text-lg ' + (on ? 'text-green-600' : 'text-gray-400');
+        label.className = 'text-sm font-bold ' + (on ? 'text-green-700' : 'text-gray-500');
+    });
+
+    document.getElementById('abs-send-cancel').onclick = function() { modal.remove(); };
+    document.getElementById('abs-send-go').onclick = function() {
+        var includeLink = document.getElementById('abs-link-toggle').checked;
+        localStorage.setItem('absence_include_link', String(includeLink));
+        modal.remove();
+
+        var total = unsent.length;
+        var successCount = 0;
+        var failCount = 0;
+        showEnhancedToast('info', 'جاري إرسال ' + total + ' إشعار... يرجى عدم إغلاق الصفحة');
+
+        unsent.forEach(function(rec, index) {
+            var rowIndex = rec.rowIndex;
+            if (rowIndex == null) { failCount++; checkAbsBulkDone(); return; }
+
+            var delay = index * 10000 + Math.floor(Math.random() * 3000);
+            setTimeout(function() {
+                google.script.run
+                    .withSuccessHandler(function(result) {
+                        if (result && result.success) { successCount++; } else { failCount++; }
+                        showEnhancedToast('info', 'تقدم الإرسال: ' + (successCount + failCount) + ' / ' + total);
+                        checkAbsBulkDone();
+                    })
+                    .withFailureHandler(function(err) {
+                        failCount++;
+                        showEnhancedToast('info', 'تقدم الإرسال: ' + (successCount + failCount) + ' / ' + total);
+                        checkAbsBulkDone();
+                    })
+                    .sendSingleAbsenceWithLink(currentStage, rowIndex, includeLink);
+            }, delay);
+        });
+
+        function checkAbsBulkDone() {
+            if (successCount + failCount >= total) {
+                showEnhancedToast('success', 'تم الإرسال: ' + successCount + ' ناجح' + (failCount ? '، ' + failCount + ' فاشل' : ''));
+                loadAbsenceTodayRecords();
+            }
         }
-    }});
+    };
 }
 
 // =================================================================
@@ -862,7 +937,7 @@ function showMessageEditor_(opts) {
     document.getElementById('me-type-badge').textContent = opts.type || '';
     document.getElementById('me-phone').textContent = opts.phone || '';
     var cached = _templateCache[_msgEditorType];
-    if (cached !== undefined) { _loadMsgEditor(cached, opts); }
+    if (cached !== undefined && cached !== '') { _loadMsgEditor(cached, opts); }
     else if (typeof google !== 'undefined' && google.script && google.script.run) {
         google.script.run.withSuccessHandler(function(r) {
             var t = (r && r.template) ? r.template : '';
@@ -908,14 +983,14 @@ function _saveAsDefault() {
         google.script.run.withSuccessHandler(function(r) {
             if (r && r.success) { _templateCache[_msgEditorType]=tmpl; showEnhancedToast('success','تم حفظ القالب كافتراضي ✓'); document.getElementById('me-tmpl-note').classList.remove('hidden'); }
             else showEnhancedToast('danger','فشل الحفظ');
-        }).saveMessageTemplate(_msgEditorType, tmpl);
+        }).withFailureHandler(function(e) { showEnhancedToast('danger','خطأ في حفظ القالب: '+e.message); }).saveMessageTemplate(_msgEditorType, tmpl);
     }
 }
 function _resetTemplate() {
     document.getElementById('me-text').value = document.getElementById('me-text').dataset.defaultMsg || '';
     document.getElementById('me-tmpl-note').classList.add('hidden');
     if (typeof google !== 'undefined' && google.script && google.script.run) {
-        google.script.run.withSuccessHandler(function(){ _templateCache[_msgEditorType]=''; showEnhancedToast('info','تم استعادة القالب الافتراضي'); }).deleteMessageTemplate(_msgEditorType);
+        google.script.run.withSuccessHandler(function(){ _templateCache[_msgEditorType]=''; showEnhancedToast('info','تم استعادة القالب الافتراضي'); }).withFailureHandler(function(e){ showEnhancedToast('danger','خطأ في حذف القالب: '+e.message); }).deleteMessageTemplate(_msgEditorType);
     }
 }
 function _closeEditor() { document.getElementById('msg-editor-modal').classList.add('hidden'); }
@@ -1022,7 +1097,7 @@ function printTodayAbsence() {
     var _printRecs = (typeof getSelectedRecords_abs === 'function') ? getSelectedRecords_abs() : absenceTodayRecords;
     if (_printRecs.length === 0) { showEnhancedToast('warning', 'لا يوجد بيانات للطباعة'); return; }
     var today = new Date();
-    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var miladi = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
     var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
     var stageName = getStageName_(currentStage);
@@ -1106,7 +1181,7 @@ function renderAbsenceApprovedTab() {
             <!-- فلاتر الحالة -->
             <div class="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-gray-100">
                 <button onclick="setFilter('all')" id="btn-filter-all" class="abs-filter-btn active px-3 py-1 rounded-lg text-[11px] font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 border border-gray-200">الكل</button>
-                <button onclick="setFilter('zero')" id="btn-filter-zero" class="abs-filter-btn px-3 py-1 rounded-lg text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100">⭐ المنضبطين</button>
+                <button onclick="setFilter('zero')" id="btn-filter-zero" class="abs-filter-btn px-3 py-1 rounded-lg text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">stars</span> المنضبطين</button>
                 <span class="w-px h-5 bg-gray-300"></span>
                 <span class="text-[9px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded border border-red-100">بدون عذر:</span>
                 <button onclick="setFilter('warning')" id="btn-filter-warning" class="abs-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold text-yellow-800 bg-yellow-50 border border-yellow-200">إنذار (3-4)</button>
@@ -1387,7 +1462,7 @@ function buildExcuseCard(excuse) {
 
     // شارة المرفقات
     var attachTag = excuse.hasAttachment
-        ? '<span class="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full border border-blue-300">📎 مرفق</span>'
+        ? '<span class="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full border border-blue-300"><span class="material-symbols-outlined" style="font-size:12px;vertical-align:middle">attach_file</span> مرفق</span>'
         : '';
 
     // ★ شارة "جديد" للأعذار المقدمة اليوم
@@ -1596,6 +1671,9 @@ function approveExcuse(excuseId) {
                     showEnhancedToast('error', result.error || 'فشل القبول');
                 }
             })
+            .withFailureHandler(function(err) {
+                showEnhancedToast('error', 'خطأ في قبول العذر: ' + err.message);
+            })
             .updateExcuseStatus(excuseId, 'approved');
     }
     }});
@@ -1670,6 +1748,9 @@ function confirmRejectExcuse() {
                     showEnhancedToast('error', result.error || 'فشل الرفض');
                 }
             })
+            .withFailureHandler(function(err) {
+                showEnhancedToast('error', 'خطأ في رفض العذر: ' + err.message);
+            })
             .updateExcuseStatus(excuseId, 'rejected', reason, sendMessage);
     }
 }
@@ -1739,6 +1820,9 @@ function sendCustomMessage() {
                     showEnhancedToast('error', result.error || 'فشل الإرسال');
                 }
             })
+            .withFailureHandler(function(err) {
+                showEnhancedToast('error', 'خطأ في الإرسال: ' + err.message);
+            })
             .sendExcuseCustomMessage(excuseId, message);
     }
 }
@@ -1750,7 +1834,7 @@ function printExcusesReport() {
     if (absenceExcusesRecords.length === 0) { showEnhancedToast('warning', 'لا يوجد أعذار للطباعة'); return; }
 
     var today = new Date();
-    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var miladi = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
     var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
     var stageName = getStageName_(currentStage);
@@ -1813,7 +1897,7 @@ function printExcusesReport() {
         dateText: hijri + ' \u00A0الموافق\u00A0 ' + miladi + ' م',
         colCount: 7,
         headers: '<th class="col-header" style="width:5%">م</th><th class="col-header" style="width:22%">اسم الطالب</th><th class="col-header" style="width:10%">الفصل</th><th class="col-header" style="width:25%">العذر</th><th class="col-header" style="width:13%">تاريخ الغياب</th><th class="col-header" style="width:10%">الحالة</th><th class="col-header" style="width:8%">المصدر</th>',
-        rows: rowsWithExcuse || '<tr><td colspan="7" class="data-cell" style="padding:20px;color:#999">لا توجد أعذار مقدمة</td></tr>',
+        rows: rowsWithExcuse || '<tr><td colspan="6" class="data-cell" style="padding:20px;color:#999">لا توجد أعذار مقدمة</td></tr>',
         total: toArShared_(withExcuse.length) + ' طالب'
     });
 
@@ -1990,6 +2074,9 @@ function loadReportsData() {
                 } else {
                     showEnhancedToast('error', result.error || 'فشل التحميل');
                 }
+            })
+            .withFailureHandler(function(err) {
+                showEnhancedToast('error', 'خطأ في تحميل التقارير: ' + err.message);
             })
             .getAbsenceStatistics(currentStage, dateFrom, dateTo, grade, cls, type);
     } else {
@@ -2240,7 +2327,7 @@ function absPopulateStudents() {
         html += `
             <label class="flex items-center gap-2 p-2 hover:bg-gray-100 rounded cursor-pointer">
                 <input type="checkbox" class="abs-student-cb w-4 h-4 rounded border-gray-300 text-orange-600"
-                    data-id="${escapeHtml(s['رقم الطالب'])}" data-name="${escapeHtml(s['اسم الطالب'])}" data-grade="${escapeHtml(s['الصف'])}" data-class="${escapeHtml(s['الفصل'])}" data-phone="${escapeHtml(s['رقم_الجوال'] || '')}">
+                    data-id="${escapeHtml(s['رقم الطالب'])}" data-name="${escapeHtml(s['اسم الطالب'])}" data-grade="${escapeHtml(s['الصف'])}" data-class="${escapeHtml(s['الفصل'])}" data-phone="${escapeHtml(s['رقم الجوال'] || s['رقم_الجوال'] || '')}">
                 <span class="text-sm">${escapeHtml(s['اسم الطالب'])}</span>
             </label>
         `;
@@ -2282,6 +2369,9 @@ function saveAbsenceRecord() {
                     showEnhancedToast('error', result.error || 'فشل الحفظ');
                 }
             })
+            .withFailureHandler(function(err) {
+                showEnhancedToast('error', 'خطأ في الحفظ: ' + err.message);
+            })
             .saveDailyAbsenceRecord({
                 stage: currentStage,
                 students: students,
@@ -2314,7 +2404,7 @@ function executePrint() {
         });
     }
     if (records.length === 0) { showEnhancedToast('warning', 'لا توجد بيانات'); return; }
-    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var stageName = getStageName_(currentStage);
     
     if (printType === 'discipline_report') {
@@ -2352,7 +2442,7 @@ function executePrint() {
         var rows = '', lastKey = '';
         records.forEach(function(rec, i) {
             var key = (rec.grade || '') + (rec.class || '');
-            if (key !== lastKey && i > 0) rows += '<tr class="sep-row"><td colspan="7"></td></tr>';
+            if (key !== lastKey && i > 0) rows += '<tr class="sep-row"><td colspan="6"></td></tr>';
             lastKey = key;
             var total = (rec.unexcused || 0) + (rec.excused || 0);
             rows += '<tr>'
@@ -2677,7 +2767,7 @@ function printAbsCommittee(id, name, grade, cls, unexcused, excused) {
         studentName: name,
         grade: grade + ' / ' + cls,
         violationDay: new Date().toLocaleDateString('ar-SA', {weekday: 'long'}),
-        violationDate: new Date().toLocaleDateString('ar-SA-u-ca-islamic'),
+        violationDate: new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura'),
         unexcusedDays: unexcused,
         excusedDays: excused
     });
@@ -2746,7 +2836,7 @@ function printAbsTodayDoc(formId, idx) {
     const printData = {
         studentName: getF_(rec, 'اسم_الطالب') || '',
         grade: (getF_(rec, 'الصف') || '') + ' / ' + (getF_(rec, 'الفصل') || ''),
-        violationDate: today.toLocaleDateString('ar-SA-u-ca-islamic'),
+        violationDate: today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura'),
         violationDay: today.toLocaleDateString('ar-SA', {weekday: 'long'}),
         unexcusedDays: 1,
         excusedDays: 0,
@@ -2782,7 +2872,7 @@ function printAbsContactReport() {
     var records = absenceStudentData || [];
     var sent = records.filter(function(r) { return (r.sentCount || 0) > 0; });
     if (sent.length === 0) { showEnhancedToast('warning', 'لا يوجد سجلات تم إرسالها'); return; }
-    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var rows = '';
     sent.forEach(function(rec, i) {
         var total = (rec.unexcused || 0) + (rec.excused || 0);
@@ -2824,31 +2914,47 @@ function sendSingleAbsence(idx) {
     if (!phone) { showEnhancedToast('warning', 'لا يوجد رقم جوال لهذا الطالب'); return; }
     var today = new Date();
     var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
-    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var studentName = getF_(rec, 'اسم_الطالب') || '';
     var grade = getF_(rec, 'الصف') || '';
     var cls = getF_(rec, 'الفصل') || '';
     var studentId = getF_(rec, 'رقم_الطالب') || getF_(rec, 'رقم_الهوية') || '';
+    var schoolName = (APP_DATA.settings.school_name || 'المدرسة');
 
-    // ★ جلب رابط ولي الأمر من السيرفر ثم فتح محرر الرسالة
-    showEnhancedToast('info', 'جاري تجهيز الرسالة...');
-    var buildAndShow = function(parentLink) {
-        var defaultMsg = '📋 *إشعار غياب*\n\nالسلام عليكم ورحمة الله وبركاته\nولي أمر الطالب: *' + studentName + '*\n\nنفيدكم بأن ابنكم *' + studentName + '* غائب اليوم\n📅 ' + dayName + ' - ' + hijri + '\nالصف: ' + grade + ' - الفصل: ' + cls;
-        if (parentLink) {
-            defaultMsg += '\n\n📝 لكتابة العذر:\n' + parentLink + '\n(صالح لمدة ٢٤ ساعة)';
-        }
-        defaultMsg += '\n\nمع تحيات إدارة مدرسة ' + (APP_DATA.settings.school_name || 'المدرسة');
+    // ★ قراءة حالة التبديل المحفوظة
+    var savedLinkPref = localStorage.getItem('absence_include_link');
+    var linkOn = savedLinkPref === null ? true : savedLinkPref === 'true';
+
+    // ★ نصوص الرسالة
+    var baseMsg = '📋 *إشعار غياب*\n\nالسلام عليكم ورحمة الله وبركاته\nولي أمر الطالب: *' + studentName + '*\n\nنفيدكم بأن ابنكم *' + studentName + '* غائب اليوم\n📅 ' + dayName + ' - ' + hijri + '\nالصف: ' + grade + ' - الفصل: ' + cls;
+    var footerMsg = '\n\nمع تحيات إدارة مدرسة ' + schoolName;
+
+    var _singleAbsLink = ''; // يُخزّن الرابط بعد جلبه
+
+    function buildLinkText(link) {
+        if (!link) return '';
+        return '\n\n📝 *لتقديم عذر الغياب:*\nاضغط على الرابط التالي لكتابة عذر الغياب:\n' + link + '\n⏳ الرابط صالح لمدة ٢٤ ساعة فقط';
+    }
+
+    function buildFullMsg(withLink) {
+        return baseMsg + (withLink ? buildLinkText(_singleAbsLink) : '') + footerMsg;
+    }
+
+    // ★ فتح المحرر مع Toggle
+    var openEditor = function() {
+        var defaultMsg = buildFullMsg(linkOn && _singleAbsLink);
+
         showMessageEditor_({
             phone: phone, studentName: studentName, type: 'غياب',
             defaultMessage: defaultMsg,
-            data: { 'اسم_الطالب': studentName, 'الصف': grade, 'الفصل': cls, 'اليوم': dayName, 'التاريخ': hijri, 'رابط_العذر': parentLink || '' },
-            appendText: parentLink ? '\n\n📝 لكتابة العذر:\n' + parentLink + '\n(صالح لمدة ٢٤ ساعة)' : '',
+            data: { 'اسم_الطالب': studentName, 'الصف': grade, 'الفصل': cls, 'اليوم': dayName, 'التاريخ': hijri },
+            appendText: '',
             onSend: function(editedMsg) {
                 showEnhancedToast('info', 'جاري الإرسال...');
                 google.script.run.withSuccessHandler(function(r) {
                     if (r && r.success) {
                         showEnhancedToast('success', 'تم الإرسال ✓');
-                        google.script.run.updateAbsenceSentStatus(currentStage, [rec.rowIndex]);
+                        google.script.run.withSuccessHandler(function(){}).withFailureHandler(function(e){ showEnhancedToast('warning','فشل تحديث حالة الإرسال: '+e.message); }).updateAbsenceSentStatus(currentStage, [rec.rowIndex]);
                         loadAbsenceTodayRecords();
                     }
                     else showEnhancedToast('danger', r.error || 'فشل');
@@ -2856,21 +2962,78 @@ function sendSingleAbsence(idx) {
                 .sendWhatsAppWithLog({ phone: phone, message: editedMsg, studentName: studentName, studentId: studentId, grade: grade, 'class': cls, messageType: 'غياب', messageTitle: 'إشعار غياب' }, currentStage);
             }
         });
+
+        // ★ إضافة Toggle داخل المحرر (بعد شريط المعلومات)
+        setTimeout(function() {
+            var infoBar = document.querySelector('#msg-editor-modal .bg-green-50');
+            if (!infoBar || document.getElementById('me-link-toggle')) return;
+
+            var toggleDiv = document.createElement('div');
+            toggleDiv.id = 'me-link-toggle-wrap';
+            toggleDiv.className = 'px-5 py-2 border-b flex items-center justify-between ' + (linkOn && _singleAbsLink ? 'bg-green-50' : 'bg-gray-50');
+            toggleDiv.innerHTML = '<div class="flex items-center gap-2">'
+                + '<span class="material-symbols-outlined text-base ' + (linkOn && _singleAbsLink ? 'text-green-600' : 'text-gray-400') + '" id="me-link-icon">link</span>'
+                + '<span class="text-xs font-bold ' + (linkOn && _singleAbsLink ? 'text-green-700' : 'text-gray-500') + '" id="me-link-label">إرفاق رابط إدخال العذر</span></div>'
+                + '<label class="relative inline-flex items-center cursor-pointer">'
+                + '<input type="checkbox" id="me-link-toggle" class="sr-only peer" ' + (linkOn && _singleAbsLink ? 'checked' : '') + (!_singleAbsLink ? ' disabled' : '') + '>'
+                + '<div class="w-9 h-5 bg-gray-300 peer-focus:ring-2 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500 peer-disabled:opacity-40"></div>'
+                + '</label>';
+            infoBar.insertAdjacentElement('afterend', toggleDiv);
+
+            if (!_singleAbsLink) {
+                var label = document.getElementById('me-link-label');
+                if (label) label.textContent = 'جاري جلب الرابط...';
+            }
+
+            var meToggle = document.getElementById('me-link-toggle');
+            if (meToggle) {
+                meToggle.addEventListener('change', function() {
+                    var on = meToggle.checked;
+                    localStorage.setItem('absence_include_link', String(on));
+                    var wrap = document.getElementById('me-link-toggle-wrap');
+                    var icon = document.getElementById('me-link-icon');
+                    var lbl = document.getElementById('me-link-label');
+                    wrap.className = 'px-5 py-2 border-b flex items-center justify-between ' + (on ? 'bg-green-50' : 'bg-gray-50');
+                    icon.className = 'material-symbols-outlined text-base ' + (on ? 'text-green-600' : 'text-gray-400');
+                    lbl.className = 'text-xs font-bold ' + (on ? 'text-green-700' : 'text-gray-500');
+                    // تحديث النص في textarea
+                    document.getElementById('me-text').value = buildFullMsg(on);
+                });
+            }
+        }, 100);
     };
 
-    // ★ جلب رابط عذر ولي الأمر - مع تشخيص في حال فشل
-    if (typeof google !== 'undefined' && google.script && google.script.run) {
+    // ★ جلب رابط عذر ولي الأمر
+    showEnhancedToast('info', 'جاري تجهيز الرسالة...');
+    if (linkOn && typeof google !== 'undefined' && google.script && google.script.run) {
         google.script.run.withSuccessHandler(function(r) {
-            if (!r || !r.success || !r.link) {
-                showEnhancedToast('warning', 'الرابط لم يُولّد: ' + (r && r.error ? r.error : 'الرابط فارغ'));
+            _singleAbsLink = (r && r.success && r.link) ? r.link : '';
+            openEditor();
+            // تحديث Toggle بعد جلب الرابط
+            if (_singleAbsLink) {
+                setTimeout(function() {
+                    var meToggle = document.getElementById('me-link-toggle');
+                    var lbl = document.getElementById('me-link-label');
+                    if (meToggle) { meToggle.disabled = false; meToggle.checked = true; }
+                    if (lbl) { lbl.textContent = 'إرفاق رابط إدخال العذر'; }
+                    document.getElementById('me-text').value = buildFullMsg(true);
+                }, 200);
+            } else {
+                setTimeout(function() {
+                    var lbl = document.getElementById('me-link-label');
+                    if (lbl) lbl.textContent = 'الرابط غير متاح';
+                }, 200);
             }
-            buildAndShow((r && r.success && r.link) ? r.link : '');
         }).withFailureHandler(function(err) {
-            showEnhancedToast('danger', 'فشل توليد الرابط: ' + err.message);
-            buildAndShow('');
+            _singleAbsLink = '';
+            openEditor();
+            setTimeout(function() {
+                var lbl = document.getElementById('me-link-label');
+                if (lbl) lbl.textContent = 'فشل جلب الرابط';
+            }, 200);
         }).getParentExcuseLinkForStudent(studentId, currentStage);
     } else {
-        buildAndShow('');
+        openEditor();
     }
 }
 

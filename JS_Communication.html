@@ -383,7 +383,7 @@ function loadCommunicationLog() {
             return;
         }
 
-        var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+        var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
         var rows = '';
         filtered.forEach(function(rec, i) {
             var statusColor = (rec.status || '').includes('تم') ? 'green' : '#999';
@@ -418,7 +418,7 @@ function loadCommunicationLog() {
         const rec = communicationRecords[index];
         if (!rec) return;
         
-        var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+        var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
         
         var win = window.open('', '_blank');
         win.document.write('<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">'

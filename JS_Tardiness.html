@@ -34,7 +34,7 @@ function getTimeOnly(dateStr) {
 function renderTardinessPage() {
     var main = document.getElementById('main-content');
     var _hd = new Date();
-    var _hjri = _hd.toLocaleDateString('ar-SA-u-ca-islamic', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    var _hjri = _hd.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
     main.innerHTML = `
         <div class="sec-tardiness">
             <div class="page-hero">
@@ -44,9 +44,9 @@ function renderTardinessPage() {
                         <p>${_hjri}</p>
                     </div>
                     <div class="hero-stats">
-                        <div class="hero-stat"><div class="hero-stat-icon">⏰</div><div class="hero-stat-num" id="tard-today-count">٠</div><div class="hero-stat-label">متأخرو اليوم</div></div>
-                        <div class="hero-stat"><div class="hero-stat-icon">📊</div><div class="hero-stat-num" id="tard-total-count">٠</div><div class="hero-stat-label">إجمالي التأخر</div></div>
-                        <div class="hero-stat"><div class="hero-stat-icon">📤</div><div class="hero-stat-num" id="tard-unsent-count">٠</div><div class="hero-stat-label">لم تُرسل</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#f59e0b">schedule</span></div><div class="hero-stat-num" id="tard-today-count">٠</div><div class="hero-stat-label">متأخرو اليوم</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#8b5cf6">bar_chart</span></div><div class="hero-stat-num" id="tard-total-count">٠</div><div class="hero-stat-label">إجمالي التأخر</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#3b82f6">send</span></div><div class="hero-stat-num" id="tard-unsent-count">٠</div><div class="hero-stat-label">لم تُرسل</div></div>
                     </div>
                 </div>
             </div>
@@ -85,7 +85,7 @@ function switchTardTab(tab) {
 // =================================================================
 function renderTardTodayTab() {
     var today = new Date();
-    var hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var miladiDate = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
     var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
 
@@ -154,13 +154,12 @@ function displayTardTodayTable() {
 
     var html = '<table class="sht"><thead><tr style="background:#dc2626">';
     html += '<th style="width:36px">#</th>';
-    html += '<th style="min-width:130px">اسم الطالب</th>';
+    html += '<th style="min-width:120px">اسم الطالب</th>';
     html += '<th>نوع التأخر</th>';
     html += '<th>الحصة</th>';
     html += '<th>الوقت</th>';
     html += '<th style="width:60px">مرات</th>';
-    html += '<th style="width:80px">الإرسال</th>';
-    html += '<th style="width:60px">طباعة</th>';
+    html += '<th style="min-width:150px">الإجراءات والتواصل</th>';
     html += '<th style="width:36px"></th>';
     html += '</tr></thead><tbody>';
 
@@ -173,8 +172,8 @@ function displayTardTodayTable() {
 
         if (g.first) {
             var classLabel = escapeHtml((getF_(rec, 'الصف') || '') + ' / ' + (getF_(rec, 'الفصل') || ''));
-            if (idx > 0) html += '<tr class="sht-sep"><td colspan="9"></td></tr>';
-            html += '<tr class="sht-gh"><td colspan="9"><span class="sht-gl">' + classLabel + '</span> <span class="sht-gc">(' + g.span + ')</span></td></tr>';
+            if (idx > 0) html += '<tr class="sht-sep"><td colspan="8"></td></tr>';
+            html += '<tr class="sht-gh"><td colspan="8"><span class="sht-gl">' + classLabel + '</span> <span class="sht-gc">(' + g.span + ')</span></td></tr>';
         }
 
         var lateTypeBadge = lateType.indexOf('حصة') >= 0
@@ -193,8 +192,11 @@ function displayTardTodayTable() {
         html += '<td><span class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-bold">' + escapeHtml(getF_(rec, 'الحصة') || '-') + '</span></td>';
         html += '<td class="text-xs text-gray-500">' + escapeHtml(getTimeOnly(rec['وقت_الإدخال'])) + '</td>';
         html += '<td class="' + cntCls + ' font-bold">' + toArabicNum_(cnt) + '</td>';
-        html += '<td>' + countBadge_(isSent, 'sendTardWhatsApp(' + origIdx + ')') + '</td>';
-        html += '<td><div class="flex gap-0.5 justify-center"><button onclick="printTardTodayDoc(\'ehalat_absence\',' + origIdx + ')" class="p-1 text-blue-500 hover:bg-blue-50 rounded" title="إحالة"><span class="material-symbols-outlined text-[15px]">forward_to_inbox</span></button><button onclick="printTardTodayDoc(\'tawtheeq_tawasol\',' + origIdx + ')" class="p-1 text-green-500 hover:bg-green-50 rounded" title="توثيق تواصل"><span class="material-symbols-outlined text-[15px]">contact_phone</span></button></div></td>';
+        html += '<td><div class="flex gap-1.5 justify-center flex-wrap items-center">';
+        html += countBadge_(isSent, 'sendTardWhatsApp(' + origIdx + ')');
+        html += '<button onclick="printTardTodayDoc(\'ehalat_absence\',' + origIdx + ')" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg" title="إحالة"><span class="material-symbols-outlined text-[20px]">forward_to_inbox</span></button>';
+        html += '<button onclick="printTardTodayDoc(\'tawtheeq_tawasol\',' + origIdx + ')" class="p-1.5 text-green-500 hover:bg-green-50 rounded-lg" title="توثيق تواصل"><span class="material-symbols-outlined text-[20px]">contact_phone</span></button>';
+        html += '</div></td>';
         html += '<td><button onclick="deleteTardRecord(' + rec.rowIndex + ')" class="p-1 hover:bg-red-50 rounded text-red-400 hover:text-red-600"><span class="material-symbols-outlined text-[18px]">delete</span></button></td>';
         html += '</tr>';
     });
@@ -233,7 +235,7 @@ function sendTardWhatsApp(idx) {
     if (!phone) { showEnhancedToast('warning', 'لا يوجد رقم جوال'); return; }
     var today = new Date();
     var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
-    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var defaultMsg = '⏰ *إشعار تأخر*\n\nالسلام عليكم ورحمة الله وبركاته\nولي أمر الطالب: *' + getF_(rec,'اسم_الطالب') + '*\nالصف: ' + getF_(rec,'الصف') + ' - ' + getF_(rec,'الفصل') + '\n\nنود إبلاغكم بتأخر ابنكم عن الحضور.\n⏰ نوع التأخر: ' + (getF_(rec,'نوع_التأخر')||'صباحي') + '\n📅 اليوم: ' + dayName + ' - ' + hijri + '\n\nمع تحيات إدارة مدرسة ' + (APP_DATA.settings.school_name || 'المدرسة') + '';
     showMessageEditor_({
         phone: phone, studentName: getF_(rec,'اسم_الطالب'), type: 'تأخر',
@@ -244,7 +246,7 @@ function sendTardWhatsApp(idx) {
             google.script.run.withSuccessHandler(function(r) {
                 if (r && r.success) {
                     showEnhancedToast('success', 'تم الإرسال ✓');
-                    google.script.run.updateLateSentStatus(currentStage, rec.rowIndex);
+                    google.script.run.withFailureHandler(function(e){ console.error('updateLateSentStatus:', e); }).updateLateSentStatus(currentStage, rec.rowIndex);
                     loadTardTodayRecords();
                 }
                 else showEnhancedToast('danger', r.error || 'فشل');
@@ -259,10 +261,41 @@ function sendAllTodayTard() {
     if (unsent.length === 0) { showEnhancedToast('info', 'تم إرسال الجميع سابقاً'); return; }
     showStyledConfirm_({title: 'إرسال إشعارات', message: 'سيتم إرسال إشعارات لـ ' + unsent.length + ' ولي أمر. متابعة؟', icon: 'send', color: 'red', onConfirm: function() {
         showEnhancedToast('info', 'جاري إرسال ' + unsent.length + ' إشعار... (تقريباً ' + Math.ceil(unsent.length * 35 / 60) + ' دقائق)');
-        unsent.forEach(function(rec, i) {
-            var delay = i * 30000 + Math.floor(Math.random() * 10000);
-            setTimeout(function() { sendTardWhatsApp(tardTodayRecords.indexOf(rec)); }, delay);
+        var successCount = 0, failCount = 0, total = unsent.length;
+        var sentRowIndices = [];
+
+        unsent.forEach(function(rec, index) {
+            var phone = getStudentPhone(rec);
+            if (!phone) { failCount++; checkTardDone(); return; }
+
+            var today = new Date();
+            var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
+            var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
+            var studentName = getF_(rec, 'اسم_الطالب');
+            var msg = '⏰ *إشعار تأخر*\n\nالسلام عليكم ورحمة الله وبركاته\nولي أمر الطالب: *' + studentName + '*\nالصف: ' + getF_(rec,'الصف') + ' - ' + getF_(rec,'الفصل') + '\n\nنود إبلاغكم بتأخر ابنكم عن الحضور.\n⏰ نوع التأخر: ' + (getF_(rec,'نوع_التأخر')||'صباحي') + '\n📅 اليوم: ' + dayName + ' - ' + hijri + '\n\nمع تحيات إدارة مدرسة ' + (APP_DATA.settings.school_name || 'المدرسة') + '';
+
+            var sendDelay = index * 30000 + Math.floor(Math.random() * 10000);
+            setTimeout(function() {
+                google.script.run
+                    .withSuccessHandler(function(r) {
+                        if (r && r.success) { successCount++; sentRowIndices.push(rec.rowIndex); }
+                        else failCount++;
+                        checkTardDone();
+                    })
+                    .withFailureHandler(function() { failCount++; checkTardDone(); })
+                    .sendWhatsAppWithLog({ phone: phone, message: msg, studentName: studentName, type: 'تأخر' }, currentStage);
+            }, sendDelay);
         });
+
+        function checkTardDone() {
+            if (successCount + failCount >= total) {
+                showEnhancedToast('success', 'تم الإرسال: ' + successCount + ' ناجح' + (failCount ? '، ' + failCount + ' فاشل' : ''));
+                if (sentRowIndices.length > 0) {
+                    google.script.run.withFailureHandler(function(e){ console.error('فشل تحديث حالة الإرسال:', e); }).updateLateSentStatusBatch(currentStage, sentRowIndices);
+                }
+                loadTardTodayRecords();
+            }
+        }
     }});
 }
 
@@ -271,6 +304,8 @@ function deleteTardRecord(rowIndex) {
     google.script.run.withSuccessHandler(function(res) {
         if (res.success) { showEnhancedToast('success', 'تم الحذف'); loadTardTodayRecords(); }
         else showEnhancedToast('danger', 'خطأ: ' + res.error);
+    }).withFailureHandler(function(e) {
+        showEnhancedToast('danger', 'خطأ في الحذف: ' + e.message);
     }).deleteLateRecord(currentStage, rowIndex);
 }
 
@@ -350,6 +385,8 @@ function _saveAsDefault() {
         google.script.run.withSuccessHandler(function(r) {
             if (r && r.success) { _templateCache[_msgEditorType]=tmpl; showEnhancedToast('success','تم حفظ القالب كافتراضي ✓'); document.getElementById('me-tmpl-note').classList.remove('hidden'); }
             else showEnhancedToast('danger','فشل الحفظ');
+        }).withFailureHandler(function(e) {
+            showEnhancedToast('danger', 'خطأ في حفظ القالب: ' + e.message);
         }).saveMessageTemplate(_msgEditorType, tmpl);
     }
 }
@@ -357,7 +394,7 @@ function _resetTemplate() {
     document.getElementById('me-text').value = document.getElementById('me-text').dataset.defaultMsg || '';
     document.getElementById('me-tmpl-note').classList.add('hidden');
     if (typeof google !== 'undefined' && google.script && google.script.run) {
-        google.script.run.withSuccessHandler(function(){ _templateCache[_msgEditorType]=''; showEnhancedToast('info','تم استعادة القالب الافتراضي'); }).deleteMessageTemplate(_msgEditorType);
+        google.script.run.withSuccessHandler(function(){ _templateCache[_msgEditorType]=''; showEnhancedToast('info','تم استعادة القالب الافتراضي'); }).withFailureHandler(function(e){ console.error('deleteMessageTemplate:', e); }).deleteMessageTemplate(_msgEditorType);
     }
 }
 function _closeEditor() { document.getElementById('msg-editor-modal').classList.add('hidden'); }
@@ -441,7 +478,7 @@ function printTodayTard() {
     var _printRecs = (typeof getSelectedRecords_tard==='function') ? getSelectedRecords_tard() : tardTodayRecords;
     if (_printRecs.length === 0) { showEnhancedToast('warning', 'لا يوجد بيانات'); return; }
     var today = new Date();
-    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var miladi = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
     var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
     var stageName = getStageName_(currentStage);
@@ -733,7 +770,7 @@ function closeTardDetailModal() { document.getElementById('tard-detail-modal').c
 function printTardArchive() {
     var records = tardAllRecords || [];
     if (records.length === 0) { showEnhancedToast('warning', 'لا توجد بيانات'); return; }
-    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var rows = '';
     records.forEach(function(rec, i) {
         rows += '<tr>'
@@ -909,7 +946,7 @@ function printTardTodayDoc(formId, idx) {
     var printData = {
         studentName: rec['اسم_الطالب'] || '',
         grade: (getF_(rec, 'الصف')) + ' / ' + (getF_(rec, 'الفصل')),
-        violationDate: today.toLocaleDateString('ar-SA-u-ca-islamic'),
+        violationDate: today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura'),
         violationDay: today.toLocaleDateString('ar-SA', {weekday: 'long'}),
         lateType: getF_(rec, 'نوع_التأخر') || 'تأخر صباحي',
         period: rec['الحصة'] || '',
@@ -935,7 +972,7 @@ function printTardDetailDoc() {
     var printData = {
         studentName: name,
         grade: grade,
-        violationDate: today.toLocaleDateString('ar-SA-u-ca-islamic'),
+        violationDate: today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura'),
         violationDay: today.toLocaleDateString('ar-SA', {weekday: 'long'}),
         contactType: 'تأخر',
         contactReason: 'تأخر متكرر',
@@ -951,7 +988,7 @@ function printTardContactReport() {
     var records = tardAllRecords || [];
     var sent = records.filter(function(r) { return getF_(r, 'تم_الإرسال') === 'نعم'; });
     if (sent.length === 0) { showEnhancedToast('warning', 'لا يوجد سجلات تم إرسالها'); return; }
-    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var rows = '';
     sent.forEach(function(rec, i) {
         rows += '<tr>'

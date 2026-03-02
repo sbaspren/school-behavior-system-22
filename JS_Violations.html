@@ -34,7 +34,7 @@ function effectiveDeg_(v, stage) {
 function renderNewViolationPage() {
     const main = document.getElementById('main-content');
     var _hd = new Date();
-    var _hjri = _hd.toLocaleDateString('ar-SA-u-ca-islamic', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    var _hjri = _hd.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
     main.innerHTML = `
         <div class="sec-violations" style="position:relative">
             <div id="viol-loading-overlay" style="position:absolute;inset:0;background:rgba(255,255,255,0.9);z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;border-radius:16px">
@@ -49,9 +49,9 @@ function renderNewViolationPage() {
                         <p>${_hjri}</p>
                     </div>
                     <div class="hero-stats">
-                        <div class="hero-stat"><div class="hero-stat-icon">📋</div><div class="hero-stat-num" id="viol-today-count">٠</div><div class="hero-stat-label">مخالفات اليوم</div></div>
-                        <div class="hero-stat"><div class="hero-stat-icon">📊</div><div class="hero-stat-num" id="viol-total-count">٠</div><div class="hero-stat-label">إجمالي المخالفات</div></div>
-                        <div class="hero-stat"><div class="hero-stat-icon">⚠️</div><div class="hero-stat-num" id="viol-critical-count">٠</div><div class="hero-stat-label">درجة ٤-٥</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#ef4444">gavel</span></div><div class="hero-stat-num" id="viol-today-count">٠</div><div class="hero-stat-label">مخالفات اليوم</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#8b5cf6">bar_chart</span></div><div class="hero-stat-num" id="viol-total-count">٠</div><div class="hero-stat-label">إجمالي المخالفات</div></div>
+                        <div class="hero-stat"><div class="hero-stat-icon"><span class="material-symbols-outlined" style="font-size:22px;color:#f59e0b">warning</span></div><div class="hero-stat-num" id="viol-critical-count">٠</div><div class="hero-stat-label">درجة ٤-٥</div></div>
                     </div>
                 </div>
             </div>
@@ -93,7 +93,7 @@ function switchViolationTab(tab) {
 // =================================================================
 function renderViolationTodayTab() {
     const today = new Date();
-    const hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    const hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     const miladiDate = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
     const dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
     
@@ -225,12 +225,11 @@ function displayViolationTodayTable() {
     
     var html = '<table class="sht"><thead><tr style="background:#4f46e5">';
     html += '<th style="width:36px">#</th>';
-    html += '<th style="min-width:130px">اسم الطالب</th>';
-    html += '<th style="min-width:150px">المخالفة</th>';
-    html += '<th style="width:50px">الدرجة</th>';
-    html += '<th style="min-width:140px">الإجراءات</th>';
-    html += '<th style="width:80px">التواصل</th>';
-    html += '<th style="width:90px">طباعة</th>';
+    html += '<th style="min-width:110px">اسم الطالب</th>';
+    html += '<th style="min-width:120px">المخالفة</th>';
+    html += '<th style="width:45px">الدرجة</th>';
+    html += '<th style="min-width:110px">الإجراءات</th>';
+    html += '<th style="min-width:200px">الإجراءات والتواصل</th>';
     html += '</tr></thead><tbody>';
 
     sorted.forEach(function(rec, idx) {
@@ -244,8 +243,8 @@ function displayViolationTodayTable() {
 
         if (g.first) {
             var classLabel = escapeHtml((getF_(rec, 'الصف') || '') + ' / ' + (getF_(rec, 'الفصل') || ''));
-            if (idx > 0) html += '<tr class="sht-sep"><td colspan="7"></td></tr>';
-            html += '<tr class="sht-gh"><td colspan="7"><span class="sht-gl">' + classLabel + '</span> <span class="sht-gc">(' + g.span + ')</span></td></tr>';
+            if (idx > 0) html += '<tr class="sht-sep"><td colspan="6"></td></tr>';
+            html += '<tr class="sht-gh"><td colspan="6"><span class="sht-gl">' + classLabel + '</span> <span class="sht-gc">(' + g.span + ')</span></td></tr>';
         }
 
         var dk = 'د' + degree;
@@ -257,17 +256,18 @@ function displayViolationTodayTable() {
         html += '<td style="text-align:right;max-width:200px"><p class="truncate" title="' + escapeHtml(getF_(rec, 'نص المخالفة') || '') + '">' + escapeHtml(getF_(rec, 'نص المخالفة') || '-') + '</p></td>';
         html += '<td><span class="px-2 py-1 rounded text-xs font-bold bg-degree-' + degree + '">' + toIndic(degree) + '</span></td>';
         html += '<td style="text-align:right;max-width:180px" class="text-xs text-gray-600"><p class="truncate" title="' + escapeHtml(procedures) + '">' + escapeHtml(shortProc || '-') + '</p></td>';
-        html += '<td>' + countBadge_(isSent, 'sendViolationWhatsApp(' + origIdx + ')') + '</td>';
         var requiredForms = getRequiredForms_(procedures);
-        html += '<td><div class="flex gap-1 justify-center flex-wrap">';
-        if (requiredForms.includes('tahood_slooki')) html += '<button onclick="printViolationForm(\'tahood_slooki\',' + origIdx + ')" class="p-1 text-indigo-500 hover:bg-indigo-50 rounded" title="تعهد سلوكي"><span class="material-symbols-outlined text-[16px]">verified</span></button>';
-        if (requiredForms.includes('ishar_wali_amr')) html += '<button onclick="printViolationForm(\'ishar_wali_amr\',' + origIdx + ')" class="p-1 text-blue-500 hover:bg-blue-50 rounded" title="إشعار ولي أمر"><span class="material-symbols-outlined text-[16px]">campaign</span></button>';
-        if (requiredForms.includes('dawat_wali_amr')) html += '<button onclick="showDawatModal_(' + origIdx + ')" class="p-1 text-amber-600 hover:bg-amber-50 rounded" title="دعوة ولي أمر"><span class="material-symbols-outlined text-[16px]">mail</span></button>';
-        if (requiredForms.includes('mahdar_lajnah')) html += '<button onclick="printViolationForm(\'mahdar_lajnah\',' + origIdx + ')" class="p-1 text-red-500 hover:bg-red-50 rounded" title="محضر لجنة"><span class="material-symbols-outlined text-[16px]">groups</span></button>';
-        if (requiredForms.includes('ehalat_talib')) html += '<button onclick="printViolationForm(\'ehalat_talib\',' + origIdx + ')" class="p-1 text-purple-500 hover:bg-purple-50 rounded" title="إحالة طالب"><span class="material-symbols-outlined text-[16px]">forward_to_inbox</span></button>';
-        if (requiredForms.includes('mahdar_dab_wakea')) html += '<button onclick="printViolationForm(\'mahdar_dab_wakea\',' + origIdx + ')" class="p-1 text-gray-500 hover:bg-gray-100 rounded" title="محضر ضبط واقعة"><span class="material-symbols-outlined text-[16px]">description</span></button>';
-        if (requiredForms.includes('tawid_darajat')) html += '<button onclick="printViolationForm(\'tawid_darajat\',' + origIdx + ')" class="p-1 text-teal-500 hover:bg-teal-50 rounded" title="فرص تعويض"><span class="material-symbols-outlined text-[16px]">workspace_premium</span></button>';
-        html += '<button onclick="printViolTodayDoc(\'tawtheeq_tawasol\',' + origIdx + ')" class="p-1 text-green-500 hover:bg-green-50 rounded" title="توثيق تواصل"><span class="material-symbols-outlined text-[16px]">contact_phone</span></button>';
+        html += '<td><div class="flex gap-1.5 justify-center flex-wrap items-center">';
+        html += countBadge_(isSent, 'sendViolationWhatsApp(' + origIdx + ')');
+        if (requiredForms.includes('tahood_slooki')) html += '<button onclick="printViolationForm(\'tahood_slooki\',' + origIdx + ')" class="p-1.5 text-indigo-500 hover:bg-indigo-50 rounded-lg" title="تعهد سلوكي"><span class="material-symbols-outlined text-[20px]">verified</span></button>';
+        if (requiredForms.includes('ishar_wali_amr')) html += '<button onclick="printViolationForm(\'ishar_wali_amr\',' + origIdx + ')" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg" title="إشعار ولي أمر"><span class="material-symbols-outlined text-[20px]">campaign</span></button>';
+        if (requiredForms.includes('dawat_wali_amr')) html += '<button onclick="showDawatModal_(' + origIdx + ')" class="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg" title="دعوة ولي أمر"><span class="material-symbols-outlined text-[20px]">mail</span></button>';
+        if (requiredForms.includes('mahdar_lajnah')) html += '<button onclick="printViolationForm(\'mahdar_lajnah\',' + origIdx + ')" class="p-1.5 text-red-500 hover:bg-red-50 rounded-lg" title="محضر لجنة"><span class="material-symbols-outlined text-[20px]">groups</span></button>';
+        if (requiredForms.includes('ehalat_talib')) html += '<button onclick="printViolationForm(\'ehalat_talib\',' + origIdx + ')" class="p-1.5 text-purple-500 hover:bg-purple-50 rounded-lg" title="إحالة طالب"><span class="material-symbols-outlined text-[20px]">forward_to_inbox</span></button>';
+        if (requiredForms.includes('mahdar_dab_wakea')) html += '<button onclick="printViolationForm(\'mahdar_dab_wakea\',' + origIdx + ')" class="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg" title="محضر ضبط واقعة"><span class="material-symbols-outlined text-[20px]">description</span></button>';
+        if (requiredForms.includes('tawid_darajat')) html += '<button onclick="printViolationForm(\'tawid_darajat\',' + origIdx + ')" class="p-1.5 text-teal-500 hover:bg-teal-50 rounded-lg" title="فرص تعويض"><span class="material-symbols-outlined text-[20px]">workspace_premium</span></button>';
+        html += '<button onclick="printViolTodayDoc(\'tawtheeq_tawasol\',' + origIdx + ')" class="p-1.5 text-green-500 hover:bg-green-50 rounded-lg" title="توثيق تواصل"><span class="material-symbols-outlined text-[20px]">contact_phone</span></button>';
+        html += '<button onclick="deleteViolationRecord(' + origIdx + ')" class="p-1.5 text-red-500 hover:bg-red-50 rounded-lg" title="حذف"><span class="material-symbols-outlined text-[18px]">delete</span></button>';
         html += '</div></td>';
         html += '</tr>';
     });
@@ -300,6 +300,30 @@ function updateViolationCounts() {
 }
 
 // =================================================================
+// حذف سجل مخالفة
+// =================================================================
+function deleteViolationRecord(idx) {
+    var rec = violationTodayRecords[idx];
+    if (!rec) return;
+    showStyledConfirm_({title: 'حذف مخالفة', message: 'هل أنت متأكد من حذف مخالفة "' + (getF_(rec, 'نص المخالفة') || '') + '" للطالب ' + (getF_(rec, 'اسم الطالب') || '') + '؟', icon: 'delete', color: 'red', onConfirm: function() {
+        showEnhancedToast('info', 'جاري الحذف...');
+        google.script.run
+            .withSuccessHandler(function(res) {
+                if (res && res.success) {
+                    showEnhancedToast('success', 'تم حذف المخالفة');
+                    loadViolationTodayRecords();
+                } else {
+                    showEnhancedToast('danger', (res && res.error) || 'فشل الحذف');
+                }
+            })
+            .withFailureHandler(function(err) {
+                showEnhancedToast('danger', 'خطأ في الحذف: ' + err.message);
+            })
+            .deleteViolationRecord(currentStage, rec.rowIndex);
+    }});
+}
+
+// =================================================================
 // 5. إرسال واتساب للمخالفات
 // =================================================================
 function sendViolationWhatsApp(idx) {
@@ -309,7 +333,7 @@ function sendViolationWhatsApp(idx) {
     if (!phone) { showEnhancedToast('warning', 'لا يوجد رقم جوال لولي أمر الطالب'); return; }
     const today = new Date();
     const dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
-    const hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    const hijriDate = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     const defaultMsg = '⚠️ *إشعار مخالفة سلوكية*\n\nالسلام عليكم ورحمة الله وبركاته\nولي أمر الطالب: *' + (rec['اسم الطالب']||'') + '*\nالصف: ' + (rec['الصف']||'') + ' - الفصل: ' + (rec['الفصل']||'') + '\n\nنود إحاطتكم بأنه قد صدر بحق ابنكم مخالفة سلوكية:\n📌 *المخالفة:* ' + (rec['نص المخالفة']||'') + '\n📊 *الدرجة:* ' + (rec['الدرجة']||'') + '\n📋 *الإجراء المتخذ:* ' + (rec['الإجراءات']||'حسب لائحة السلوك') + '\n\n📅 اليوم: ' + dayName + ' - ' + hijriDate + '\n\n🏫 الرجاء مراجعة المدرسة في أقرب وقت.\n\nمع تحيات إدارة مدرسة ' + (APP_DATA.settings.school_name || 'المدرسة') + '';
     showMessageEditor_({
         phone: phone,
@@ -374,7 +398,7 @@ function showDawatModal_(idx) {
     var dayNames = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
     var defaultDay = dayNames[tomorrow.getDay()];
     var defaultHijri = '';
-    try { defaultHijri = tomorrow.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }) + ' هـ'; } catch(e) { defaultHijri = ''; }
+    try { defaultHijri = tomorrow.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' }) + ' هـ'; } catch(e) { defaultHijri = ''; }
 
     // إزالة منبثقة سابقة
     var old = document.getElementById('dawat-modal-overlay');
@@ -453,7 +477,7 @@ function showDawatModal_(idx) {
         var d = new Date(this.value);
         if (!isNaN(d)) {
             document.getElementById('dawat-day').value = dayNames[d.getDay()];
-            try { document.getElementById('dawat-hijri-preview').textContent = d.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }) + ' هـ'; } catch(e) {}
+            try { document.getElementById('dawat-hijri-preview').textContent = d.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' }) + ' هـ'; } catch(e) {}
         }
     });
 }
@@ -471,7 +495,7 @@ function submitDawatModal_(idx) {
     var hijriDate = '';
     try {
         var d = new Date(dateVal);
-        hijriDate = d.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+        hijriDate = d.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     } catch(e) { hijriDate = dateVal; }
 
     var printData = {
@@ -753,7 +777,7 @@ function printTodayViolations() {
     if (_printRecs.length === 0) { showEnhancedToast('warning', 'لا يوجد بيانات للطباعة'); return; }
     
     var today = new Date();
-    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var miladi = today.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
     var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
     var stageName = getStageName_(currentStage);
@@ -763,7 +787,7 @@ function printTodayViolations() {
     sorted.forEach(function(rec, i) {
         var grade = getF_(rec, 'الصف'), cls = getF_(rec, 'الفصل');
         var key = grade + cls;
-        if (key !== lastKey && i > 0) rows += '<tr class="sep-row"><td colspan="7"></td></tr>';
+        if (key !== lastKey && i > 0) rows += '<tr class="sep-row"><td colspan="6"></td></tr>';
         lastKey = key;
         var isSent = getF_(rec, 'تم الإرسال') === 'نعم';
         rows += '<tr>'
@@ -1144,6 +1168,7 @@ function openViolDetailModal(groupIndex) {
         const printData = {
             studentName: v['اسم الطالب'], grade: v['الصف'], class: v['الفصل'],
             violationDate: v['التاريخ الهجري'], violationDegree: v['الدرجة'],
+            violationDay: v['التاريخ الميلادي'] ? new Date(v['التاريخ الميلادي']).toLocaleDateString('ar-SA', { weekday: 'long' }) : '',
             violationText: v['نص المخالفة'],
             procedures: v['الإجراءات'] ? v['الإجراءات'].split('\n') : []
         };
@@ -1213,6 +1238,7 @@ function createViolApprovedTable(records) {
         const printData = {
             studentName: rec['اسم الطالب'], grade: rec['الصف'], class: rec['الفصل'],
             violationDate: rec['التاريخ الهجري'], violationDegree: rec['الدرجة'],
+            violationDay: rec['التاريخ الميلادي'] ? new Date(rec['التاريخ الميلادي']).toLocaleDateString('ar-SA', { weekday: 'long' }) : '',
             violationText: rec['نص المخالفة'],
             procedures: rec['الإجراءات'] ? rec['الإجراءات'].split('\n') : []
         };
@@ -1290,6 +1316,7 @@ function violBulkPrint(formId) {
         var printData = {
             studentName: rec['اسم الطالب'], grade: rec['الصف'], class: rec['الفصل'],
             violationDate: rec['التاريخ الهجري'], violationDegree: rec['الدرجة'],
+            violationDay: rec['التاريخ الميلادي'] ? new Date(rec['التاريخ الميلادي']).toLocaleDateString('ar-SA', { weekday: 'long' }) : '',
             violationText: rec['نص المخالفة'],
             procedures: rec['الإجراءات'] ? rec['الإجراءات'].split('\n') : []
         };
@@ -1315,38 +1342,46 @@ function violBulkSendWhatsApp() {
     if (unsent.length === 0) { showEnhancedToast('info', 'جميع المحددين تم إرسالهم سابقاً'); return; }
     showStyledConfirm_({title: 'إرسال واتساب جماعي', message: 'إرسال ' + unsent.length + ' رسالة واتساب للمحددين؟\n⏱️ التقدير: ~' + Math.ceil(unsent.length * 35 / 60) + ' دقائق', icon: 'send', color: 'green', onConfirm: function() {
         showEnhancedToast('info', 'جاري إرسال ' + unsent.length + ' إشعار... (تقريباً ' + Math.ceil(unsent.length * 35 / 60) + ' دقائق)');
+        var successCount = 0, failCount = 0, total = unsent.length;
+        var sentRowIndices = [];
+
         unsent.forEach(function(i, index) {
             var rec = violationAllRecords[i];
-            if (!rec) return;
+            if (!rec) { failCount++; checkViolBulkDone(); return; }
             var phone = getStudentPhone(rec);
-            if (!phone) return;
+            if (!phone) { failCount++; checkViolBulkDone(); return; }
             var delay = index * 30000 + Math.floor(Math.random() * 10000);
             setTimeout(function() {
                 var today = new Date();
                 var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
-                var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+                var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
                 var msg = '⚠️ *إشعار مخالفة سلوكية*\n\nالسلام عليكم ورحمة الله وبركاته\nولي أمر الطالب: *' + (rec['اسم الطالب']||'') + '*\nالصف: ' + (rec['الصف']||'') + ' - الفصل: ' + (rec['الفصل']||'') + '\n\n📌 *المخالفة:* ' + (rec['نص المخالفة']||'') + '\n📊 *الدرجة:* ' + (rec['الدرجة']||'') + '\n📋 *الإجراء:* ' + (rec['الإجراءات']||'حسب لائحة السلوك') + '\n\n📅 ' + dayName + ' - ' + hijri + '\n\nمع تحيات إدارة مدرسة ' + (APP_DATA.settings.school_name || 'المدرسة') + '';
-                if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+                if (typeof google === 'undefined' || !google.script || !google.script.run) { failCount++; checkViolBulkDone(); return; }
                 google.script.run
                     .withSuccessHandler(function(r) {
-                        if (r && r.success) {
-                            google.script.run.withFailureHandler(function(e){ console.error('فشل تحديث حالة الإرسال:', e); }).updateViolationSentStatus(currentStage, [rec.rowIndex]);
-                            if (index === unsent.length - 1) {
-                                showEnhancedToast('success', 'تم إرسال ' + unsent.length + ' إشعار ✓');
-                                loadViolationApprovedRecords();
-                            }
-                        }
+                        if (r && r.success) { successCount++; sentRowIndices.push(rec.rowIndex); }
+                        else failCount++;
+                        checkViolBulkDone();
                     })
                     .withFailureHandler(function(err) {
                         console.error('bulkSend error for ' + rec['اسم الطالب'] + ':', err);
-                        if (index === unsent.length - 1) {
-                            showEnhancedToast('warning', 'تم إرسال بعض الإشعارات مع أخطاء');
-                            loadViolationApprovedRecords();
-                        }
+                        failCount++;
+                        checkViolBulkDone();
                     })
                     .sendWhatsAppWithLog({ phone: phone, message: msg, studentName: rec['اسم الطالب'], type: 'مخالفة سلوكية' }, currentStage);
             }, delay);
         });
+
+        function checkViolBulkDone() {
+            if (successCount + failCount >= total) {
+                showEnhancedToast('success', 'تم الإرسال: ' + successCount + ' ناجح' + (failCount ? '، ' + failCount + ' فاشل' : ''));
+                if (sentRowIndices.length > 0) {
+                    google.script.run.withFailureHandler(function(e){ console.error('فشل تحديث حالة الإرسال:', e); }).updateViolationSentStatus(currentStage, sentRowIndices);
+                }
+                loadViolationApprovedRecords();
+            }
+        }
+
         clearViolSelection();
     }});
 }
@@ -1360,7 +1395,7 @@ function sendViolCardWhatsApp(studentId) {
     if (!phone) { showEnhancedToast('warning', 'لا يوجد رقم جوال لولي أمر الطالب'); return; }
     var today = new Date();
     var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
-    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var violList = recs.map(function(r, i) { return '  ' + (i+1) + '. ' + (r['نص المخالفة']||'') + ' (درجة ' + (r['الدرجة']||'') + ')'; }).join('\n');
     var msg = '⚠️ *إشعار مخالفات سلوكية*\n\nالسلام عليكم ورحمة الله وبركاته\nولي أمر الطالب: *' + (rec['اسم الطالب']||'') + '*\nالصف: ' + (rec['الصف']||'') + ' - الفصل: ' + (rec['الفصل']||'') + '\n\nالمخالفات:\n' + violList + '\n\n📅 ' + dayName + ' - ' + hijri + '\n\n🏫 الرجاء مراجعة المدرسة.\n\nمع تحيات إدارة مدرسة ' + (APP_DATA.settings.school_name || 'المدرسة');
     showMessageEditor_({
@@ -1390,7 +1425,7 @@ function sendViolRecordWhatsApp(idx) {
     if (!phone) { showEnhancedToast('warning', 'لا يوجد رقم جوال لولي أمر الطالب'); return; }
     var today = new Date();
     var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
-    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var msg = '⚠️ *إشعار مخالفة سلوكية*\n\nالسلام عليكم ورحمة الله وبركاته\nولي أمر الطالب: *' + (rec['اسم الطالب']||'') + '*\nالصف: ' + (rec['الصف']||'') + ' - الفصل: ' + (rec['الفصل']||'') + '\n\n📌 *المخالفة:* ' + (rec['نص المخالفة']||'') + '\n📊 *الدرجة:* ' + (rec['الدرجة']||'') + '\n📋 *الإجراء:* ' + (rec['الإجراءات']||'حسب لائحة السلوك') + '\n\n📅 ' + dayName + ' - ' + hijri + '\n\nمع تحيات إدارة مدرسة ' + (APP_DATA.settings.school_name || 'المدرسة');
     showMessageEditor_({
         phone: phone, studentName: rec['اسم الطالب'] || '', type: 'مخالفة سلوكية',
@@ -1416,31 +1451,43 @@ function sendApprovedViolations() {
     if (unsent.length === 0) { showEnhancedToast('info', 'تم إرسال جميع الإشعارات سابقاً'); return; }
     showStyledConfirm_({title: 'إرسال إشعارات المعتمد', message: 'سيتم إرسال ' + unsent.length + ' إشعار واتساب لأولياء الأمور.\n⏱️ التقدير: ~' + Math.ceil(unsent.length * 35 / 60) + ' دقائق\nمتابعة؟', icon: 'send', color: 'green', onConfirm: function() {
         showEnhancedToast('info', 'جاري إرسال ' + unsent.length + ' إشعار...');
+        var successCount = 0, failCount = 0, total = unsent.length;
+        var sentRowIndices = [];
+
         unsent.forEach(function(rec, index) {
             var phone = getStudentPhone(rec);
-            if (!phone) return;
+            if (!phone) { failCount++; checkApprovedDone(); return; }
             var delay = index * 30000 + Math.floor(Math.random() * 10000);
             setTimeout(function() {
                 var today = new Date();
                 var dayName = today.toLocaleDateString('ar-SA', { weekday: 'long' });
-                var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+                var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
                 var msg = '⚠️ *إشعار مخالفة سلوكية*\n\nالسلام عليكم ورحمة الله وبركاته\nولي أمر الطالب: *' + (rec['اسم الطالب']||'') + '*\nالصف: ' + (rec['الصف']||'') + ' - الفصل: ' + (rec['الفصل']||'') + '\n\n📌 *المخالفة:* ' + (rec['نص المخالفة']||'') + '\n📊 *الدرجة:* ' + (rec['الدرجة']||'') + '\n📋 *الإجراء:* ' + (rec['الإجراءات']||'حسب لائحة السلوك') + '\n\n📅 ' + dayName + ' - ' + hijri + '\n\nمع تحيات إدارة مدرسة ' + (APP_DATA.settings.school_name || 'المدرسة') + '';
-                if (typeof google !== 'undefined' && google.script && google.script.run) {
-                    google.script.run
-                        .withSuccessHandler(function(r) {
-                            if (r && r.success) {
-                                google.script.run.withFailureHandler(function(e){ console.error('فشل تحديث حالة الإرسال:', e); }).updateViolationSentStatus(currentStage, [rec.rowIndex]);
-                                if (index === unsent.length - 1) {
-                                    showEnhancedToast('success', 'تم إرسال ' + unsent.length + ' إشعار ✓');
-                                    loadViolationApprovedRecords();
-                                }
-                            }
-                        })
-                        .withFailureHandler(function(err) { console.error('sendApproved error:', err); })
-                        .sendWhatsAppWithLog({ phone: phone, message: msg, studentName: rec['اسم الطالب'], type: 'مخالفة سلوكية' }, currentStage);
-                }
+                if (typeof google === 'undefined' || !google.script || !google.script.run) { failCount++; checkApprovedDone(); return; }
+                google.script.run
+                    .withSuccessHandler(function(r) {
+                        if (r && r.success) { successCount++; sentRowIndices.push(rec.rowIndex); }
+                        else failCount++;
+                        checkApprovedDone();
+                    })
+                    .withFailureHandler(function(err) {
+                        console.error('sendApproved error:', err);
+                        failCount++;
+                        checkApprovedDone();
+                    })
+                    .sendWhatsAppWithLog({ phone: phone, message: msg, studentName: rec['اسم الطالب'], type: 'مخالفة سلوكية' }, currentStage);
             }, delay);
         });
+
+        function checkApprovedDone() {
+            if (successCount + failCount >= total) {
+                showEnhancedToast('success', 'تم الإرسال: ' + successCount + ' ناجح' + (failCount ? '، ' + failCount + ' فاشل' : ''));
+                if (sentRowIndices.length > 0) {
+                    google.script.run.withFailureHandler(function(e){ console.error('فشل تحديث حالة الإرسال:', e); }).updateViolationSentStatus(currentStage, sentRowIndices);
+                }
+                loadViolationApprovedRecords();
+            }
+        }
     }});
 }
 
@@ -1489,13 +1536,13 @@ function printViolationApprovedList() {
         return true;
     });
     if (filtered.length === 0) { showEnhancedToast('warning', 'لا توجد بيانات للطباعة'); return; }
-    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var sorted = sortByClassShared_(filtered, 'اسم الطالب', 'الصف', 'الفصل');
     var rows = '', lastKey = '';
     sorted.forEach(function(rec, i) {
         var g = getF_(rec, 'الصف'), c = getF_(rec, 'الفصل');
         var key = g + c;
-        if (key !== lastKey && i > 0) rows += '<tr class="sep-row"><td colspan="7"></td></tr>';
+        if (key !== lastKey && i > 0) rows += '<tr class="sep-row"><td colspan="6"></td></tr>';
         lastKey = key;
         var isSent = getF_(rec, 'تم الإرسال') === 'نعم';
         rows += '<tr>'
@@ -1766,7 +1813,7 @@ function getViolationModalsHTML() {
                     </div>
 
                     <!-- اختيار الطالب -->
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-bold text-gray-500 mb-2">الصف</label>
                             <select id="nv-grade" onchange="populateClasses()" class="w-full h-11 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm">
@@ -1779,12 +1826,20 @@ function getViolationModalsHTML() {
                                 <option value="">اختر الفصل</option>
                             </select>
                         </div>
-                        <div>
-                            <label class="block text-xs font-bold text-gray-500 mb-2">الطالب</label>
-                            <select id="nv-student" onchange="onStudentSelected()" disabled class="w-full h-11 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold disabled:opacity-50">
-                                <option value="">اختر الطالب</option>
-                            </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 mb-2">
+                            الطلاب <span class="text-gray-400 font-normal text-[11px]">(يمكنك اختيار أكثر من طالب)</span>
+                        </label>
+                        <div class="flex items-center gap-3 mb-2">
+                            <button type="button" onclick="toggleSelectAllViolStudents()" class="text-xs px-3 py-1 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 font-bold flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[14px]">select_all</span> تحديد الكل
+                            </button>
+                            <span id="nv-student-count" class="text-xs text-gray-400"></span>
                         </div>
+                        <select id="nv-student" multiple onchange="onStudentSelectionChanged()" disabled class="w-full h-48 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold disabled:opacity-50">
+                        </select>
+                        <p class="text-[11px] text-gray-400 mt-1">اضغط Ctrl للاختيار المتعدد</p>
                     </div>
 
                     <!-- المخالفة -->
@@ -1838,6 +1893,21 @@ function openViolationAddModal() {
 
 function closeViolationAddModal() {
     document.getElementById('viol-add-modal').classList.add('hidden');
+    // إعادة تهيئة النموذج
+    var studentSel = document.getElementById('nv-student');
+    if (studentSel) { studentSel.innerHTML = ''; studentSel.disabled = true; }
+    var classSel = document.getElementById('nv-class');
+    if (classSel) { classSel.innerHTML = '<option value="">اختر الفصل</option>'; classSel.disabled = true; }
+    var gradeSel = document.getElementById('nv-grade');
+    if (gradeSel) gradeSel.value = '';
+    document.getElementById('violation-section').classList.add('hidden');
+    document.getElementById('procedures-section').classList.add('hidden');
+    document.getElementById('procedures-list').innerHTML = '';
+    document.getElementById('repeat-alert-box').innerHTML = '';
+    var countEl = document.getElementById('nv-student-count');
+    if (countEl) countEl.textContent = '';
+    var saveBtn = document.getElementById('saveBtn');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">save</span> حفظ المخالفة'; }
 }
 
 // =================================================================
@@ -1869,7 +1939,7 @@ function setViolationType(type) {
 
     applyModalTheme(type);
 
-    if (document.getElementById('nv-student').value) {
+    if (document.getElementById('nv-student').selectedOptions.length > 0) {
         populateDegrees();
     }
 }
@@ -1912,16 +1982,46 @@ function populateStudents() {
     const cls = document.getElementById('nv-class').value;
     const select = document.getElementById('nv-student');
     select.disabled = !cls;
-    if (!cls) return;
+    select.innerHTML = '';
+    if (!cls) { updateViolStudentCount(); return; }
     const students = APP_DATA.students.filter(s => s['المرحلة'] === currentStage && s['الصف'] === grade && s['الفصل'] == cls);
     students.sort((a, b) => (a['اسم الطالب'] || '').localeCompare(b['اسم الطالب'] || '', 'ar'));
-    select.innerHTML = '<option value="">اختر الطالب</option>';
-    students.forEach(s => select.add(new Option(s['اسم الطالب'], s['رقم الطالب'])));
+    students.forEach(s => {
+        var opt = new Option(s['اسم الطالب'], s['رقم الطالب']);
+        opt.dataset.name = s['اسم الطالب'] || '';
+        opt.dataset.grade = s['الصف'] || '';
+        opt.dataset.class = s['الفصل'] || '';
+        opt.dataset.phone = s['رقم الجوال'] || '';
+        select.add(opt);
+    });
+    updateViolStudentCount();
 }
 
-function onStudentSelected() {
-    document.getElementById('violation-section').classList.remove('hidden');
-    populateDegrees();
+function toggleSelectAllViolStudents() {
+    var select = document.getElementById('nv-student');
+    if (select.disabled) return;
+    var allSelected = select.options.length > 0 && Array.from(select.options).every(o => o.selected);
+    Array.from(select.options).forEach(o => o.selected = !allSelected);
+    onStudentSelectionChanged();
+}
+
+function updateViolStudentCount() {
+    var select = document.getElementById('nv-student');
+    var count = select ? Array.from(select.selectedOptions).length : 0;
+    var el = document.getElementById('nv-student-count');
+    if (el) el.textContent = count > 0 ? ('تم اختيار ' + count + ' طالب') : '';
+}
+
+function onStudentSelectionChanged() {
+    var count = Array.from(document.getElementById('nv-student').selectedOptions).length;
+    updateViolStudentCount();
+    if (count > 0) {
+        document.getElementById('violation-section').classList.remove('hidden');
+        populateDegrees();
+    } else {
+        document.getElementById('violation-section').classList.add('hidden');
+        document.getElementById('procedures-section').classList.add('hidden');
+    }
 }
 
 function populateDegrees() {
@@ -1944,22 +2044,28 @@ function populateViolationTexts() {
 }
 
 function fetchProcedures() {
-    const studentId = document.getElementById('nv-student').value;
+    const selectedOpts = Array.from(document.getElementById('nv-student').selectedOptions);
     const violationId = document.getElementById('nv-text').value;
-    if (!studentId || !violationId) return;
+    if (selectedOpts.length === 0 || !violationId) return;
     document.getElementById('procedures-section').classList.remove('hidden');
-    document.getElementById('procedures-list').innerHTML = `<div class="flex justify-center py-8"><div class="w-8 h-8 border-4 border-${THEMES[selectedType].main}-200 border-t-${THEMES[selectedType].main}-600 rounded-full animate-spin"></div></div>`;
-    if (typeof google !== 'undefined' && google.script && google.script.run) {
+    document.getElementById('procedures-list').innerHTML = '<div class="flex justify-center py-8"><div class="w-8 h-8 border-4 border-' + THEMES[selectedType].main + '-200 border-t-' + THEMES[selectedType].main + '-600 rounded-full animate-spin"></div></div>';
+
+    if (selectedOpts.length === 1 && typeof google !== 'undefined' && google.script && google.script.run) {
+        // طالب واحد → جلب التكرار الفعلي
         google.script.run
             .withSuccessHandler(showProcedures)
             .withFailureHandler(function(err) {
                 console.error('fetchProcedures error:', err);
-                document.getElementById('procedures-list').innerHTML = '<div class="text-center py-4 text-red-500">خطأ في جلب الإجراءات: ' + escapeHtml(err.message || 'خطأ غير معروف') + '</div>';
+                document.getElementById('procedures-list').innerHTML = '<div class="text-center py-4 text-red-500">خطأ في جلب الإجراءات</div>';
                 document.getElementById('saveBtn').disabled = false;
             })
-            .calculateRepeatLevel(studentId, violationId);
+            .calculateRepeatLevel(selectedOpts[0].value, violationId);
     } else {
-        // بيئة المعاينة — عرض إجراءات افتراضية
+        // عدة طلاب → عرض إجراءات المستوى الأول + رسالة توضيحية
+        document.getElementById('repeat-alert-box').innerHTML =
+            '<div class="flex items-center gap-3 p-3 mb-3 bg-blue-50 border-r-4 border-blue-500 rounded-l-xl">' +
+            '<span class="material-symbols-outlined text-blue-600">group</span>' +
+            '<p class="text-sm text-blue-700">تم اختيار <strong>' + selectedOpts.length + '</strong> طالب — سيتم حساب مستوى التكرار لكل طالب تلقائياً عند الحفظ</p></div>';
         showProcedures({ success: true, repeatLevel: 1, previousProcedures: [] });
     }
 }
@@ -2048,9 +2154,11 @@ function updatePrintButtons() {
 // =================================================================
 function printCurrentContext(formId, actionText = '') {
     const studentSelect = document.getElementById('nv-student');
-    if (!studentSelect || !studentSelect.value) { showEnhancedToast('danger', 'يرجى اختيار الطالب أولاً'); return; }
-    
-    const studentName = studentSelect.options[studentSelect.selectedIndex].text;
+    var selOpts = Array.from(studentSelect.selectedOptions);
+    if (!studentSelect || selOpts.length === 0) { showEnhancedToast('danger', 'يرجى اختيار الطالب أولاً'); return; }
+    if (selOpts.length > 1) { showEnhancedToast('warning', 'يرجى اختيار طالب واحد فقط للطباعة'); return; }
+
+    const studentName = selOpts[0].text;
     const grade = document.getElementById('nv-grade').value;
     const cls = document.getElementById('nv-class').value;
     const vSelect = document.getElementById('nv-text');
@@ -2060,7 +2168,7 @@ function printCurrentContext(formId, actionText = '') {
     if (vDegree.includes(' ')) vDegree = vDegree.split(' ')[1];
     
     const today = new Date();
-    const vDate = today.toLocaleDateString('ar-SA-u-ca-islamic');
+    const vDate = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura');
     const vDay = today.toLocaleDateString('ar-SA', { weekday: 'long' });
     
     const procedures = [];
@@ -2107,7 +2215,7 @@ function showDawatModalApproved_(baseData) {
     var dayNames = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
     var defaultDay = dayNames[tomorrow.getDay()];
     var defaultHijri = '';
-    try { defaultHijri = tomorrow.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }) + ' هـ'; } catch(e) { defaultHijri = ''; }
+    try { defaultHijri = tomorrow.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' }) + ' هـ'; } catch(e) { defaultHijri = ''; }
 
     var old = document.getElementById('dawat-modal-overlay');
     if (old) old.remove();
@@ -2155,12 +2263,12 @@ function showDawatModalApproved_(baseData) {
         var d = new Date(this.value);
         if (!isNaN(d)) {
             document.getElementById('dawat-day').value = dayNames[d.getDay()];
-            try { document.getElementById('dawat-hijri-preview').textContent = d.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }) + ' هـ'; } catch(e) {}
+            try { document.getElementById('dawat-hijri-preview').textContent = d.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' }) + ' هـ'; } catch(e) {}
         }
     });
     document.getElementById('dawat-submit-btn').addEventListener('click', function() {
         var hijriDate = '';
-        try { var d = new Date(document.getElementById('dawat-date').value); hijriDate = d.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }); } catch(e) { hijriDate = document.getElementById('dawat-date').value; }
+        try { var d = new Date(document.getElementById('dawat-date').value); hijriDate = d.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' }); } catch(e) { hijriDate = document.getElementById('dawat-date').value; }
         var finalData = Object.assign({}, baseData, {
             visitDay: document.getElementById('dawat-day').value,
             visitDate: hijriDate,
@@ -2177,31 +2285,41 @@ function showDawatModalApproved_(baseData) {
 // 12. حفظ المخالفة
 // =================================================================
 function saveViolation() {
-    const studentId = document.getElementById('nv-student').value;
-    const violationId = document.getElementById('nv-text').value;
-    const procedures = [];
-    const forms = [];
+    var studentSelect = document.getElementById('nv-student');
+    var selectedOpts = Array.from(studentSelect.selectedOptions);
+    var violationId = document.getElementById('nv-text').value;
+
+    if (selectedOpts.length === 0) { showEnhancedToast('warning', 'يرجى اختيار طالب واحد على الأقل'); return; }
+    if (!violationId) { showEnhancedToast('warning', 'يرجى اختيار المخالفة'); return; }
+
+    var procedures = [];
+    var forms = [];
     document.querySelectorAll('#procedures-list input:checked').forEach(cb => {
         procedures.push(cb.value);
         if (cb.dataset.formName && cb.dataset.formName !== 'undefined' && cb.dataset.formName !== '') forms.push(cb.dataset.formName);
     });
-    
-    const btn = document.getElementById('saveBtn');
+
+    var btn = document.getElementById('saveBtn');
     btn.disabled = true;
-    btn.innerHTML = '<div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> جاري الحفظ...';
-    
+    var countLabel = selectedOpts.length > 1 ? (' (' + selectedOpts.length + ' طلاب)') : '';
+    btn.innerHTML = '<div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> جاري الحفظ...' + countLabel;
+
     if (typeof google === 'undefined' || !google.script || !google.script.run) {
         showEnhancedToast('danger', 'غير متصل بالخادم');
         btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">save</span> حفظ المخالفة';
         btn.disabled = false;
         return;
     }
+
+    var students = selectedOpts.map(function(opt) {
+        return { studentId: opt.value, studentName: opt.dataset.name, grade: opt.dataset.grade, class: opt.dataset.class, phone: opt.dataset.phone };
+    });
+
     google.script.run
         .withSuccessHandler(function(response) {
             if (response && response.success) {
-                showEnhancedToast('success', 'تم حفظ المخالفة بنجاح');
+                showEnhancedToast('success', response.message || 'تم الحفظ بنجاح');
                 closeViolationAddModal();
-                // تحديث اليومي
                 if (violationCurrentTab === 'today') loadViolationTodayRecords();
                 else if (violationCurrentTab === 'approved') loadViolationApprovedRecords();
             } else {
@@ -2216,7 +2334,7 @@ function saveViolation() {
             btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">save</span> حفظ المخالفة';
             btn.disabled = false;
         })
-        .saveViolation({ studentId: studentId, violationId: violationId, procedures: procedures, forms: forms, repeatLevel: violationCurrentRepeatLevel });
+        .saveViolationsBatch({ students: students, violationId: violationId, procedures: procedures, forms: forms, stage: currentStage });
 }
 
 // =================================================================
@@ -2226,6 +2344,7 @@ function createCardPrintBtn(formId, label, record, colorClass) {
     const printData = {
         studentName: record['اسم الطالب'], grade: record['الصف'], class: record['الفصل'],
         violationDate: record['التاريخ الهجري'], violationDegree: record['الدرجة'],
+        violationDay: record['التاريخ الميلادي'] ? new Date(record['التاريخ الميلادي']).toLocaleDateString('ar-SA', { weekday: 'long' }) : '',
         violationText: record['نص المخالفة'],
         procedures: record['الإجراءات'] ? record['الإجراءات'].split('\n') : []
     };
@@ -2254,7 +2373,7 @@ function printViolContactReport() {
     var sent = records.filter(function(r) { return getF_(r, 'تم الإرسال') === 'نعم'; });
     if (sent.length === 0) { showEnhancedToast('warning', 'لا يوجد سجلات تم إرسالها'); return; }
     var today = new Date();
-    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' });
+    var hijri = today.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
     var degLabel = {1:'الأولى',2:'الثانية',3:'الثالثة',4:'الرابعة',5:'الخامسة'};
     var rows = '';
     sent.forEach(function(rec, i) {

@@ -513,7 +513,7 @@ function repairDailyAbsenceData() {
       var hijriVal = row[7];
       if (hijriVal instanceof Date) {
         // Sheets حوّل النص إلى Date — نستخرج day/month/year
-        row[7] = hijriVal.getDate() + '/' + (hijriVal.getMonth() + 1) + '/' + hijriVal.getFullYear();
+        row[7] = hijriVal.getFullYear() + '/' + (hijriVal.getMonth() + 1) + '/' + hijriVal.getDate();
         fixes.hijriDate++;
         changed = true;
       } else if (hijriVal) {

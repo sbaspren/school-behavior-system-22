@@ -76,7 +76,12 @@ function getViolationRecords(stage) {
       headers.forEach((header, index) => {
         var val = row[index];
         if (val && val instanceof Date) {
-          record[header] = val.toISOString();
+          // ★ التاريخ الهجري يُحول لنص هجري وليس ISO
+          if (header === 'التاريخ الهجري') {
+            record[header] = readHijriCellValue_(val);
+          } else {
+            record[header] = val.toISOString();
+          }
         } else {
           record[header] = (val !== null && val !== undefined && val !== '') ? val : '';
         }
@@ -151,7 +156,12 @@ function getTodayViolationRecords(stage) {
         headers.forEach(function(header, idx) {
           var val = row[idx];
           if (val && val instanceof Date) {
-            record[header] = val.toISOString();
+            // ★ التاريخ الهجري يُحول لنص هجري وليس ISO
+            if (header === 'التاريخ الهجري') {
+              record[header] = readHijriCellValue_(val);
+            } else {
+              record[header] = val.toISOString();
+            }
           } else {
             record[header] = (val !== null && val !== undefined && val !== '') ? val : '';
           }
@@ -193,6 +203,28 @@ function updateViolationSentStatus(stage, rowIndices) {
     CacheService.getScriptCache().remove(cacheKey);
   } catch (e) {
     console.error('updateViolationSentStatus: ' + e.toString());
+  }
+}
+
+// =================================================================
+// حذف سجل مخالفة
+// =================================================================
+function deleteViolationRecord(stage, rowIndex) {
+  try {
+    var logSheetName = getSheetName_('المخالفات', stage);
+    var ss = getSpreadsheet_();
+    var sheet = findSheet_(ss, logSheetName);
+    if (!sheet) return { success: false, error: 'الشيت غير موجود' };
+
+    var ri = parseInt(rowIndex);
+    if (isNaN(ri) || ri < 2 || ri > sheet.getLastRow()) {
+      return { success: false, error: 'رقم الصف غير صالح' };
+    }
+
+    sheet.deleteRow(ri);
+    return { success: true, message: 'تم الحذف' };
+  } catch (e) {
+    return { success: false, error: e.toString() };
   }
 }
 
@@ -241,7 +273,9 @@ function saveViolation(data) {
           .setFontWeight('bold')
           .setHorizontalAlignment('center');
         sheet.setFrozenRows(1);
-        
+        // ★ تنسيق عمود التاريخ الهجري (9) كنص عادي لمنع التحويل التلقائي
+        sheet.getRange(1, 9, sheet.getMaxRows(), 1).setNumberFormat('@');
+
         // لون التبويب من السجل المركزي
         var regEntry = SHEET_REGISTRY['المخالفات'];
         if (regEntry && regEntry.color) sheet.setTabColor(regEntry.color);
@@ -306,6 +340,130 @@ function saveViolation(data) {
 
   } catch (e) {
     console.error("❌ خطأ في حفظ المخالفة:", e.toString());
+    return { success: false, error: e.message };
+  }
+}
+
+// =================================================================
+// BATCH SAVE - حفظ مخالفة لعدة طلاب دفعة واحدة
+// =================================================================
+function saveViolationsBatch(data) {
+  try {
+    if (!data || !data.students || data.students.length === 0 || !data.violationId)
+      throw new Error("بيانات غير مكتملة");
+
+    var allStudents = getStudents_();
+    var rules = getRulesData_();
+    var violation = rules.violations.find(function(v) { return v.id == data.violationId; });
+    if (!violation) throw new Error("المخالفة غير موجودة: " + data.violationId);
+
+    var stage = data.stage;
+    var logSheetName = getSheetName_('المخالفات', stage);
+    var ss = getSpreadsheet_();
+    var sheet = findSheet_(ss, logSheetName);
+
+    // ★ الترويسة الموحدة 18 عمود
+    var violationHeaders = [
+      'رقم الطالب', 'اسم الطالب', 'الصف', 'الفصل',
+      'رقم المخالفة', 'نص المخالفة', 'نوع المخالفة', 'الدرجة',
+      'التاريخ الهجري', 'التاريخ الميلادي', 'مستوى التكرار', 'الإجراءات',
+      'النقاط', 'اليوم', 'النماذج المحفوظة', 'المستخدم', 'وقت الإدخال', 'تم الإرسال'
+    ];
+
+    // إنشاء الشيت إذا لم يوجد (نفس منطق saveViolation)
+    if (!sheet) {
+      sheet = ss.insertSheet(logSheetName);
+      sheet.setRightToLeft(true);
+      sheet.appendRow(violationHeaders);
+      sheet.getRange(1, 1, 1, violationHeaders.length)
+        .setBackground('#e74c3c').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
+      sheet.setFrozenRows(1);
+      sheet.getRange(1, 9, sheet.getMaxRows(), 1).setNumberFormat('@');
+      var regEntry = SHEET_REGISTRY['المخالفات'];
+      if (regEntry && regEntry.color) sheet.setTabColor(regEntry.color);
+    } else if (sheet.getLastRow() < 1) {
+      sheet.appendRow(violationHeaders);
+    } else {
+      var currentHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      if (currentHeaders.indexOf('تم الإرسال') === -1) {
+        var newCol = sheet.getLastColumn() + 1;
+        sheet.getRange(1, newCol).setValue('تم الإرسال').setBackground('#e74c3c').setFontColor('#ffffff').setFontWeight('bold');
+      }
+    }
+
+    // ★ قراءة البيانات الحالية مرة واحدة لحساب التكرار في الذاكرة
+    var existingData = [];
+    var headers = [];
+    if (sheet.getLastRow() >= 2) {
+      var allData = sheet.getDataRange().getValues();
+      headers = allData.shift();
+      existingData = allData;
+    }
+    var sidCol = headers.indexOf('رقم الطالب');
+    var vidCol = headers.indexOf('رقم المخالفة');
+
+    var now = new Date();
+    var dayName = now.toLocaleDateString('ar-SA', { weekday: 'long' });
+    var violTime = Utilities.formatDate(now, Session.getScriptTimeZone(), 'HH:mm:ss');
+    var hijriDate = getHijriDate_(now);
+    var proceduresText = Array.isArray(data.procedures) ? data.procedures.map(function(p) { return sanitizeInput_(p); }).join('\n') : '';
+    var formsText = Array.isArray(data.forms) ? data.forms.map(function(f) { return sanitizeInput_(f); }).join('\n') : '';
+
+    var rows = [];
+    for (var i = 0; i < data.students.length; i++) {
+      var inp = data.students[i];
+      var student = allStudents.find(function(s) { return s['رقم الطالب'] == inp.studentId; });
+      if (!student) continue;
+
+      // حساب التكرار من البيانات الحالية + الصفوف المبنية في هذه الدفعة
+      var repeatLevel = 1;
+      if (sidCol !== -1 && vidCol !== -1) {
+        for (var r = 0; r < existingData.length; r++) {
+          if (existingData[r][sidCol] == inp.studentId && existingData[r][vidCol] == data.violationId) repeatLevel++;
+        }
+        for (var j = 0; j < rows.length; j++) {
+          if (rows[j][0] == inp.studentId && rows[j][4] == data.violationId) repeatLevel++;
+        }
+      }
+
+      var points = getDeductionForViolation_(String(data.violationId), repeatLevel, student['المرحلة']);
+
+      rows.push([
+        student['رقم الطالب'],
+        student['اسم الطالب'],
+        student['الصف'],
+        student['الفصل'],
+        violation.id,
+        violation.text,
+        violation.type,
+        getEffectiveDegree_(violation.id, student['المرحلة']),
+        hijriDate,
+        now,
+        repeatLevel,
+        proceduresText,
+        points,
+        dayName,
+        formsText,
+        'الوكيل',
+        violTime,
+        'لا'
+      ]);
+    }
+
+    // ★ كتابة دفعة واحدة
+    if (rows.length > 0) {
+      var startRow = sheet.getLastRow() + 1;
+      sheet.getRange(startRow, 9, rows.length, 1).setNumberFormat('@');
+      sheet.getRange(startRow, 1, rows.length, 18).setValues(rows);
+    }
+
+    // مسح الكاش
+    var cacheKey = 'violations_' + stage + '_' + new Date().toLocaleDateString('en-US');
+    CacheService.getScriptCache().remove(cacheKey);
+
+    return { success: true, message: 'تم حفظ ' + rows.length + ' مخالفة بنجاح', count: rows.length };
+  } catch (e) {
+    console.error("❌ خطأ في saveViolationsBatch:", e.toString());
     return { success: false, error: e.message };
   }
 }
@@ -470,6 +628,8 @@ function saveCompensationRecord(data) {
       sheet.getRange(1, 1, 1, positiveHeaders.length)
         .setBackground('#10b981').setFontColor('#ffffff').setFontWeight('bold');
       sheet.setFrozenRows(1);
+      // حماية عمود التاريخ الهجري من التحويل التلقائي
+      sheet.getRange(1, 10, sheet.getMaxRows(), 1).setNumberFormat('@');
       var regEntry = SHEET_REGISTRY['السلوك_الإيجابي'];
       if (regEntry && regEntry.color) sheet.setTabColor(regEntry.color);
     }
@@ -577,7 +737,12 @@ function getPositiveBehaviorRecords(stage) {
       headers.forEach(function(header, index) {
         var val = row[index];
         if (val && val instanceof Date) {
-          record[header] = val.toISOString();
+          // ★ التاريخ الهجري يُحول لنص هجري وليس ISO
+          if (header === 'التاريخ الهجري') {
+            record[header] = readHijriCellValue_(val);
+          } else {
+            record[header] = val.toISOString();
+          }
         } else {
           record[header] = (val !== null && val !== undefined && val !== '') ? val : '';
         }
@@ -585,7 +750,7 @@ function getPositiveBehaviorRecords(stage) {
       record.rowIndex = i + 2; // ★ رقم الصف للتحديث لاحقاً
       return record;
     }).filter(function(record) { return record['رقم الطالب']; });
-    
+
   } catch (e) {
     console.error('❌ Error fetching positive behavior records:', e.toString());
     return [];

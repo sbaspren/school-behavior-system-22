@@ -103,7 +103,7 @@ function handleStatusResponse(result) {
                         </ol>
                         <div class="mt-6 bg-amber-50 border border-amber-200 rounded-xl p-3">
                             <p class="text-xs text-amber-800">
-                                ⭐ <strong>مهم:</strong> آخر رقم يُمسح بالباركود يصبح الرقم الرئيسي تلقائياً
+                                <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;color:#f59e0b">star</span> <strong>مهم:</strong> آخر رقم يُمسح بالباركود يصبح الرقم الرئيسي تلقائياً
                             </p>
                         </div>
                     </div>
@@ -299,7 +299,7 @@ function showDisconnectedState(result) {
             <p class="text-gray-500 text-sm mb-5">لم يتم ربط رقم رئيسي لـ ${escapeHtml(stageName)}</p>
             
             <div class="bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
-                <p class="text-sm text-red-700">⚠️ لن يعمل أي تواصل (روابط، إشعارات، رسائل) إلا بعد ربط رقم رئيسي</p>
+                <p class="text-sm text-red-700"><span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle">warning</span> لن يعمل أي تواصل (روابط، إشعارات، رسائل) إلا بعد ربط رقم رئيسي</p>
             </div>
             
             <!-- نموذج إنشاء جلسة -->
@@ -360,43 +360,226 @@ function createNewSession() {
         .verifySecurityCode(code);
 }
 
+// ★ متغيرات polling الـ QR
+var _qrPollTimer = null;
+var _qrRefreshTimer = null;
+var _qrSavedPhones = [];
+
 function openQRPage() {
+    // إيقاف أي polling سابق
+    stopQRPolling();
+
     var container = document.getElementById('wa-main-content');
     var stageName = getStageLabel();
-    
+
+    // عرض حالة التحميل
     container.innerHTML = `
         <div class="text-center w-full">
-            <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span class="material-symbols-outlined text-2xl text-green-600">qr_code_2</span>
+            <div class="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-green-200">
+                <span class="material-symbols-outlined text-3xl text-green-600">qr_code_2</span>
             </div>
-            <h3 class="text-lg font-bold text-gray-800 mb-2">مسح الباركود</h3>
-            <p class="text-sm text-gray-500 mb-4">سيصبح الرقم <strong>الرقم الرئيسي</strong> لـ <strong>${escapeHtml(stageName)}</strong></p>
-            
-            <div class="bg-gray-100 rounded-xl p-4 mb-4">
-                <p class="text-sm text-gray-600 mb-3">اضغط الزر لفتح صفحة الباركود:</p>
-                <!-- FIXME: Hardcoded IP address (194.163.133.252) should be configurable via server-side config or fetched dynamically.
-                     Replace with dynamic qrUrl from server (call getWhatsAppQR() and use result.qrUrl). -->
-                <a href="${escapeHtml('http://194.163.133.252:3000/qr')}" target="_blank"
-                   class="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-xl transition">
-                    <span class="material-symbols-outlined">open_in_new</span>
-                    فتح صفحة الباركود
-                </a>
+            <h3 class="text-lg font-bold text-gray-800 mb-2">ربط واتساب</h3>
+            <p class="text-sm text-gray-500 mb-4">سيصبح الرقم الرئيسي لـ <strong>${escapeHtml(stageName)}</strong></p>
+            <div id="qr-display-area" class="mb-4">
+                <div class="bg-amber-50 border border-amber-200 rounded-2xl p-6 inline-block">
+                    <div class="flex flex-col items-center gap-3">
+                        <div class="animate-spin w-10 h-10 border-4 border-green-200 border-t-green-600 rounded-full"></div>
+                        <p class="text-sm text-amber-700 font-medium">يتم الان تكوين الاتصال...</p>
+                        <p class="text-xs text-amber-500">يرجى الانتظار لحظات</p>
+                    </div>
+                </div>
             </div>
-            
-            <p class="text-xs text-gray-400 mb-4">بعد مسح الباركود، اضغط الزر أدناه</p>
-            
-            <button onclick="checkAndSaveNewPhone()" 
-                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2">
-                <span class="material-symbols-outlined">check</span>
-                تم المسح - تحقق الآن
-            </button>
-            
-            <button onclick="loadWhatsAppStatus()" 
-                    class="w-full mt-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 px-4 rounded-xl transition">
+            <button onclick="cancelQRLinking()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2.5 px-6 rounded-xl transition text-sm">
                 إلغاء
             </button>
         </div>
     `;
+
+    // جلب الأرقام المحفوظة الحالية (للمقارنة لاحقاً)
+    google.script.run
+        .withSuccessHandler(function(savedResult) {
+            _qrSavedPhones = [];
+            if (savedResult && savedResult.success && savedResult.sessions) {
+                _qrSavedPhones = savedResult.sessions.map(function(s) { return s.phone; });
+            }
+            // بدء جلب QR
+            fetchAndShowQR();
+        })
+        .withFailureHandler(function() {
+            _qrSavedPhones = [];
+            fetchAndShowQR();
+        })
+        .getSavedPhonesByStage(currentStage);
+}
+
+function fetchAndShowQR() {
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result && result.success && result.qrImage) {
+                showQRInline(result.qrImage);
+                // بدء polling لكشف الاتصال + تحديث QR
+                startQRPolling();
+            } else if (result && result.success && result.qrUrl) {
+                // fallback: لو لم نحصل على base64، نفتح الرابط
+                showQRFallback(result.qrUrl);
+            } else {
+                showQRError(result ? result.error : 'فشل جلب الباركود');
+            }
+        })
+        .withFailureHandler(function(err) {
+            showQRError(err.message || 'خطأ في الاتصال بالسيرفر');
+        })
+        .getWhatsAppQR();
+}
+
+function showQRInline(qrBase64) {
+    var area = document.getElementById('qr-display-area');
+    if (!area) return;
+    var stageName = getStageLabel();
+
+    area.innerHTML = `
+        <div class="bg-green-50 border-2 border-green-200 rounded-2xl p-5 inline-block shadow-sm">
+            <div class="bg-white rounded-xl p-3 mb-3 shadow-inner">
+                <img id="qr-inline-img" src="${qrBase64}" alt="QR Code"
+                     style="width:260px; height:260px; image-rendering: pixelated;"
+                     class="mx-auto block rounded-lg">
+            </div>
+            <div class="flex items-center justify-center gap-2 text-green-700 mb-1">
+                <span class="material-symbols-outlined text-lg">phone_iphone</span>
+                <span class="text-sm font-bold">امسح الباركود من واتساب</span>
+            </div>
+            <p class="text-xs text-green-600">الإعدادات ← الأجهزة المرتبطة ← ربط جهاز</p>
+        </div>
+        <div class="mt-3 flex items-center justify-center gap-2 text-gray-400">
+            <div class="animate-pulse w-2 h-2 bg-green-400 rounded-full"></div>
+            <p class="text-xs" id="qr-status-text">جاري انتظار المسح...</p>
+        </div>
+    `;
+}
+
+function showQRFallback(qrUrl) {
+    var area = document.getElementById('qr-display-area');
+    if (!area) return;
+    area.innerHTML = `
+        <div class="bg-gray-100 rounded-xl p-4">
+            <p class="text-sm text-gray-600 mb-3">لم نستطع عرض الباركود مباشرة — افتحه في صفحة جديدة:</p>
+            <a href="${escapeHtml(qrUrl)}" target="_blank"
+               class="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-xl transition">
+                <span class="material-symbols-outlined">open_in_new</span>
+                فتح صفحة الباركود
+            </a>
+        </div>
+    `;
+    startQRPolling();
+}
+
+function showQRError(msg) {
+    var area = document.getElementById('qr-display-area');
+    if (!area) return;
+    area.innerHTML = `
+        <div class="bg-red-50 border border-red-200 rounded-xl p-4">
+            <span class="material-symbols-outlined text-red-500 text-2xl">error</span>
+            <p class="text-sm text-red-600 mt-2">${escapeHtml(msg)}</p>
+            <button onclick="fetchAndShowQR()" class="mt-3 bg-red-100 hover:bg-red-200 text-red-700 font-bold py-2 px-4 rounded-lg text-sm transition">
+                إعادة المحاولة
+            </button>
+        </div>
+    `;
+}
+
+function showQRSuccess(phone) {
+    stopQRPolling();
+    var container = document.getElementById('wa-main-content');
+    if (!container) return;
+    container.innerHTML = `
+        <div class="text-center w-full">
+            <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-green-300">
+                <span class="material-symbols-outlined text-4xl text-green-600">phone_in_talk</span>
+            </div>
+            <h3 class="text-xl font-bold text-gray-800 mb-2">متصل بنجاح!</h3>
+            <div class="bg-green-50 border-2 border-green-200 rounded-2xl p-5 inline-block my-3">
+                <div class="flex flex-col items-center gap-2">
+                    <span class="material-symbols-outlined text-4xl text-green-500">phone_enabled</span>
+                    <span class="text-xl font-bold text-gray-800 tracking-wider" dir="ltr">${escapeHtml(phone)}</span>
+                    <span class="text-sm text-green-600 font-medium">تم ربط الحساب بنجاح</span>
+                </div>
+            </div>
+            <p class="text-green-600 font-bold text-sm mt-3 mb-4">تم الاتصال بنجاح مع واتساب</p>
+            <button onclick="loadWhatsAppStatus()"
+                    class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-xl transition">
+                متابعة
+            </button>
+        </div>
+    `;
+}
+
+function startQRPolling() {
+    stopQRPolling();
+
+    // ★ polling كل 5 ثوان لكشف اتصال جديد
+    _qrPollTimer = setInterval(function() {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success && result.sessions && result.sessions.length > 0) {
+                    // البحث عن رقم جديد
+                    var newPhone = null;
+                    for (var i = 0; i < result.sessions.length; i++) {
+                        if (_qrSavedPhones.indexOf(result.sessions[i].phone) === -1) {
+                            newPhone = result.sessions[i].phone;
+                            break;
+                        }
+                    }
+                    if (newPhone) {
+                        // ★ وجدنا رقم جديد! حفظه تلقائياً
+                        var statusText = document.getElementById('qr-status-text');
+                        if (statusText) statusText.textContent = 'تم الكشف عن اتصال جديد — جاري الحفظ...';
+                        stopQRPolling();
+                        saveNewPhoneToSheet(newPhone);
+                        // عرض نجاح بعد الحفظ
+                        setTimeout(function() { showQRSuccess(newPhone); }, 500);
+                    }
+                }
+            })
+            .withFailureHandler(function() {})
+            .getAllConnectedSessions();
+    }, 5000);
+
+    // ★ تحديث صورة QR كل 15 ثانية (QR ينتهي صلاحيته)
+    _qrRefreshTimer = setInterval(function() {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success && result.qrImage) {
+                    var img = document.getElementById('qr-inline-img');
+                    if (img) img.src = result.qrImage;
+                }
+            })
+            .withFailureHandler(function() {})
+            .getWhatsAppQR();
+    }, 15000);
+
+    // ★ timeout: إيقاف بعد 3 دقائق
+    setTimeout(function() {
+        if (_qrPollTimer) {
+            stopQRPolling();
+            var statusText = document.getElementById('qr-status-text');
+            if (statusText) {
+                statusText.textContent = 'انتهى وقت الانتظار — اضغط لإعادة المحاولة';
+                statusText.style.cursor = 'pointer';
+                statusText.style.color = '#f59e0b';
+                statusText.onclick = function() { openQRPage(); };
+            }
+        }
+    }, 180000);
+}
+
+function stopQRPolling() {
+    if (_qrPollTimer) { clearInterval(_qrPollTimer); _qrPollTimer = null; }
+    if (_qrRefreshTimer) { clearInterval(_qrRefreshTimer); _qrRefreshTimer = null; }
+}
+
+function cancelQRLinking() {
+    stopQRPolling();
+    loadWhatsAppStatus();
 }
 
 function checkAndSaveNewPhone() {
