@@ -678,7 +678,8 @@ function submitTeacherForm(formData) {
       var classParts = String(formData.className || '').trim().split(/\s+/);
       var gradeName = classParts.length > 1 ? classParts.slice(0, -1).join(' ') : formData.className;
       var sectionNum = classParts.length > 1 ? classParts[classParts.length - 1] : '';
-      nSheet.appendRow([
+      // ★ استخدام writeDailyAbsenceRows_ لضمان تنسيق '@' على عمود التاريخ الهجري
+      writeDailyAbsenceRows_(nSheet, [[
         'NO_ABSENCE',                                      // 1: رقم_الطالب (علامة خاصة)
         'لا يوجد غائب',                                   // 2: اسم_الطالب
         sanitizeInput_(gradeName),                          // 3: الصف
@@ -695,8 +696,9 @@ function submitTeacherForm(formData) {
         'نعم',                                              // 14: تم_الإرسال
         'حاضر',                                             // 15: حالة_التأخر
         '',                                                 // 16: وقت_الحضور
-        ''                                                  // 17: ملاحظات
-      ]);
+        '',                                                 // 17: ملاحظات
+        ''                                                  // 18: حالة_نور
+      ]]);
       logActivity_(formData, 0);
       return {
         success: true,
@@ -734,17 +736,32 @@ function submitTeacherForm(formData) {
     
     var savedCount = 0;
     var savedRecords = [];
-    
-    for (var i = 0; i < formData.students.length; i++) {
-      var student = formData.students[i];
-      var row = buildRowData_(formData, student, now, hijriDate, dayName);
-      sheet.appendRow(row);
-      savedCount++;
-      
-      savedRecords.push({
-        studentName: student.name,
-        studentId: student.id
-      });
+
+    // ★ الغياب اليومي: استخدام writeDailyAbsenceRows_ لضمان تنسيق '@' على عمود التاريخ الهجري
+    // appendRow لا يضمن حفظ التاريخ الهجري كنص مما يسبب عدم ظهوره في التوثيق
+    if (formData.inputType === 'absence') {
+      var absRows = [];
+      for (var i = 0; i < formData.students.length; i++) {
+        var student = formData.students[i];
+        absRows.push(buildRowData_(formData, student, now, hijriDate, dayName));
+        savedRecords.push({
+          studentName: student.name,
+          studentId: student.id
+        });
+      }
+      savedCount = writeDailyAbsenceRows_(sheet, absRows);
+    } else {
+      for (var i = 0; i < formData.students.length; i++) {
+        var student = formData.students[i];
+        var row = buildRowData_(formData, student, now, hijriDate, dayName);
+        sheet.appendRow(row);
+        savedCount++;
+
+        savedRecords.push({
+          studentName: student.name,
+          studentId: student.id
+        });
+      }
     }
     
     // تسجيل النشاط

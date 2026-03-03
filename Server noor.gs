@@ -227,13 +227,26 @@ function getNoorAbsenceRecords_(ss, stage, filterMode) {
     if (noorStatus !== '' && noorStatus !== 'معلق') return false;
     // فلتر اليوم فقط إذا كان الوضع 'today'
     if (today) {
-      var dateStr = String(r['التاريخ_هجري'] || r['التاريخ هجري'] || '');
+      var dateVal = r['التاريخ_هجري'] || r['التاريخ هجري'] || '';
+      // ★ معالجة حالة تحويل Sheets للتاريخ الهجري إلى Date تلقائياً
+      if (dateVal instanceof Date) {
+        dateVal = readHijriCellValue_(dateVal);
+      }
+      var dateStr = String(dateVal);
       if (dateStr && normalizeHijriDate_(dateStr) !== normalizeHijriDate_(today)) return false;
     }
     return true;
   }).map(function(r) {
     r._type = 'absence';
     r._noorMode = NOOR_DROPDOWN_MAP.modes.absence;
+
+    // ★ تحويل التاريخ الهجري من Date إلى نص إذا لزم (لعرض صحيح في الواجهة)
+    var hijriKeys = ['التاريخ_هجري', 'التاريخ هجري'];
+    for (var hi = 0; hi < hijriKeys.length; hi++) {
+      if (r[hijriKeys[hi]] instanceof Date) {
+        r[hijriKeys[hi]] = readHijriCellValue_(r[hijriKeys[hi]]);
+      }
+    }
 
     // ★ نوع_الغياب يخزّن "يوم كامل" أو "حصة" — ليس نوع العذر
     // المطلوب لنور هو نوع العذر (بعذر/بدون عذر) وليس نوع الغياب
@@ -510,8 +523,8 @@ function getTodayHijriDate_() {
 function normalizeHijriDate_(dateStr) {
   if (!dateStr) return '';
   var s = String(dateStr).trim();
-  // إزالة لاحقة "هـ" والأحرف غير المرئية (zero-width)
-  s = s.replace(/[\u200F\u200E\u061C]/g, '');
+  // إزالة لاحقة "هـ" والأحرف غير المرئية (zero-width / RTL marks)
+  s = s.replace(/[\u200F\u200E\u061C\u200B\u200C\u200D\uFEFF]/g, '');
   s = s.replace(/\s*هـ\s*$/, '').trim();
   // تحويل الأرقام العربية إلى إنجليزية
   s = s.replace(/[٠-٩]/g, function(d) {
@@ -519,6 +532,19 @@ function normalizeHijriDate_(dateStr) {
   });
   // إزالة الأصفار البادئة من كل جزء: 01/08/1446 → 1/8/1446
   s = s.replace(/\b0+(\d)/g, '$1');
+
+  // ★ توحيد الترتيب: إذا كان dd/mm/yyyy → تحويل إلى yyyy/mm/dd
+  // getHijriDate_ يُرجع yyyy/mm/dd لكن بعض المصادر تحفظ dd/mm/yyyy
+  var parts = s.split('/');
+  if (parts.length === 3) {
+    var first = parseInt(parts[0]);
+    var last = parseInt(parts[2]);
+    if (last >= 1300 && last <= 1500 && first <= 30) {
+      // الصيغة dd/mm/yyyy → قلبها إلى yyyy/mm/dd
+      s = parts[2] + '/' + parts[1] + '/' + parts[0];
+    }
+  }
+
   return s;
 }
 

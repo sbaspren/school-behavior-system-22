@@ -399,6 +399,86 @@ function TEST_DiagNoorRecords() {
   Logger.log('═══════════════════════════════════════════');
 }
 
+/**
+ * ★ تشخيص مشكلة عدم ظهور الغياب في التوثيق في نور
+ * شغّل هذه الدالة من المحرر واقرأ السجلات
+ */
+function diagnoseNoorAbsence() {
+  var stage = 'متوسط';
+  var ss = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
+  var sheetName = getSheetName_('الغياب_اليومي', stage);
+  var sheet = findSheet_(ss, sheetName);
+
+  Logger.log('═══════════════════════════════════════════');
+  Logger.log('★ تشخيص الغياب في نور — المرحلة: ' + stage);
+  Logger.log('  الشيت: ' + sheetName);
+  Logger.log('═══════════════════════════════════════════');
+
+  if (!sheet || sheet.getLastRow() < 2) {
+    Logger.log('❌ الشيت فارغ أو غير موجود');
+    return;
+  }
+
+  var todayHijri = getTodayHijriDate_();
+  Logger.log('  تاريخ اليوم الهجري: ' + todayHijri);
+  Logger.log('  نوع todayHijri: ' + typeof todayHijri);
+  Logger.log('  normalized: ' + normalizeHijriDate_(todayHijri));
+  Logger.log('');
+
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  Logger.log('  عدد الأعمدة: ' + headers.length);
+  Logger.log('  الترويسات: ' + headers.join(' | '));
+
+  // إيجاد أعمدة مهمة
+  var hijriCol = -1, noorCol = -1, nameCol = -1, timeCol = -1;
+  for (var h = 0; h < headers.length; h++) {
+    var hdr = String(headers[h]).trim();
+    if (hdr === 'التاريخ_هجري') hijriCol = h;
+    if (hdr === 'حالة_نور') noorCol = h;
+    if (hdr === 'اسم_الطالب') nameCol = h;
+    if (hdr === 'وقت_الإدخال') timeCol = h;
+  }
+
+  Logger.log('  عمود التاريخ_هجري: ' + hijriCol);
+  Logger.log('  عمود حالة_نور: ' + noorCol);
+  Logger.log('  عمود اسم_الطالب: ' + nameCol);
+  Logger.log('  عمود وقت_الإدخال: ' + timeCol);
+  Logger.log('');
+
+  // فحص آخر 20 سجل
+  var startRow = Math.max(1, data.length - 20);
+  var included = 0, excluded = 0;
+  for (var i = startRow; i < data.length; i++) {
+    if (!data[i][0] && !data[i][1]) continue;
+
+    var name = nameCol >= 0 ? String(data[i][nameCol]) : '?';
+    var hijriVal = hijriCol >= 0 ? data[i][hijriCol] : '(عمود غير موجود)';
+    var noorStatus = noorCol >= 0 ? String(data[i][noorCol] || '').trim() : '(عمود غير موجود)';
+    var entryTime = timeCol >= 0 ? data[i][timeCol] : '?';
+
+    var hijriType = (hijriVal instanceof Date) ? 'Date' : typeof hijriVal;
+    var hijriStr = (hijriVal instanceof Date) ? readHijriCellValue_(hijriVal) : String(hijriVal);
+    var hijriNorm = normalizeHijriDate_(hijriStr);
+    var todayNorm = normalizeHijriDate_(todayHijri);
+    var dateMatch = (hijriNorm === todayNorm);
+
+    var wouldInclude = (noorStatus === '' || noorStatus === 'معلق') && dateMatch;
+    if (wouldInclude) included++; else excluded++;
+
+    Logger.log('صف ' + (i+1) + ': ' + name);
+    Logger.log('  التاريخ_هجري: [' + hijriType + '] raw=' + hijriVal + ' → str=' + hijriStr + ' → norm=' + hijriNorm);
+    Logger.log('  حالة_نور: "' + noorStatus + '"');
+    Logger.log('  وقت_الإدخال: ' + entryTime);
+    Logger.log('  تطابق التاريخ: ' + dateMatch + ' | يمر الفلتر: ' + wouldInclude);
+    Logger.log('');
+  }
+
+  Logger.log('═══════════════════════════════════════════');
+  Logger.log('★ النتيجة: ' + included + ' سجل يمر الفلتر، ' + excluded + ' مستبعد');
+  Logger.log('═══════════════════════════════════════════');
+}
+
 // ── دوال مساعدة للاختبار ──
 
 function _getTestStage_() {
